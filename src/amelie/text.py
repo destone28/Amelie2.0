@@ -103,7 +103,17 @@ _CONFUSIONI_VERSO_CIFRA = str.maketrans({
     "g": "9", "q": "9",
 })
 
+# Sul testo grezzo basta escludere che il numero faccia parte di una cifra piu'
+# lunga: un codice a barre non e' un'annata.
 _ANNATA = re.compile(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)")
+
+# Sul testo RIPARATO la regola dev'essere molto piu' severa. La riparazione
+# trasforma lettere in cifre, e dentro una parola qualsiasi puo' far comparire
+# un anno dal nulla: "Grigio" diventa "6r1910" (G->6, i->1, g->9, i->1, o->0) e
+# "1910" e' li'. Un'annata vera, sull'etichetta, e' sempre un token a se': non
+# e' mai incollata a delle lettere. Pretendere confini non alfanumerici elimina
+# le invenzioni e conserva i casi veri come "2Ol7".
+_ANNATA_RIPARATA = re.compile(r"(?<![0-9A-Za-z])(19\d{2}|20\d{2})(?![0-9A-Za-z])")
 
 # Un vino imbottigliato non può avere un'annata nel futuro, e sotto il 1900 si
 # tratta quasi sempre di un numero civico o di una gradazione mal letta.
@@ -128,9 +138,12 @@ def estrai_annata(righe: Iterable[str], *, anno_massimo: int | None = None) -> i
     for riga in righe:
         # Prima si cerca nel testo così com'è: se le cifre sono già cifre, non
         # si rischia di rovinare una parola trasformandola in numero.
-        for grezzo in (riga, riga.translate(_CONFUSIONI_VERSO_CIFRA)):
-            for m in _ANNATA.finditer(grezzo):
-                candidati.append(int(m.group(1)))
+        for m in _ANNATA.finditer(riga):
+            candidati.append(int(m.group(1)))
+        # Poi si riprova sul testo riparato, ma con la regola severa.
+        riparata = riga.translate(_CONFUSIONI_VERSO_CIFRA)
+        for m in _ANNATA_RIPARATA.finditer(riparata):
+            candidati.append(int(m.group(1)))
 
     if anno_massimo is None:
         anno_massimo = 2100

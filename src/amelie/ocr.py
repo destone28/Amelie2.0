@@ -185,8 +185,15 @@ def _estrai_righe(risultato: Any) -> list[Riga]:
 
     testi = getattr(risultato, "txts", None)
     if testi is not None:
-        punteggi = getattr(risultato, "scores", None) or [1.0] * len(testi)
-        riquadri = getattr(risultato, "boxes", None) or [()] * len(testi)
+        # Attenzione: `scores` e `boxes` sono array numpy. Un `or` su un array
+        # numpy solleva ValueError ("truth value is ambiguous"), quindi il
+        # confronto con None deve essere esplicito.
+        punteggi = getattr(risultato, "scores", None)
+        if punteggi is None:
+            punteggi = [1.0] * len(testi)
+        riquadri = getattr(risultato, "boxes", None)
+        if riquadri is None:
+            riquadri = [()] * len(testi)
         return [
             Riga(testo=str(t), confidenza=float(s), riquadro=_riquadro(b))
             for t, s, b in zip(testi, punteggi, riquadri)

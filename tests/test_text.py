@@ -89,6 +89,26 @@ class TestEstraiAnnata:
         # un codice a barre non è un'annata
         assert estrai_annata(["8001234201900"]) is None
 
+    def test_non_inventa_un_annata_dentro_una_parola(self):
+        """Il caso trovato su un'etichetta vera: «Grigio» diventava 1910.
+
+        La riparazione delle cifre trasforma G->6, i->1, g->9, i->1, o->0, e
+        dentro «6r1910» compare un anno che non esiste. Un'annata vera è
+        sempre un token a sé, mai incollata a delle lettere.
+        """
+        righe = ["Santa Margherita", "Linot Grigio", "VALDADIGE", "750ml", "12.5% ac/ol."]
+        assert estrai_annata(righe) is None
+
+    @pytest.mark.parametrize(
+        "parola",
+        ["Grigio", "Barbaresco", "DENOMINAZIONE", "Bolgheri", "Sassicaia", "Valpolicella"],
+    )
+    def test_nessuna_parola_comune_genera_un_annata(self, parola):
+        assert estrai_annata([parola]) is None
+
+    def test_riconosce_l_annata_dopo_una_parola(self):
+        assert estrai_annata(["Vendemmia 2Ol5"]) == 2015
+
 
 class TestParoleUtili:
     def test_toglie_le_parole_di_ogni_etichetta(self):
