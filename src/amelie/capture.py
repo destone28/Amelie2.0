@@ -27,6 +27,7 @@ rimuove la vignettatura, che sta agli angoli: nessuna calibrazione necessaria.
 
 from __future__ import annotations
 
+import glob
 import logging
 import subprocess
 import time
@@ -43,7 +44,13 @@ log = logging.getLogger(__name__)
 class ImpostazioniCamera:
     """Parametri della camera. I default valgono per InnoMaker U20CAM-1080P."""
 
-    device: str = "/dev/video0"
+    # NON un percorso fisso. Su questa board l'ordine di /dev/videoN cambia da un
+    # avvio all'altro: il codec Venus del SoC si prende volentieri video0 e video1,
+    # e la camera finisce piu' in la'. Hardcodare /dev/video0 significa, un avvio
+    # su due, fare l'OCR sull'uscita di un decoder video. Si cerca per nome fra i
+    # collegamenti stabili di /dev/v4l/by-id.
+    nome_camera: str = "U20CAM"
+    device: str | None = None          # forza un percorso, scavalcando la ricerca
     larghezza: int = 1920
     altezza: int = 1080
     fourcc: str = "MJPG"
@@ -115,6 +122,39 @@ def ritaglia_centro(immagine: np.ndarray, frazione: float) -> np.ndarray:
     return immagine[y0 : y0 + nh, x0 : x0 + nw]
 
 
+def trova_camera(nome: str = "U20CAM") -> str:
+    """Restituisce il percorso stabile della camera, cercandola per nome.
+
+    `/dev/v4l/by-id/` contiene collegamenti costruiti su vendor, modello e numero
+    di serie: sopravvivono ai riavvii e all'ordine di enumerazione. Si prende
+    l'`index0`, che e' il nodo di cattura; l'`index1` dei dispositivi UVC e' il
+    nodo di soli metadati e non produce fotogrammi.
+    """
+    candidati = sorted(glob.glob("/dev/v4l/by-id/*"))
+    per_nome = [c for c in candidati if nome.lower() in c.lower()]
+    cattura = [c for c in per_nome if c.endswith("index0")] or per_nome
+    if cattura:
+        return cattura[0]
+
+    # Nessun collegamento by-id: si ripiega sull'interrogazione diretta dei nodi,
+    # perche' by-id manca se udev non ha ancora girato.
+    for nodo in sorted(glob.glob("/dev/video*")):
+        try:
+            r = subprocess.run(
+                ["v4l2-ctl", "-d", nodo, "--info"],
+                capture_output=True, text=True, timeout=3,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if nome.lower() in r.stdout.lower():
+            return nodo
+
+    disponibili = ", ".join(candidati) or "nessuno"
+    raise CameraNonDisponibile(
+        f"nessuna camera che contenga {nome!r}. Collegamenti by-id: {disponibili}"
+    )
+
+
 def _v4l2(device: str, *controlli: str) -> None:
     """Imposta controlli V4L2, senza far fallire la cattura se non esistono.
 
@@ -132,14 +172,14 @@ def _v4l2(device: str, *controlli: str) -> None:
             log.warning("v4l2-ctl non eseguibile per %s: %s", c, e)
 
 
-def blocca_esposizione(imp: ImpostazioniCamera) -> None:
+def blocca_esposizione(imp: ImpostazioniCamera, device: str | None = None) -> None:
     """Disattiva auto-esposizione e bilanciamento del bianco.
 
     Da chiamare una volta all'avvio, non a ogni scatto: alcuni driver UVC
     reimpostano i valori a ogni riapertura del device.
     """
     _v4l2(
-        imp.device,
+        device or imp.device or trova_camera(imp.nome_camera),
         "auto_exposure=1",                      # 1 = manuale
         f"exposure_time_absolute={imp.esposizione}",
         "white_balance_automatic=0",
@@ -159,11 +199,20 @@ class Camera:
 
     def __init__(self, impostazioni: ImpostazioniCamera | None = None) -> None:
         self.imp = impostazioni or ImpostazioniCamera()
+        self._percorso: str | None = None
+
+    @property
+    def percorso(self) -> str:
+        """Il device della camera, risolto una volta sola e poi ricordato."""
+        if self._percorso is None:
+            self._percorso = self.imp.device or trova_camera(self.imp.nome_camera)
+            log.info("camera: %s", self._percorso)
+        return self._percorso
 
     def _apri(self) -> cv2.VideoCapture:
-        cap = cv2.VideoCapture(self.imp.device, cv2.CAP_V4L2)
+        cap = cv2.VideoCapture(self.percorso, cv2.CAP_V4L2)
         if not cap.isOpened():
-            raise CameraNonDisponibile(f"impossibile aprire {self.imp.device}")
+            raise CameraNonDisponibile(f"impossibile aprire {self.percorso}")
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*self.imp.fourcc))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.imp.larghezza)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.imp.altezza)
@@ -203,7 +252,7 @@ class Camera:
 
             if migliore is None:
                 raise CameraNonDisponibile(
-                    f"nessun fotogramma letto da {self.imp.device}"
+                    f"nessun fotogramma letto da {self.percorso}"
                 )
         finally:
             cap.release()
