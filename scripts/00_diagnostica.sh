@@ -90,21 +90,38 @@ else bad "spazio insufficiente: reflash OBBLIGATORIO con --root-size 20GB (irrev
 
 # ---------------------------------------------------------------- 5. video
 sez "5. Video (il rischio n.1 dopo l'alimentazione)"
-if have xrandr && [ -n "${DISPLAY:-}" ]; then
-  xrandr --query 2>/dev/null | sed 's/^/  /' | head -30
-  if xrandr --query 2>/dev/null | grep -q '^DP-1 connected'; then
-    ok "DP-1 risulta connesso"
-    xrandr --query | grep -q 'DP-1 connected.*0mm x 0mm' && \
-      warn "DP-1 riporta 0mm x 0mm: EDID NON letto attraverso l'hub. Servira' una modeline forzata."
+# Si legge da sysfs, non da xrandr: via SSH xrandr non ha l'autorizzazione X del
+# greeter e fallisce anche quando lo schermo funziona benissimo. /sys/class/drm e'
+# il kernel, e non dipende da chi sta guardando.
+TROVATO_DP=0
+for st in /sys/class/drm/card*-DP-*/status; do
+  [ -r "$st" ] || continue
+  CONN=$(dirname "$st"); NOME=$(basename "$CONN")
+  S=$(cat "$st")
+  echo "  $NOME: $S"
+  [ "$S" = connected ] || continue
+  TROVATO_DP=1
+  ok "$NOME connesso"
+  [ -r "$CONN/enabled" ] && echo "    abilitato: $(cat "$CONN/enabled")"
+  if [ -s "$CONN/modes" ]; then
+    echo "    modalita': $(tr '\n' ' ' < "$CONN/modes" | cut -c1-100)"
+    if grep -qx '800x480' "$CONN/modes"; then
+      ok "800x480 e' fra le modalita' offerte: niente modeline da forzare"
+    else
+      warn "800x480 NON offerta: si pilota 1280x720 e si lascia scalare il pannello"
+    fi
   else
-    bad "DP-1 non connesso: controllare hub, cavo HDMI e alimentazione dello schermo"
+    warn "nessuna modalita' elencata"
   fi
-else
-  unk "xrandr non disponibile o nessun DISPLAY (esegui da sessione grafica, non da SSH puro)"
-fi
-for e in /sys/class/drm/card*-DP-1/edid; do
-  [ -s "$e" ] && ok "EDID presente ($e, $(stat -c%s "$e") byte)" || warn "EDID vuoto o assente ($e): lo schermo non si descrive attraverso l'hub"
+  E="$CONN/edid"
+  [ -s "$E" ] && ok "EDID letto ($(stat -c%s "$E") byte)" \
+    || warn "EDID vuoto: il pannello non si descrive attraverso l'hub (le modalita' sopra restano valide)"
 done
+[ "$TROVATO_DP" = 1 ] || bad "nessun DisplayPort connesso: controllare hub, cavo HDMI e alimentazione dello schermo"
+if have xrandr && [ -n "${DISPLAY:-}" ] && xrandr --query >/dev/null 2>&1; then
+  echo "  --- xrandr (sessione grafica accessibile) ---"
+  xrandr --query 2>/dev/null | grep -E "^(Screen|DP|HDMI)" | sed 's/^/  /'
+fi
 echo "  --- driver grafico ---"
 if have glxinfo; then
   glxinfo -B 2>/dev/null | grep -i 'renderer\|OpenGL version' | sed 's/^/  /'
