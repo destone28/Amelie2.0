@@ -1,0 +1,38 @@
+[project]
+name = "amelie"
+version = "0.1.0"
+description = "Supporto da tavolo che riconosce un vino dall'etichetta e ne racconta la storia"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Emilio Destratis" }]
+
+dependencies = [
+    "numpy>=1.26",
+    "opencv-python-headless>=4.10",
+    "rapidocr>=3.0",
+    "onnxruntime>=1.20",
+    "rapidfuzz>=3.9",
+    "msgpack>=1.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sse-starlette>=2.1",
+    "tomli>=2.0; python_version<'3.11'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov"]
+
+[project.scripts]
+amelie = "amelie.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

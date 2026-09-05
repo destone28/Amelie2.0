@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Dati generati
+data/amelie.db
+data/sources/*.csv
+data/sources/*.json
+!data/sources/.gitkeep
+
+# Modelli scaricati (vedi scripts/fetch_models.sh)
+models/*.gguf
+models/*.onnx
+models/*.onnx.json
+
+# Cache di runtime
+var/
+*.log
+cache/
+
+# Sistema
+.DS_Store
+.idea/
+.vscode/
