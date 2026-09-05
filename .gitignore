@@ -6,11 +6,13 @@ venv/
 *.egg-info/
 .pytest_cache/
 
-# Dati generati
+# Il database si ricostruisce con data/build_db.py: non si versiona
 data/amelie.db
-data/sources/*.csv
-data/sources/*.json
-!data/sources/.gitkeep
+data/*.sqlite
+
+# Gli snapshot delle fonti INVECE si versionano: il dispositivo e' offline e il
+# repo deve poter ricostruire il database anche fra un anno, quando un endpoint
+# potrebbe non rispondere piu'. Vedi docs/ATTRIBUZIONI.md per le licenze.
 
 # Modelli scaricati (vedi scripts/fetch_models.sh)
 models/*.gguf
