@@ -33,11 +33,14 @@ echo "Lo schermo deve essere acceso e collegato PRIMA di lanciare questo script.
 # ------------------------------------------------------------------ 1
 sez "1. Kernel"
 echo "  $(uname -r)"
-# I kernel Arduino portano l'hash del commit nella release (es. 7.0.0-g122c2c22d838)
-case "$(uname -r)" in
-  *-g[0-9a-f]*|*unoq*) ok "kernel Arduino: il dai-link HDMI/I2S e' presente in tutte le linee pubblicate" ;;
-  *) warn "non sembra un kernel Arduino per UNO Q: i controlli sotto restano quelli che contano" ;;
-esac
+# I kernel Arduino portano l'hash del commit nella release, es.
+# 7.0.0-g122c2c22d838. Servono almeno 8 cifre esadecimali, altrimenti "-generic"
+# passerebbe per un hash.
+if uname -r | grep -qE -- '-g[0-9a-f]{8,}|unoq'; then
+  ok "kernel Arduino: il dai-link HDMI/I2S e' presente in tutte le linee pubblicate"
+else
+  warn "non sembra un kernel Arduino per UNO Q: i controlli sotto restano quelli che contano"
+fi
 
 # ------------------------------------------------------------------ 2
 sez "2. Profilo ALSA del costruttore"
