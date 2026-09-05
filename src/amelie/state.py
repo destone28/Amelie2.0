@@ -1,0 +1,242 @@
+"""La macchina a stati dell'interazione.
+
+Il requisito guida del progetto è **attrito zero**: nessuna istruzione, nessun
+pulsante, nessun verso obbligato oltre quello naturale. Si appoggia la
+bottiglia e il dispositivo fa il resto. Tutto quello che succede è quindi
+guidato da due soli segnali fisici — la bottiglia c'è o non c'è — più il tocco
+sullo schermo quando serve una disambiguazione.
+
+Questo modulo non fa I/O. Non parla con la camera, con l'MCU, con l'LLM: riceve
+eventi e produce transizioni ed *effetti*, che qualcun altro esegue. È scritto
+così perché la logica dell'interazione è la parte che si sbaglia più facilmente
+e più costosamente, ed è l'unica che si può collaudare per intero senza
+hardware.
+
+Il ciclo normale::
+
+    ATTESA ──bottiglia──► ASSESTAMENTO ──stabile──► SCANSIONE ──letta──►
+    RICONOSCIMENTO ──sicuro──► RACCONTO ──finito──► CONCLUSO ──tolta──► ATTESA
+
+e le due deviazioni che contano::
+
+    RICONOSCIMENTO ──dubbio──► CONFERMA ──tocco──► RACCONTO
+    SCANSIONE ──illeggibile──► RIPOSIZIONA ──ritenta──► SCANSIONE
+"""
+
+from __future__ import annotations
+
+import enum
+from dataclasses import dataclass, field
+from typing import Callable
+
+
+class Stato(enum.Enum):
+    """Dove si trova l'interazione."""
+
+    ATTESA = "attesa"                  # nessuna bottiglia, anello in respiro lento
+    ASSESTAMENTO = "assestamento"      # bottiglia appena posata, si aspetta che smetta di oscillare
+    SCANSIONE = "scansione"            # flash, raffica, OCR
+    RICONOSCIMENTO = "riconoscimento"  # interrogazione del database
+    CONFERMA = "conferma"              # match dubbio: si mostrano i candidati
+    RACCONTO = "racconto"              # testo a schermo e voce
+    CONCLUSO = "concluso"              # racconto finito, bottiglia ancora lì
+    RIPOSIZIONA = "riposiziona"        # etichetta illeggibile, si chiede di girarla
+    GUASTO = "guasto"                  # errore tecnico, si mostra e si torna in attesa
+
+
+class Evento(enum.Enum):
+    """Cosa può succedere."""
+
+    BOTTIGLIA_PRESENTE = "bottiglia_presente"
+    BOTTIGLIA_ASSENTE = "bottiglia_assente"
+    SCADENZA = "scadenza"              # il timer dello stato corrente è scaduto
+    LETTURA_RIUSCITA = "lettura_riuscita"
+    LETTURA_FALLITA = "lettura_fallita"
+    MATCH_SICURO = "match_sicuro"
+    MATCH_DUBBIO = "match_dubbio"
+    MATCH_ASSENTE = "match_assente"
+    CANDIDATO_SCELTO = "candidato_scelto"
+    RACCONTO_FINITO = "racconto_finito"
+    RIPETI = "ripeti"                  # tocco sullo schermo a racconto concluso
+    ERRORE = "errore"
+
+
+class Effetto(enum.Enum):
+    """Cosa deve fare il mondo esterno quando si entra in uno stato.
+
+    L'orchestratore traduce ciascuno in chiamate concrete: l'anello di luce sta
+    sull'MCU, la camera e l'OCR su Linux, la voce su Piper.
+    """
+
+    ANELLO_RESPIRO = "anello_respiro"      # attesa: pulsazione lenta e calda
+    ANELLO_ACCESO = "anello_acceso"        # bottiglia riconosciuta: luce ferma
+    ANELLO_LAVORO = "anello_lavoro"        # elaborazione: rotazione lenta
+    ANELLO_ATTENZIONE = "anello_attenzione"  # serve qualcosa dall'utente
+    ANELLO_SPENTO = "anello_spento"
+    FLASH_E_SCATTA = "flash_e_scatta"
+    INTERROGA_DATABASE = "interroga_database"
+    AVVIA_RACCONTO = "avvia_racconto"
+    FERMA_RACCONTO = "ferma_racconto"
+    MOSTRA_CANDIDATI = "mostra_candidati"
+    MOSTRA_RIPOSIZIONA = "mostra_riposiziona"
+    MOSTRA_GUASTO = "mostra_guasto"
+    SCHERMO_ATTESA = "schermo_attesa"
+
+
+# Quanto si resta in uno stato prima che scatti SCADENZA. `None` = si resta
+# finché non arriva un altro evento.
+DURATE_S: dict[Stato, float | None] = {
+    # Il tempo che serve alla bottiglia per smettere di oscillare. Sotto i
+    # 400 ms si fotografa il movimento; sopra il secondo l'attesa si nota.
+    Stato.ASSESTAMENTO: 0.6,
+    Stato.SCANSIONE: None,
+    Stato.RICONOSCIMENTO: None,
+    # Se nessuno tocca lo schermo si prende il primo candidato: meglio
+    # raccontare il vino più probabile che restare fermi.
+    Stato.CONFERMA: 12.0,
+    Stato.RACCONTO: None,
+    Stato.RIPOSIZIONA: 4.0,
+    Stato.GUASTO: 6.0,
+    Stato.CONCLUSO: None,
+    Stato.ATTESA: None,
+}
+
+EFFETTI_INGRESSO: dict[Stato, tuple[Effetto, ...]] = {
+    Stato.ATTESA: (Effetto.ANELLO_RESPIRO, Effetto.SCHERMO_ATTESA),
+    Stato.ASSESTAMENTO: (Effetto.ANELLO_ACCESO,),
+    Stato.SCANSIONE: (Effetto.ANELLO_LAVORO, Effetto.FLASH_E_SCATTA),
+    Stato.RICONOSCIMENTO: (Effetto.ANELLO_LAVORO, Effetto.INTERROGA_DATABASE),
+    Stato.CONFERMA: (Effetto.ANELLO_ATTENZIONE, Effetto.MOSTRA_CANDIDATI),
+    Stato.RACCONTO: (Effetto.ANELLO_ACCESO, Effetto.AVVIA_RACCONTO),
+    Stato.CONCLUSO: (Effetto.ANELLO_ACCESO,),
+    Stato.RIPOSIZIONA: (Effetto.ANELLO_ATTENZIONE, Effetto.MOSTRA_RIPOSIZIONA),
+    Stato.GUASTO: (Effetto.ANELLO_ATTENZIONE, Effetto.MOSTRA_GUASTO),
+}
+
+# Effetti da eseguire USCENDO da uno stato. Serve un solo caso, ma è quello
+# che conta: se si toglie la bottiglia mentre il dispositivo sta parlando,
+# deve zittirsi subito. Senza questo, continuerebbe a raccontare un vino che
+# non c'è più.
+EFFETTI_USCITA: dict[Stato, tuple[Effetto, ...]] = {
+    Stato.RACCONTO: (Effetto.FERMA_RACCONTO,),
+}
+
+# Tabella delle transizioni: (stato, evento) -> stato successivo.
+TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
+    (Stato.ATTESA, Evento.BOTTIGLIA_PRESENTE): Stato.ASSESTAMENTO,
+
+    (Stato.ASSESTAMENTO, Evento.SCADENZA): Stato.SCANSIONE,
+    (Stato.ASSESTAMENTO, Evento.BOTTIGLIA_ASSENTE): Stato.ATTESA,
+
+    (Stato.SCANSIONE, Evento.LETTURA_RIUSCITA): Stato.RICONOSCIMENTO,
+    (Stato.SCANSIONE, Evento.LETTURA_FALLITA): Stato.RIPOSIZIONA,
+
+    (Stato.RICONOSCIMENTO, Evento.MATCH_SICURO): Stato.RACCONTO,
+    (Stato.RICONOSCIMENTO, Evento.MATCH_DUBBIO): Stato.CONFERMA,
+    # Nessun match non è un fallimento: si racconta la denominazione, o il
+    # vitigno, o si chiede di girare l'etichetta. Decide il narratore.
+    (Stato.RICONOSCIMENTO, Evento.MATCH_ASSENTE): Stato.RACCONTO,
+
+    (Stato.CONFERMA, Evento.CANDIDATO_SCELTO): Stato.RACCONTO,
+    (Stato.CONFERMA, Evento.SCADENZA): Stato.RACCONTO,
+
+    (Stato.RACCONTO, Evento.RACCONTO_FINITO): Stato.CONCLUSO,
+
+    (Stato.CONCLUSO, Evento.RIPETI): Stato.RACCONTO,
+
+    (Stato.RIPOSIZIONA, Evento.SCADENZA): Stato.SCANSIONE,
+
+    (Stato.GUASTO, Evento.SCADENZA): Stato.ATTESA,
+}
+
+# Stati da cui togliere la bottiglia riporta sempre in attesa. Vale ovunque
+# tranne che in ATTESA (dove ci si è già) e in GUASTO (che si esaurisce da sé).
+_TORNA_IN_ATTESA = frozenset(Stato) - {Stato.ATTESA, Stato.GUASTO}
+
+
+@dataclass
+class Transizione:
+    """L'esito di un evento."""
+
+    da: Stato
+    evento: Evento
+    a: Stato
+    effetti: tuple[Effetto, ...] = ()
+    durata_s: float | None = None
+
+    @property
+    def cambia_stato(self) -> bool:
+        return self.da != self.a
+
+
+@dataclass
+class Macchina:
+    """La macchina a stati. Non fa I/O: si limita a dire cosa deve succedere.
+
+    >>> m = Macchina()
+    >>> m.stato
+    <Stato.ATTESA: 'attesa'>
+    >>> t = m.invia(Evento.BOTTIGLIA_PRESENTE)
+    >>> t.a
+    <Stato.ASSESTAMENTO: 'assestamento'>
+    >>> Effetto.ANELLO_ACCESO in t.effetti
+    True
+    """
+
+    stato: Stato = Stato.ATTESA
+    storia: list[Transizione] = field(default_factory=list, repr=False)
+    su_transizione: Callable[[Transizione], None] | None = None
+
+    def invia(self, evento: Evento) -> Transizione:
+        """Applica un evento e restituisce la transizione risultante.
+
+        Un evento che non ha senso nello stato corrente non è un errore: viene
+        ignorato e la macchina resta dov'è. Nel mondo reale il sensore di
+        presenza rimbalza, l'utente tocca lo schermo quando non serve, e una
+        macchina che solleva eccezioni per questo è una macchina che si pianta
+        in sala.
+        """
+        destinazione = self._destinazione(evento)
+
+        if destinazione is None or destinazione is self.stato:
+            t = Transizione(da=self.stato, evento=evento, a=self.stato)
+        else:
+            t = Transizione(
+                da=self.stato,
+                evento=evento,
+                a=destinazione,
+                effetti=(
+                    EFFETTI_USCITA.get(self.stato, ())
+                    + EFFETTI_INGRESSO.get(destinazione, ())
+                ),
+                durata_s=DURATE_S.get(destinazione),
+            )
+            self.stato = destinazione
+
+        self.storia.append(t)
+        if self.su_transizione is not None:
+            self.su_transizione(t)
+        return t
+
+    def _destinazione(self, evento: Evento) -> Stato | None:
+        # Togliere la bottiglia interrompe tutto: ha precedenza su ogni altra
+        # transizione, perché è il modo in cui l'utente dice "ho finito".
+        if evento is Evento.BOTTIGLIA_ASSENTE and self.stato in _TORNA_IN_ATTESA:
+            return Stato.ATTESA
+        # Un guasto può arrivare in qualsiasi momento.
+        if evento is Evento.ERRORE:
+            return Stato.GUASTO
+        return TRANSIZIONI.get((self.stato, evento))
+
+    def reimposta(self) -> None:
+        self.stato = Stato.ATTESA
+        self.storia.clear()
+
+    @property
+    def sta_elaborando(self) -> bool:
+        """Vero quando la CPU è occupata e non si devono avviare altri lavori."""
+        return self.stato in (
+            Stato.SCANSIONE,
+            Stato.RICONOSCIMENTO,
+            Stato.RACCONTO,
+        )
