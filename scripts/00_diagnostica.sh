@@ -105,11 +105,18 @@ for st in /sys/class/drm/card*-DP-*/status; do
   [ -r "$CONN/enabled" ] && echo "    abilitato: $(cat "$CONN/enabled")"
   if [ -s "$CONN/modes" ]; then
     echo "    modalita': $(tr '\n' ' ' < "$CONN/modes" | cut -c1-100)"
-    if grep -qx '800x480' "$CONN/modes"; then
-      ok "800x480 e' fra le modalita' offerte: niente modeline da forzare"
+    # ATTENZIONE: essere ELENCATA non significa FUNZIONARE. Sul pannello LAFVIN
+    # da 5" xrandr elenca 800x480 per prima e la marca come preferita, ma se la
+    # si attiva il pannello resta NERO. Solo 1280x720 e 1920x1080 - modalita' CEA
+    # vere - producono immagine. L'unico criterio valido resta guardare il
+    # pannello, non leggere questa lista.
+    if grep -qx '1280x720' "$CONN/modes"; then
+      ok "1280x720 disponibile: e' la modalita' di produzione (CEA, scalata dal pannello)"
     else
-      warn "800x480 NON offerta: si pilota 1280x720 e si lascia scalare il pannello"
+      warn "1280x720 non offerta: ripiegare su 1920x1080"
     fi
+    grep -qx '800x480' "$CONN/modes" && \
+      warn "800x480 e' elencata, ma sul pannello LAFVIN NON produce immagine: non usarla"
   else
     warn "nessuna modalita' elencata"
   fi

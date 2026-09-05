@@ -1,0 +1,16 @@
+[Unit]
+Description=Amelie - modalita' video e schermo sempre sveglio
+After=lightdm.service
+Requires=lightdm.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Il server X impiega qualche secondo a esporre l'uscita dopo lightdm.
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/local/bin/amelie-display.sh
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/var/lib/lightdm/.Xauthority
+
+[Install]
+WantedBy=graphical.target
