@@ -47,17 +47,17 @@ sez "2. Profilo ALSA del costruttore"
 # La UCM per qcm2290 NON esiste in Debian: arriva solo dal pacchetto Arduino.
 # Un 'apt full-upgrade' che la sostituisce con quella Debian la fa sparire.
 dpkg -l alsa-ucm-conf 2>/dev/null | tail -1 | sed 's/^/  /'
-if dpkg -l alsa-ucm-conf 2>/dev/null | grep -q 'qcom\|arduino'; then
-  ok "pacchetto del costruttore installato"
-else
-  warn "pacchetto alsa-ucm-conf NON del costruttore: la UCM per qcm2290 non esiste in Debian"
-  echo "        rimedio: sudo apt install alsa-ucm-conf=1.2.14-1qcom0.1arduino3"
-fi
+# Cio' che conta e' che i profili per qcm2290 ci siano: Debian non li ha, quindi
+# se ci sono vuol dire che l'immagine li porta, comunque sia numerato il pacchetto.
+# Controllare la stringa di versione darebbe un falso allarme sull'immagine di lancio.
 if [ -d "$UCM" ]; then
-  ok "profili presenti: $(ls "$UCM" | tr '\n' ' ')"
-  [ -f "$UCM/HDMI.conf" ] && ok "HDMI.conf c'e'" || warn "HDMI.conf manca"
+  ok "profili qcm2290 presenti: $(ls "$UCM" | tr '\n' ' ')"
+  [ -f "$UCM/HDMI.conf" ] && ok "HDMI.conf c'e'" \
+    || bad "HDMI.conf manca: senza, PipeWire non espone alcun sink HDMI"
 else
-  bad "$UCM assente: senza questo PipeWire non espone alcun sink HDMI"
+  bad "$UCM assente: Debian non fornisce i profili per qcm2290, li porta solo"
+  echo "        l'immagine Arduino. Un 'apt full-upgrade' puo' averli rimossi."
+  echo "        rimedio: reinstallare alsa-ucm-conf dal repo Arduino, poi apt-mark hold"
 fi
 
 # ------------------------------------------------------------------ 3
@@ -74,16 +74,23 @@ fi
 
 # ------------------------------------------------------------------ 4
 sez "4. Device tree"
-if [ -r "$DTB" ]; then
-  if strings "$DTB" 2>/dev/null | grep -q 'HDMI/I2S'; then
-    ok "il DTB caricato contiene il collegamento HDMI/I2S"
+# Si interroga il device tree VIVO, non il file .dtb: su alcune immagini quel file
+# non sta affatto in /boot/efi (la 6.16.7 di lancio ci mette la collezione DTB
+# completa di upstream) e un controllo con 'strings' darebbe un falso negativo.
+# /proc/device-tree e' l'albero effettivamente caricato: e' l'unica fonte che conta.
+if [ -d /proc/device-tree/sound ]; then
+  LINKS=$(for d in /proc/device-tree/sound/*/; do
+            tr -d '\0' < "$d/link-name" 2>/dev/null && echo
+          done | grep -v '^$')
+  echo "$LINKS" | sed 's/^/  dai-link: /'
+  if echo "$LINKS" | grep -q 'HDMI/I2S'; then
+    ok "il device tree caricato espone 'HDMI/I2S Playback': l'audio ha la strada"
   else
-    bad "il DTB NON contiene 'HDMI/I2S': l'audio non ha proprio la strada"
-    echo "        causa tipica: un pannello DSI abilitato (esclude video_sound-usbc.dtbo)"
-    echo "        oppure un aggiornamento che ha rigenerato /boot/efi"
+    bad "nessun dai-link HDMI/I2S: l'audio non ha proprio la strada"
+    echo "        causa tipica: un pannello DSI abilitato, che esclude l'overlay video_sound-usbc"
   fi
 else
-  warn "$DTB non leggibile (serve root?): prova  sudo strings $DTB | grep HDMI/I2S"
+  warn "/proc/device-tree/sound assente: device tree non ispezionabile"
 fi
 
 # ------------------------------------------------------------------ 5
@@ -118,6 +125,17 @@ fi
 sez "7. L'interruttore che conta"
 # Questo e' il gate di q6routing. Con il mixer a 0 non esce nulla E aplay
 # riporta comunque successo: e' la ragione per cui l'audio sembra rotto.
+# Il nome cambia fra le immagini: sulla 6.16.7 di lancio il controllo comandato
+# dalla UCM e' 'SEC_MI2S_RX Audio Mixer MultiMedia4'. Esiste anche un piu' generico
+# 'HDMI Mixer MultiMedia4' del routing q6, che NON e' quello giusto.
+if ! amixer -c "$CARD" cget name="$MIXER" >/dev/null 2>&1; then
+  for alt in "HDMI Mixer MultiMedia4" "DISPLAY_PORT_RX Audio Mixer MultiMedia4"; do
+    if amixer -c "$CARD" cget name="$alt" >/dev/null 2>&1; then
+      warn "'$MIXER' assente su questa immagine, uso '$alt'"
+      MIXER="$alt"; break
+    fi
+  done
+fi
 amixer -c "$CARD" cget name="$MIXER" 2>&1 | sed 's/^/  /'
 if [ "$SOLO_DIAGNOSI" = 1 ]; then
   echo; echo "  (--solo-diagnosi: mi fermo qui)"; exit 0

@@ -151,6 +151,16 @@ else
 fi
 echo "  --- device audio USB collegati ---"
 have lsusb && lsusb 2>/dev/null | grep -i 'audio\|c-media\|cmedia\|headset' | sed 's/^/  /' || true
+echo "  --- dai-link nel device tree vivo ---"
+if [ -d /proc/device-tree/sound ]; then
+  DTLINKS=$(for d in /proc/device-tree/sound/*/; do
+              tr -d '\0' < "$d/link-name" 2>/dev/null && echo
+            done | grep -v '^$')
+  echo "$DTLINKS" | sed 's/^/    /'
+  echo "$DTLINKS" | grep -q 'HDMI/I2S' \
+    && ok "il device tree espone 'HDMI/I2S Playback'" \
+    || warn "nessun dai-link HDMI/I2S nel device tree"
+fi
 echo "  --- moduli audio caricati ---"
 lsmod 2>/dev/null | grep -i 'snd' | awk '{print "  "$1}' | head -15
 echo "  --- mixer (cerca canali mutati) ---"
