@@ -13,6 +13,15 @@ data/*.sqlite
 # Gli snapshot delle fonti INVECE si versionano: il dispositivo e' offline e il
 # repo deve poter ricostruire il database anche fra un anno, quando un endpoint
 # potrebbe non rispondere piu'. Vedi docs/ATTRIBUZIONI.md per le licenze.
+#
+# Eccezione: il repository X-Wines scaricato a mano pesa 1,9 GB, per lo piu' in
+# 21 milioni di valutazioni utente che a noi non servono (sono per i sistemi di
+# raccomandazione). Si versiona solo il sottoinsieme italiano, derivato con
+# data/estrai_xwines.py. Le fotografie delle etichette non si ridistribuiscono:
+# sono opere grafiche di produttori terzi. Il set di prova si rigenera in locale
+# dal proprio scaricamento, guidato dal manifesto in tests/etichette/.
+data/sources/X-Wines_Official_Repository/
+tests/etichette/*.jpeg
 
 # Modelli scaricati (vedi scripts/fetch_models.sh)
 models/*.gguf

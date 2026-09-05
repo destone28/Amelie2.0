@@ -1,0 +1,118 @@
+{
+  "_nota": "Vocabolari controllati dei dataset, tradotti. Le chiavi sono i valori esatti che compaiono nelle fonti (in inglese) e non vanno mai cambiate: sono la chiave di join. Per aggiungere una lingua si aggiunge la sua sigla a 'lingue' e la voce corrispondente a ogni termine. 'etichetta' e' la forma breve per lo schermo; 'narrativa', quando c'e', e' la forma da usare dentro una frase.",
+  "lingue": ["it", "en"],
+  "predefinita": "it",
+
+  "tipo": {
+    "_fonte": "X-Wines, campo Type",
+    "Red":           {"it": {"etichetta": "rosso"},   "en": {"etichetta": "red"}},
+    "White":         {"it": {"etichetta": "bianco"},  "en": {"etichetta": "white"}},
+    "Rosé":          {"it": {"etichetta": "rosato"},  "en": {"etichetta": "rosé"}},
+    "Sparkling":     {"it": {"etichetta": "spumante"}, "en": {"etichetta": "sparkling"}},
+    "Dessert":       {"it": {"etichetta": "da dessert"}, "en": {"etichetta": "dessert"}},
+    "Dessert/Port":  {"it": {"etichetta": "da dessert, in stile Porto"}, "en": {"etichetta": "dessert, Port style"}}
+  },
+
+  "colore": {
+    "_fonte": "Figshare PDO, campo Color",
+    "Red":   {"it": {"etichetta": "rosso"},  "en": {"etichetta": "red"}},
+    "White": {"it": {"etichetta": "bianco"}, "en": {"etichetta": "white"}},
+    "Rosé":  {"it": {"etichetta": "rosato"}, "en": {"etichetta": "rosé"}}
+  },
+
+  "categoria_ue": {
+    "_fonte": "Figshare PDO, campo Category. Le forme italiane sono quelle ufficiali dell'Allegato VII del Reg. UE 1308/2013.",
+    "Wine":                             {"it": {"etichetta": "vino"}, "en": {"etichetta": "wine"}},
+    "Sparkling Wine":                   {"it": {"etichetta": "vino spumante"}, "en": {"etichetta": "sparkling wine"}},
+    "Quality Sparkling Wine":           {"it": {"etichetta": "vino spumante di qualità"}, "en": {"etichetta": "quality sparkling wine"}},
+    "Quality Aromatic Sparkling Wine":  {"it": {"etichetta": "vino spumante di qualità del tipo aromatico"}, "en": {"etichetta": "quality aromatic sparkling wine"}},
+    "Semi-Sparkling Wine":              {"it": {"etichetta": "vino frizzante"}, "en": {"etichetta": "semi-sparkling wine"}},
+    "Liqueur Wine":                     {"it": {"etichetta": "vino liquoroso"}, "en": {"etichetta": "liqueur wine"}},
+    "Wine From Raisined Grapes":        {"it": {"etichetta": "vino da uve appassite"}, "en": {"etichetta": "wine from raisined grapes"}},
+    "Wine Of Overripe Grapes":          {"it": {"etichetta": "vino da uve stramature"}, "en": {"etichetta": "wine of overripe grapes"}},
+    "Partially Fermented Grape Must":   {"it": {"etichetta": "mosto di uve parzialmente fermentato"}, "en": {"etichetta": "partially fermented grape must"}}
+  },
+
+  "elaborazione": {
+    "_fonte": "X-Wines, campo Elaborate",
+    "Varietal/100%":                     {"it": {"etichetta": "da un solo vitigno", "narrativa": "nasce da un solo vitigno"}, "en": {"etichetta": "single variety", "narrativa": "comes from a single grape variety"}},
+    "Varietal/>75%":                     {"it": {"etichetta": "in prevalenza da un vitigno", "narrativa": "nasce in prevalenza da un solo vitigno"}, "en": {"etichetta": "predominantly single variety", "narrativa": "comes predominantly from a single grape variety"}},
+    "Assemblage/Blend":                  {"it": {"etichetta": "da più vitigni", "narrativa": "nasce dall'incontro di più vitigni"}, "en": {"etichetta": "blend", "narrativa": "is a blend of several grape varieties"}},
+    "Assemblage/Valpolicella Red Blend": {"it": {"etichetta": "uvaggio della Valpolicella"}, "en": {"etichetta": "Valpolicella red blend"}},
+    "Assemblage/Bordeaux Red Blend":     {"it": {"etichetta": "uvaggio bordolese"}, "en": {"etichetta": "Bordeaux red blend"}},
+    "Assemblage/Tuscan Red Blend":       {"it": {"etichetta": "uvaggio toscano"}, "en": {"etichetta": "Tuscan red blend"}},
+    "Assemblage/Chianti Red Blend":      {"it": {"etichetta": "uvaggio del Chianti"}, "en": {"etichetta": "Chianti red blend"}},
+    "Assemblage/Soave White Blend":      {"it": {"etichetta": "uvaggio del Soave"}, "en": {"etichetta": "Soave white blend"}},
+    "Assemblage/Champagne Blend":        {"it": {"etichetta": "uvaggio dello Champagne"}, "en": {"etichetta": "Champagne blend"}},
+    "Assemblage/Bourgogne Red Blend":    {"it": {"etichetta": "uvaggio borgognone"}, "en": {"etichetta": "Bourgogne red blend"}}
+  },
+
+  "corpo": {
+    "_fonte": "X-Wines, campo Body",
+    "Very light-bodied": {"it": {"etichetta": "molto leggero", "narrativa": "di corpo molto leggero"}, "en": {"etichetta": "very light-bodied", "narrativa": "very light in body"}},
+    "Light-bodied":      {"it": {"etichetta": "leggero", "narrativa": "di corpo leggero"}, "en": {"etichetta": "light-bodied", "narrativa": "light in body"}},
+    "Medium-bodied":     {"it": {"etichetta": "di media struttura", "narrativa": "di media struttura"}, "en": {"etichetta": "medium-bodied", "narrativa": "medium-bodied"}},
+    "Full-bodied":       {"it": {"etichetta": "strutturato", "narrativa": "di bella struttura"}, "en": {"etichetta": "full-bodied", "narrativa": "full-bodied"}},
+    "Very full-bodied":  {"it": {"etichetta": "di grande struttura", "narrativa": "di grande struttura"}, "en": {"etichetta": "very full-bodied", "narrativa": "very full-bodied"}}
+  },
+
+  "acidita": {
+    "_fonte": "X-Wines, campo Acidity",
+    "Low":    {"it": {"etichetta": "bassa", "narrativa": "acidità contenuta"}, "en": {"etichetta": "low", "narrativa": "low acidity"}},
+    "Medium": {"it": {"etichetta": "media", "narrativa": "acidità equilibrata"}, "en": {"etichetta": "medium", "narrativa": "balanced acidity"}},
+    "High":   {"it": {"etichetta": "alta", "narrativa": "bella acidità"}, "en": {"etichetta": "high", "narrativa": "bright acidity"}}
+  },
+
+  "abbinamento": {
+    "_fonte": "X-Wines, campo Harmonize",
+    "Beef":                {"it": {"etichetta": "manzo"}, "en": {"etichetta": "beef"}},
+    "Veal":                {"it": {"etichetta": "vitello"}, "en": {"etichetta": "veal"}},
+    "Lamb":                {"it": {"etichetta": "agnello"}, "en": {"etichetta": "lamb"}},
+    "Pork":                {"it": {"etichetta": "maiale"}, "en": {"etichetta": "pork"}},
+    "Poultry":             {"it": {"etichetta": "pollame"}, "en": {"etichetta": "poultry"}},
+    "Chicken":             {"it": {"etichetta": "pollo"}, "en": {"etichetta": "chicken"}},
+    "Duck":                {"it": {"etichetta": "anatra"}, "en": {"etichetta": "duck"}},
+    "Game Meat":           {"it": {"etichetta": "cacciagione"}, "en": {"etichetta": "game meat"}},
+    "Cured Meat":          {"it": {"etichetta": "salumi"}, "en": {"etichetta": "cured meat"}},
+    "Ham":                 {"it": {"etichetta": "prosciutto"}, "en": {"etichetta": "ham"}},
+    "Roast":               {"it": {"etichetta": "arrosti"}, "en": {"etichetta": "roast"}},
+    "Grilled":             {"it": {"etichetta": "grigliate"}, "en": {"etichetta": "grilled dishes"}},
+    "Barbecue":            {"it": {"etichetta": "carne alla brace"}, "en": {"etichetta": "barbecue"}},
+    "Light Stews":         {"it": {"etichetta": "stufati leggeri"}, "en": {"etichetta": "light stews"}},
+    "Lean Fish":           {"it": {"etichetta": "pesce magro"}, "en": {"etichetta": "lean fish"}},
+    "Rich Fish":           {"it": {"etichetta": "pesce grasso"}, "en": {"etichetta": "rich fish"}},
+    "Fish":                {"it": {"etichetta": "pesce"}, "en": {"etichetta": "fish"}},
+    "Shellfish":           {"it": {"etichetta": "crostacei"}, "en": {"etichetta": "shellfish"}},
+    "Seafood":             {"it": {"etichetta": "frutti di mare"}, "en": {"etichetta": "seafood"}},
+    "Sushi":               {"it": {"etichetta": "sushi"}, "en": {"etichetta": "sushi"}},
+    "Sashimi":             {"it": {"etichetta": "sashimi"}, "en": {"etichetta": "sashimi"}},
+    "Pasta":               {"it": {"etichetta": "pasta"}, "en": {"etichetta": "pasta"}},
+    "Risotto":             {"it": {"etichetta": "risotto"}, "en": {"etichetta": "risotto"}},
+    "Pizza":               {"it": {"etichetta": "pizza"}, "en": {"etichetta": "pizza"}},
+    "Tomato Dishes":       {"it": {"etichetta": "piatti al pomodoro"}, "en": {"etichetta": "tomato dishes"}},
+    "Mushrooms":           {"it": {"etichetta": "funghi"}, "en": {"etichetta": "mushrooms"}},
+    "Vegetarian":          {"it": {"etichetta": "piatti vegetariani"}, "en": {"etichetta": "vegetarian dishes"}},
+    "Salad":               {"it": {"etichetta": "insalate"}, "en": {"etichetta": "salads"}},
+    "Spicy Food":          {"it": {"etichetta": "piatti speziati"}, "en": {"etichetta": "spicy food"}},
+    "Soufflé":             {"it": {"etichetta": "soufflé"}, "en": {"etichetta": "soufflé"}},
+    "Cream":               {"it": {"etichetta": "preparazioni alla panna"}, "en": {"etichetta": "cream dishes"}},
+    "Appetizer":           {"it": {"etichetta": "antipasti"}, "en": {"etichetta": "appetizers"}},
+    "Snack":               {"it": {"etichetta": "stuzzichini"}, "en": {"etichetta": "snacks"}},
+    "Aperitif":            {"it": {"etichetta": "aperitivo"}, "en": {"etichetta": "aperitif"}},
+    "Cheese":              {"it": {"etichetta": "formaggi"}, "en": {"etichetta": "cheese"}},
+    "Mild Cheese":         {"it": {"etichetta": "formaggi freschi"}, "en": {"etichetta": "mild cheese"}},
+    "Soft Cheese":         {"it": {"etichetta": "formaggi a pasta molle"}, "en": {"etichetta": "soft cheese"}},
+    "Medium-cured Cheese": {"it": {"etichetta": "formaggi di media stagionatura"}, "en": {"etichetta": "medium-cured cheese"}},
+    "Maturated Cheese":    {"it": {"etichetta": "formaggi stagionati"}, "en": {"etichetta": "matured cheese"}},
+    "Hard Cheese":         {"it": {"etichetta": "formaggi a pasta dura"}, "en": {"etichetta": "hard cheese"}},
+    "Blue Cheese":         {"it": {"etichetta": "formaggi erborinati"}, "en": {"etichetta": "blue cheese"}},
+    "Goat Cheese":         {"it": {"etichetta": "formaggi caprini"}, "en": {"etichetta": "goat cheese"}},
+    "Dessert":             {"it": {"etichetta": "dessert"}, "en": {"etichetta": "dessert"}},
+    "Sweet Dessert":       {"it": {"etichetta": "dolci"}, "en": {"etichetta": "sweet desserts"}},
+    "Fruit Dessert":       {"it": {"etichetta": "dolci alla frutta"}, "en": {"etichetta": "fruit desserts"}},
+    "Fruit":               {"it": {"etichetta": "frutta"}, "en": {"etichetta": "fruit"}},
+    "Cake":                {"it": {"etichetta": "torte"}, "en": {"etichetta": "cake"}},
+    "Cookies":             {"it": {"etichetta": "biscotti"}, "en": {"etichetta": "cookies"}},
+    "Chocolate":           {"it": {"etichetta": "cioccolato"}, "en": {"etichetta": "chocolate"}}
+  }
+}
