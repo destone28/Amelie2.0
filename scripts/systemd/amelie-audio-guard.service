@@ -1,0 +1,23 @@
+[Unit]
+Description=Amelie - garantisce la scheda audio all'avvio
+# Deve girare dopo che i probe ritardati hanno avuto la loro occasione, e prima
+# dell'applicazione, che senza scheda audio partirebbe muta.
+After=sound.target systemd-udev-settle.service
+Before=amelie.service
+ConditionPathExists=!/var/lib/amelie/niente-riavvii
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Restart=no
+TimeoutStartSec=120
+# I probe ritardati del kernel scadono a 10 s: si aspetta oltre, per non
+# scambiare un avvio lento per un avvio guasto.
+ExecStartPre=/bin/sleep 25
+ExecStart=/usr/local/bin/amelie-audio-guard.sh
+# Lo script deve poter fallire senza impedire l'avvio del resto: un Amelie muto
+# funziona ancora, uno che non parte no.
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target
