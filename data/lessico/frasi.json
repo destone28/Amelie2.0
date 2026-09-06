@@ -1,0 +1,138 @@
+{
+  "_nota": "L'impalcatura delle frasi del racconto, una per lingua. I vocabolari di vocabolari.json traducono le PAROLE; qui si traducono le FRASI che le tengono insieme. Senza questo file il dispositivo, in inglese, direbbe parole inglesi dentro periodi italiani.",
+  "_registro": "Due registri, e non è una svista. Quando il dispositivo si rivolge all'ospite gli dà del lei: è un oggetto da sala, e un tavolo di ristorante non si tratta con confidenza. Quando invece descrive il vino non si rivolge a nessuno: forma impersonale. Vale la regola già scritta nelle istruzioni al modello - si parla DEL VINO, non a chi legge - e in italiano l'impersonale la rispetta meglio di qualunque persona verbale. Da qui «Si serve fra 16 e 18 gradi», non «Servilo» e nemmeno «Lo serva».",
+  "_segnaposto": "Fra graffe. Chi aggiunge una lingua deve usare gli stessi segnaposto della voce italiana: il test di copertura fallisce se ne manca uno o se ne compare uno inventato.",
+
+  "apertura": {
+    "vino_certo": {
+      "it": "Questo è il {cosa}.",
+      "en": "This is the {cosa}."
+    },
+    "vino_dubbio": {
+      "it": "Direi che è il {cosa}.",
+      "en": "I'd say this is the {cosa}."
+    },
+    "vino_incerto": {
+      "it": "L'etichetta non è nitida: potrebbe essere il {cosa}.",
+      "en": "The label isn't sharp: it could be the {cosa}."
+    },
+    "pezzo_nome": {
+      "it": "«{nome}»",
+      "en": "“{nome}”"
+    },
+    "pezzo_cantina": {
+      "it": "di {cantina}",
+      "en": "by {cantina}"
+    },
+    "pezzo_annata": {
+      "it": "annata {annata}",
+      "en": "{annata} vintage"
+    },
+    "tipologia_nota": {
+      "it": "Non riesco a leggere l'etichetta con certezza, ma questo è un {tipologia}.",
+      "en": "I can't read the label with certainty, but this is a {tipologia}."
+    },
+    "tipologia_incerta": {
+      "it": "L'etichetta non è nitida. Potrebbe essere un {tipologia}.",
+      "en": "The label isn't sharp. This could be a {tipologia}."
+    },
+    "denominazione": {
+      "it": "L'etichetta non è nitida, ma riconosco la denominazione: {denominazione}, {sigla}.",
+      "en": "The label isn't sharp, but I recognise the appellation: {denominazione}, {sigla}."
+    },
+    "vitigno_noto": {
+      "it": "Del produttore non sono sicuro, ma il vitigno sì: {vitigno}.",
+      "en": "I'm not sure of the producer, but I am of the grape: {vitigno}."
+    },
+    "vitigno_incerto": {
+      "it": "L'etichetta non è nitida. Mi pare un {vitigno}.",
+      "en": "The label isn't sharp. It looks like a {vitigno}."
+    },
+    "illeggibile": {
+      "it": "Non riesco a leggere questa etichetta.",
+      "en": "I can't read this label."
+    }
+  },
+
+  "corpo": {
+    "nasce_da": {
+      "it": "Nasce da {vitigni}.",
+      "en": "It is made from {vitigni}."
+    },
+    "tratti_entrambi": {
+      "it": "È un vino {corpo}, con {acidita}.",
+      "en": "It is {corpo}, with {acidita}."
+    },
+    "tratti_corpo": {
+      "it": "È un vino {corpo}.",
+      "en": "It is {corpo}."
+    },
+    "tratti_acidita": {
+      "it": "È un vino con {acidita}.",
+      "en": "It is a wine with {acidita}."
+    },
+    "abbinamenti": {
+      "it": "Si accompagna bene a {piatti}.",
+      "en": "It goes well with {piatti}."
+    },
+    "temperatura_intervallo": {
+      "it": "Si serve fra {da} e {a} gradi.",
+      "en": "Best served between {da} and {a} degrees."
+    },
+    "temperatura_puntuale": {
+      "it": "Si serve a {gradi} gradi.",
+      "en": "Best served at {gradi} degrees."
+    }
+  },
+
+  "schermo": {
+    "_nota": "Qui il dispositivo parla all'ospite, non del vino: si dà del lei.",
+    "invito_a_girare": {
+      "it": "Non riesco a leggere l'etichetta. Provi a girarla verso di me?",
+      "en": "I can't read the label. Could you turn it towards me?"
+    },
+    "rinuncia": {
+      "it": "Non sono riuscito a leggere questa etichetta. Può togliere la bottiglia.",
+      "en": "I couldn't read this label. You can take the bottle away."
+    },
+    "guasto": {
+      "it": "Qualcosa non ha funzionato. Riprovo fra un istante.",
+      "en": "Something went wrong. I'll try again in a moment."
+    },
+    "sto_leggendo": {
+      "it": "Sto leggendo l'etichetta…",
+      "en": "I'm reading the label…"
+    },
+    "un_attimo": {
+      "it": "Un attimo…",
+      "en": "One moment…"
+    },
+    "fammi_guardare": {
+      "it": "Fammi guardare…",
+      "en": "Let me have a look…"
+    },
+    "illeggibile_con_invito": {
+      "it": "Non riesco a leggere questa etichetta. Provi a girarla verso di me.",
+      "en": "I can't read this label. Please try turning it towards me."
+    },
+    "quale_di_questi": {
+      "it": "Quale di questi?",
+      "en": "Which one is it?"
+    },
+    "appoggia_bottiglia": {
+      "it": "Appoggi una bottiglia",
+      "en": "Place a bottle"
+    }
+  },
+
+  "sigle": {
+    "DOP": {
+      "it": "DOCG o DOC",
+      "en": "DOCG or DOC"
+    },
+    "IGP": {
+      "it": "IGT",
+      "en": "IGT"
+    }
+  }
+}

@@ -23,7 +23,8 @@ se ne accorga.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
@@ -31,9 +32,14 @@ from typing import Iterable
 PERCORSO_PREDEFINITO = (
     Path(__file__).resolve().parents[2] / "data" / "lessico" / "vocabolari.json"
 )
+PERCORSO_FRASI = (
+    Path(__file__).resolve().parents[2] / "data" / "lessico" / "frasi.json"
+)
 
 # Le chiavi di primo livello che non sono vocabolari.
 _META = {"_nota", "lingue", "predefinita"}
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -43,6 +49,29 @@ class Lessico:
     vocabolari: dict[str, dict[str, dict]]
     lingue: tuple[str, ...]
     predefinita: str
+    # gruppo -> chiave -> lingua -> frase. Vedi data/lessico/frasi.json.
+    frasi: dict[str, dict[str, dict[str, str]]] = field(default_factory=dict)
+
+    def frase(self, gruppo: str, chiave: str, *, lingua: str | None = None,
+              **segnaposto: object) -> str:
+        """Una frase del racconto, nella lingua chiesta, coi buchi riempiti.
+
+        Se la lingua non ha quella frase si ripiega sulla predefinita: meglio
+        una riga in italiano dentro un testo inglese che un buco nero a
+        schermo. Se manca del tutto si restituisce stringa vuota, e chi chiama
+        se ne accorge perche' la frase sparisce - non perche' il dispositivo si
+        ferma davanti a un tavolo.
+        """
+        voce = self.frasi.get(gruppo, {}).get(chiave, {})
+        modello = voce.get(lingua or self.predefinita) or voce.get(self.predefinita)
+        if not modello:
+            log.warning("frase mancante: %s.%s in %s", gruppo, chiave, lingua)
+            return ""
+        try:
+            return modello.format(**segnaposto)
+        except KeyError as e:
+            log.warning("segnaposto %s mancante per %s.%s", e, gruppo, chiave)
+            return modello
 
     def traduci(
         self,
@@ -115,10 +144,23 @@ def carica(percorso: str | Path | None = None) -> Lessico:
         for nome, contenuto in dati.items()
         if nome not in _META and isinstance(contenuto, dict)
     }
+
+    frasi: dict[str, dict[str, dict[str, str]]] = {}
+    percorso_frasi = p.parent / "frasi.json"
+    if percorso_frasi.exists():
+        grezze = json.loads(percorso_frasi.read_text(encoding="utf-8"))
+        frasi = {
+            gruppo: {k: v for k, v in contenuto.items()
+                     if not k.startswith("_") and isinstance(v, dict)}
+            for gruppo, contenuto in grezze.items()
+            if not gruppo.startswith("_") and isinstance(contenuto, dict)
+        }
+
     return Lessico(
         vocabolari=vocabolari,
         lingue=tuple(dati.get("lingue", ["it"])),
         predefinita=dati.get("predefinita", "it"),
+        frasi=frasi,
     )
 
 

@@ -1,22 +1,2057 @@
 {
-  "_nota": "Conoscenza enologica di base, scritta per il progetto. Non viene da un dataset: le fonti aperte riutilizzabili non la contengono, e Wikipedia non è utilizzabile perché la sua prosa in CC BY-SA contaminerebbe i testi generati. Qui stanno solo affermazioni consolidate - vitigno, colore della bacca, descrittori sensoriali tipici, temperatura di servizio, abbinamenti classici - non giudizi né dati che cambiano da produttore a produttore. Le temperature seguono la pratica corrente della sommellerie italiana. Licenza: come il progetto.",
+  "_nota": "Conoscenza enologica di base, scritta per il progetto. Non viene da un dataset: le fonti aperte riutilizzabili non la contengono, e Wikipedia non è utilizzabile perché la sua prosa in CC BY-SA contaminerebbe i testi generati. Qui stanno solo affermazioni consolidate - vitigno, colore della bacca, descrittori sensoriali tipici, temperatura di servizio, abbinamenti classici - non giudizi né dati che cambiano da produttore a produttore. Le temperature seguono la pratica corrente della sommellerie italiana. Licenza: come il progetto. Ogni voce esiste in italiano e in inglese: la lingua si sceglie a schermo, e una descrizione tradotta a meta' produrrebbe un periodo inglese con dentro una frase italiana. Il campo `alias` elenca i modi in cui i dataset di partenza chiamano lo STESSO vitigno - «Syrah/Shiraz», «Pinot Noir», «Glera/Prosecco» - e serve a non perdere la descrizione per un problema di nomenclatura. Vanno messi li' solo i sinonimi VERI: «Barbera Bianca» non e' Barbera e «Friulano» non e' Sauvignon, e attaccarne la descrizione sarebbe inventare.",
   "_uso": "Alimenta la tabella `vitigno` di data/amelie.db ed è l'ultimo gradino del fallback: quando l'etichetta non porta né al vino né alla denominazione, si racconta il vitigno.",
   "vitigni": [
     {
-      "nome": "Sangiovese",
+      "nome": "Aglianico",
       "colore_bacca": "nera",
-      "descrizione": "Il vitigno più coltivato d'Italia e l'anima della Toscana, dal Chianti al Brunello di Montalcino. Matura tardi e sa restituire il carattere del suolo con precisione rara.",
+      "descrizione": "Il grande rosso del Sud, fra Taurasi e Vulture. Matura tardissimo, spesso a novembre, e chiede anni per distendersi.",
       "note_sensoriali": [
-        "amarena",
+        "frutta scura",
+        "cenere",
+        "tannino severo",
+        "acidità alta"
+      ],
+      "temperatura_c": "17-19",
+      "abbinamenti": [
+        "carni rosse",
+        "brasati",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "The great red of the South, between Taurasi and the Vulture. It ripens very late, often in November, and needs years to unwind.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "ash",
+        "severe tannin",
+        "high acidity"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "braised meat",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Aglianico Del Vulture",
+        "Aglianico del Vulture"
+      ]
+    },
+    {
+      "nome": "Albana",
+      "colore_bacca": "bianca",
+      "descrizione": "Romagnola, primo bianco italiano a diventare DOCG nel 1987. Buccia spessa che permette secco, passito e macerato.",
+      "note_sensoriali": [
+        "albicocca",
+        "camomilla",
+        "nota tannica"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce grasso",
+        "carni bianche",
+        "formaggi di media stagionatura"
+      ],
+      "descrizione_en": "From Romagna, the first Italian white to become DOCG, in 1987. Thick skins that allow dry, sweet and skin-contact styles.",
+      "note_sensoriali_en": [
+        "apricot",
+        "camomile",
+        "tannic note"
+      ],
+      "abbinamenti_en": [
+        "oily fish",
+        "white meat",
+        "medium-aged cheeses"
+      ]
+    },
+    {
+      "nome": "Albarossa",
+      "colore_bacca": "nera",
+      "descrizione": "Incrocio piemontese fra Nebbiolo e Barbera ottenuto nel 1938, diffuso solo da pochi anni.",
+      "note_sensoriali": [
+        "frutta scura",
         "viola",
+        "tannino saldo"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "brasati",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "A Piedmontese crossing of Nebbiolo and Barbera obtained in 1938, planted only in recent years.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "violet",
+        "firm tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "braised meat",
+        "aged cheeses"
+      ]
+    },
+    {
+      "nome": "Aleatico",
+      "colore_bacca": "nera",
+      "descrizione": "Aromatico a bacca nera, dell'Elba e della Puglia. Dà passiti dolci di grande profumo, imparentato col Moscato.",
+      "note_sensoriali": [
+        "rosa",
+        "frutta rossa",
+        "uva moscata"
+      ],
+      "temperatura_c": "12-14",
+      "abbinamenti": [
+        "dolci",
+        "dolci al cioccolato",
+        "pasticceria secca"
+      ],
+      "descrizione_en": "An aromatic black grape, from Elba and Puglia. It gives sweet passito wines of great perfume, and is related to Moscato.",
+      "note_sensoriali_en": [
+        "rose",
+        "red fruit",
+        "muscat grape"
+      ],
+      "abbinamenti_en": [
+        "desserts",
+        "chocolate desserts",
+        "dry pastries"
+      ],
+      "alias": [
+        "Aléatico"
+      ]
+    },
+    {
+      "nome": "Alicante Bouschet",
+      "colore_bacca": "nera",
+      "descrizione": "Incrocio francese dell'Ottocento, uno dei pochi vitigni a polpa rossa e non solo buccia. In Italia sta soprattutto in Toscana e in Sicilia.",
+      "note_sensoriali": [
+        "frutta scura",
+        "colore intenso",
+        "tannino saldo"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "carne alla brace",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "A nineteenth-century French crossing, one of the few grapes with red flesh and not just red skin. In Italy it is found above all in Tuscany and Sicily.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "deep colour",
+        "firm tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "grilled meat",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Alicante",
+        "Alicante Bouschet/Garnacha Tintorera"
+      ]
+    },
+    {
+      "nome": "Ancellotta",
+      "colore_bacca": "nera",
+      "descrizione": "Emiliana, di colore fortissimo: si usa soprattutto per rinforzare altri rossi, e il suo mosto tinge come inchiostro.",
+      "note_sensoriali": [
+        "frutta scura",
+        "colore intenso",
+        "tannino morbido"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "pasta",
+        "carni rosse"
+      ],
+      "descrizione_en": "From Emilia, of very deep colour: it is used above all to reinforce other reds, and its must stains like ink.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "deep colour",
+        "soft tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "pasta",
+        "red meat"
+      ]
+    },
+    {
+      "nome": "Arneis",
+      "colore_bacca": "bianca",
+      "descrizione": "Piemontese, del Roero. Il nome in dialetto significa pressappoco birichino, per quanto è capriccioso in vigna.",
+      "note_sensoriali": [
+        "pera",
+        "mandorla",
+        "fiori bianchi"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "antipasti",
+        "pesce magro",
+        "carni bianche"
+      ],
+      "descrizione_en": "Piedmontese, from the Roero. The name means roughly 'little rascal' in dialect, for how capricious it is in the vineyard.",
+      "note_sensoriali_en": [
+        "pear",
+        "almond",
+        "white flowers"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "lean fish",
+        "white meat"
+      ]
+    },
+    {
+      "nome": "Barbera",
+      "colore_bacca": "nera",
+      "descrizione": "Piemontese, generosa e di acidità spiccata, con tannino discreto. Da vino quotidiano si è guadagnata versioni di grande serietà.",
+      "note_sensoriali": [
+        "ciliegia matura",
+        "prugna",
+        "acidità viva"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "salumi",
+        "pasta al ragu",
+        "carni bianche"
+      ],
+      "descrizione_en": "Piedmontese, generous and markedly acidic, with restrained tannin. Once an everyday wine, it has earned versions of real seriousness.",
+      "note_sensoriali_en": [
+        "ripe cherry",
+        "plum",
+        "lively acidity"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "pasta with ragù",
+        "white meat"
+      ]
+    },
+    {
+      "nome": "Bombino Bianco",
+      "colore_bacca": "bianca",
+      "descrizione": "Pugliese e abruzzese, produttivo e discreto. In Abruzzo entra spesso in ciò che si chiama Trebbiano.",
+      "note_sensoriali": [
+        "mela",
+        "agrumi",
+        "acidità equilibrata"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "antipasti",
+        "verdure"
+      ],
+      "descrizione_en": "From Puglia and Abruzzo, productive and unassuming. In Abruzzo it often goes into what is called Trebbiano.",
+      "note_sensoriali_en": [
+        "apple",
+        "citrus",
+        "balanced acidity"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "vegetables"
+      ]
+    },
+    {
+      "nome": "Bonarda",
+      "colore_bacca": "nera",
+      "descrizione": "Nome che in Italia copre vitigni diversi: in Oltrepò indica la Croatina, in Piemonte la Bonarda Piemontese vera. Rossi di frutto, spesso vivaci.",
+      "note_sensoriali": [
+        "ciliegia",
+        "frutta rossa",
+        "tannino morbido"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "pasta",
+        "carni bianche"
+      ],
+      "descrizione_en": "A name that in Italy covers different grapes: in the Oltrepò it means Croatina, in Piedmont the true Bonarda Piemontese. Fruity reds, often lightly fizzy.",
+      "note_sensoriali_en": [
+        "cherry",
+        "red fruit",
+        "soft tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "pasta",
+        "white meat"
+      ]
+    },
+    {
+      "nome": "Bovale",
+      "colore_bacca": "nera",
+      "descrizione": "Sardo, sotto questo nome stanno due vitigni distinti: il Bovale Sardo e il Bovale Grande. Entrambi danno colore e tannino.",
+      "note_sensoriali": [
+        "frutta scura",
+        "spezie",
+        "tannino deciso"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "agnello",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "Sardinian: two distinct grapes go under this name, Bovale Sardo and Bovale Grande. Both give colour and tannin.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "spice",
+        "firm tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "lamb",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Bovale Sardo",
+        "Bovale Grande"
+      ]
+    },
+    {
+      "nome": "Brachetto",
+      "colore_bacca": "nera",
+      "descrizione": "Piemontese, di Acqui. Aromatico come un Moscato ma a bacca nera: dà un rosso dolce e spumeggiante, di bassa gradazione.",
+      "note_sensoriali": [
+        "rosa",
+        "fragola",
+        "uva moscata"
+      ],
+      "temperatura_c": "6-8",
+      "abbinamenti": [
+        "dolci",
+        "dolci al cioccolato",
+        "frutta"
+      ],
+      "descrizione_en": "Piedmontese, from Acqui. Aromatic like a Moscato but black-berried: it gives a sweet, sparkling red, low in alcohol.",
+      "note_sensoriali_en": [
+        "rose",
+        "strawberry",
+        "muscat grape"
+      ],
+      "abbinamenti_en": [
+        "desserts",
+        "chocolate desserts",
+        "fruit"
+      ]
+    },
+    {
+      "nome": "Cabernet Franc",
+      "colore_bacca": "nera",
+      "descrizione": "Genitore del Cabernet Sauvignon, più snello e profumato. Nel Nordest italiano ha una lunga tradizione.",
+      "note_sensoriali": [
+        "frutta rossa",
+        "foglia di pomodoro",
+        "erbaceo fine"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "carni bianche",
+        "verdure"
+      ],
+      "descrizione_en": "Parent of Cabernet Sauvignon, slimmer and more perfumed. It has a long tradition in Italy's North-East.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "tomato leaf",
+        "fine herbaceous note"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "white meat",
+        "vegetables"
+      ]
+    },
+    {
+      "nome": "Cabernet Sauvignon",
+      "colore_bacca": "nera",
+      "descrizione": "Il vitigno bordolese più diffuso al mondo. In Italia è protagonista dei rossi di Bolgheri e presenza costante nei blend.",
+      "note_sensoriali": [
+        "ribes nero",
+        "peperone",
+        "cedro",
+        "tannino saldo"
+      ],
+      "temperatura_c": "17-19",
+      "abbinamenti": [
+        "carni rosse",
+        "agnello",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "The most widely planted Bordeaux grape in the world. In Italy it leads the reds of Bolgheri and is a constant presence in blends.",
+      "note_sensoriali_en": [
+        "blackcurrant",
+        "bell pepper",
+        "cedar",
+        "firm tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "lamb",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Cabernet"
+      ]
+    },
+    {
+      "nome": "Canaiolo Bianco",
+      "colore_bacca": "bianca",
+      "descrizione": "Umbro e toscano, chiamato anche Drupeggio. Entra nell'Orvieto e nel Vin Santo, dove porta morbidezza più che aroma.",
+      "note_sensoriali": [
+        "mela",
+        "fiori",
+        "corpo medio"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "antipasti",
+        "pesce magro",
+        "formaggi freschi"
+      ],
+      "descrizione_en": "Umbrian and Tuscan, also called Drupeggio. It goes into Orvieto and Vin Santo, where it brings softness rather than aroma.",
+      "note_sensoriali_en": [
+        "apple",
+        "flowers",
+        "medium body"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "lean fish",
+        "fresh cheeses"
+      ],
+      "alias": [
+        "Canaiolo Blanco",
+        "Drupeggio"
+      ]
+    },
+    {
+      "nome": "Canaiolo Nero",
+      "colore_bacca": "nera",
+      "descrizione": "Toscano, storico compagno del Sangiovese nel Chianti della ricetta di Bettino Ricasoli. Ammorbidisce e arrotonda dove il Sangiovese è severo.",
+      "note_sensoriali": [
+        "frutta rossa",
+        "viola",
+        "tannino gentile"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "salumi",
+        "pasta al ragu",
+        "carni bianche"
+      ],
+      "descrizione_en": "Tuscan, the historic companion of Sangiovese in the Chianti of Bettino Ricasoli's recipe. It softens and rounds where Sangiovese is severe.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "violet",
+        "gentle tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "pasta with ragù",
+        "white meat"
+      ],
+      "alias": [
+        "Canaiolo"
+      ]
+    },
+    {
+      "nome": "Cannonau",
+      "colore_bacca": "nera",
+      "descrizione": "Il nome sardo del Grenache. Vini caldi e sapidi, spesso di alta gradazione, con tannino non aggressivo.",
+      "note_sensoriali": [
+        "frutta rossa matura",
+        "macchia mediterranea",
+        "spezie"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "agnello",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "The Sardinian name for Grenache. Warm, savoury wines, often high in alcohol, with tannin that is never aggressive.",
+      "note_sensoriali_en": [
+        "ripe red fruit",
+        "Mediterranean scrub",
+        "spice"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "lamb",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Grenache",
+        "Cannonau/Grenache",
+        "Garnacha"
+      ]
+    },
+    {
+      "nome": "Carignano",
+      "colore_bacca": "nera",
+      "descrizione": "Spagnolo d'origine, in Sardegna ha trovato le sabbie del Sulcis e viti vecchissime a piede franco.",
+      "note_sensoriali": [
+        "frutta scura",
+        "macchia mediterranea",
+        "tannino saldo"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "agnello",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "Spanish in origin, in Sardinia it found the sands of the Sulcis and very old ungrafted vines.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "Mediterranean scrub",
+        "firm tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "lamb",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Carignan/Cariñena",
+        "Carignan",
+        "Cariñena",
+        "Carignano del Sulcis"
+      ]
+    },
+    {
+      "nome": "Carmenere",
+      "colore_bacca": "nera",
+      "descrizione": "Bordolese creduto per decenni Cabernet Franc, nel Veneto come in Cile. Nota erbacea inconfondibile.",
+      "note_sensoriali": [
+        "peperone",
+        "frutta scura",
+        "erbaceo"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "verdure",
+        "formaggi di media stagionatura"
+      ],
+      "descrizione_en": "Bordelais, for decades believed to be Cabernet Franc, in the Veneto as in Chile. An unmistakable herbaceous note.",
+      "note_sensoriali_en": [
+        "bell pepper",
+        "dark fruit",
+        "herbaceous"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "vegetables",
+        "medium-aged cheeses"
+      ],
+      "alias": [
+        "Carménère"
+      ]
+    },
+    {
+      "nome": "Carricante",
+      "colore_bacca": "bianca",
+      "descrizione": "Etneo, il bianco dell'Etna. Acidità alta e nota minerale che viene dalla lava: invecchia molto meglio di quanto ci si aspetti.",
+      "note_sensoriali": [
+        "mela verde",
+        "nota minerale",
+        "acidità alta"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "frutti di mare",
+        "verdure"
+      ],
+      "descrizione_en": "From Etna, the white of the volcano. High acidity and a mineral note that comes from the lava: it ages far better than one would expect.",
+      "note_sensoriali_en": [
+        "green apple",
+        "mineral note",
+        "high acidity"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "seafood",
+        "vegetables"
+      ]
+    },
+    {
+      "nome": "Catarratto",
+      "colore_bacca": "bianca",
+      "descrizione": "Il bianco più coltivato in Sicilia. Versatile, dalla base per Marsala ai bianchi di territorio.",
+      "note_sensoriali": [
+        "agrumi",
+        "fiori",
+        "acidità equilibrata"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "antipasti",
+        "verdure"
+      ],
+      "descrizione_en": "The most planted white grape in Sicily. Versatile, from a base for Marsala to whites of real place.",
+      "note_sensoriali_en": [
+        "citrus",
+        "flowers",
+        "balanced acidity"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "vegetables"
+      ],
+      "alias": [
+        "Catarratto Bianco",
+        "Catarratto Bianco Comune",
+        "Catarratto Bianco Lucido"
+      ]
+    },
+    {
+      "nome": "Cesanese",
+      "colore_bacca": "nera",
+      "descrizione": "Laziale, l'unico rosso DOCG della regione. Speziato e floreale, con tannino contenuto.",
+      "note_sensoriali": [
+        "frutta rossa",
+        "rosa",
+        "spezie"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "carni bianche",
+        "salumi",
+        "pasta"
+      ],
+      "descrizione_en": "From Lazio, the region's only DOCG red. Spicy and floral, with restrained tannin.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "rose",
+        "spice"
+      ],
+      "abbinamenti_en": [
+        "white meat",
+        "cured meats",
+        "pasta"
+      ],
+      "alias": [
+        "Cesanese di Affile",
+        "Cesanese Comune"
+      ]
+    },
+    {
+      "nome": "Chardonnay",
+      "colore_bacca": "bianca",
+      "descrizione": "Borgognone, ovunque nel mondo. In Italia va dalla Franciacorta ai bianchi da legno dell'Alto Adige.",
+      "note_sensoriali": [
+        "mela",
+        "agrumi",
+        "nocciola se affinato in legno"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce grasso",
+        "carni bianche",
+        "formaggi a pasta molle"
+      ],
+      "descrizione_en": "Burgundian, and everywhere in the world. In Italy it ranges from Franciacorta to the oak-aged whites of Alto Adige.",
+      "note_sensoriali_en": [
+        "apple",
+        "citrus",
+        "hazelnut when oak-aged"
+      ],
+      "abbinamenti_en": [
+        "oily fish",
+        "white meat",
+        "soft cheeses"
+      ]
+    },
+    {
+      "nome": "Ciliegiolo",
+      "colore_bacca": "nera",
+      "descrizione": "Toscano e umbro, parente stretto del Sangiovese. Il nome viene dal profumo, che è di ciliegia e non lascia dubbi.",
+      "note_sensoriali": [
+        "ciliegia",
+        "frutta rossa",
+        "tannino morbido"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "pasta",
+        "carni bianche"
+      ],
+      "descrizione_en": "Tuscan and Umbrian, a close relative of Sangiovese. The name comes from the aroma, which is cherry and leaves no doubt.",
+      "note_sensoriali_en": [
+        "cherry",
+        "red fruit",
+        "soft tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "pasta",
+        "white meat"
+      ]
+    },
+    {
+      "nome": "Coda di Volpe",
+      "colore_bacca": "bianca",
+      "descrizione": "Campano, del Vesuvio e del Sannio. Il nome viene dal grappolo lungo e ricurvo come una coda di volpe.",
+      "note_sensoriali": [
+        "mela",
+        "fiori bianchi",
+        "nota minerale"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "antipasti",
+        "pizza"
+      ],
+      "descrizione_en": "From Campania, of Vesuvius and the Sannio. The name comes from the long, curved bunch, like a fox's tail.",
+      "note_sensoriali_en": [
+        "apple",
+        "white flowers",
+        "mineral note"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "pizza"
+      ],
+      "alias": [
+        "Coda Di Volpe Bianca"
+      ]
+    },
+    {
+      "nome": "Colorino",
+      "colore_bacca": "nera",
+      "descrizione": "Toscano, usato storicamente per dare colore al Chianti quando il Sangiovese ne aveva poco. Il nome dice tutto del suo mestiere.",
+      "note_sensoriali": [
+        "frutta scura",
+        "viola",
+        "colore intenso"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "pasta al ragu",
+        "carni rosse",
+        "salumi"
+      ],
+      "descrizione_en": "Tuscan, historically used to give colour to Chianti when Sangiovese was short of it. The name says everything about its job.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "violet",
+        "deep colour"
+      ],
+      "abbinamenti_en": [
+        "pasta with ragù",
+        "red meat",
+        "cured meats"
+      ],
+      "alias": [
+        "Colorino del Valdarno",
+        "Colorino Del Valdarno"
+      ]
+    },
+    {
+      "nome": "Cortese",
+      "colore_bacca": "bianca",
+      "descrizione": "Piemontese, il vitigno del Gavi. Delicato, agrumato, di grande pulizia.",
+      "note_sensoriali": [
+        "limone",
+        "fiori bianchi",
+        "nota minerale"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "crostacei",
+        "antipasti"
+      ],
+      "descrizione_en": "Piedmontese, the grape of Gavi. Delicate, citrusy, of great cleanliness.",
+      "note_sensoriali_en": [
+        "lemon",
+        "white flowers",
+        "mineral note"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "shellfish",
+        "antipasti"
+      ]
+    },
+    {
+      "nome": "Corvina",
+      "colore_bacca": "nera",
+      "descrizione": "La base dei vini della Valpolicella. Resiste bene all'appassimento, ed è per questo che regge Amarone e Recioto.",
+      "note_sensoriali": [
+        "ciliegia",
+        "mandorla amara",
+        "spezie dolci"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "risotto",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "The backbone of Valpolicella. It dries well after harvest, which is why it can carry Amarone and Recioto.",
+      "note_sensoriali_en": [
+        "cherry",
+        "bitter almond",
+        "sweet spice"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "risotto",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Corvina Veronese"
+      ]
+    },
+    {
+      "nome": "Corvinone",
+      "colore_bacca": "nera",
+      "descrizione": "A lungo creduto una varietà di Corvina, è un vitigno a sé. Acini grandi e buccia spessa, ideale per l'appassimento.",
+      "note_sensoriali": [
+        "frutta scura",
+        "spezie",
+        "buona struttura"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "brasati",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "Long believed to be a variant of Corvina, it is a variety in its own right. Large berries and thick skins make it ideal for drying.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "spice",
+        "good structure"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "braised meat",
+        "aged cheeses"
+      ]
+    },
+    {
+      "nome": "Croatina",
+      "colore_bacca": "nera",
+      "descrizione": "Lombarda e piemontese, spesso confusa con la Bonarda, che è un altro vitigno. Tannino spiccato e frutto scuro, anche nelle versioni frizzanti.",
+      "note_sensoriali": [
+        "mora",
+        "prugna",
+        "tannino deciso"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "carni rosse",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "From Lombardy and Piedmont, often confused with Bonarda, which is a different grape. Marked tannin and dark fruit, even in the fizzy versions.",
+      "note_sensoriali_en": [
+        "blackberry",
+        "plum",
+        "firm tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "red meat",
+        "aged cheeses"
+      ]
+    },
+    {
+      "nome": "Dindarella",
+      "colore_bacca": "nera",
+      "descrizione": "Veronese, minoritaria nella Valpolicella. Colore tenue e profumo floreale, porta leggerezza più che struttura.",
+      "note_sensoriali": [
+        "fiori",
+        "frutta rossa",
+        "corpo leggero"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "antipasti",
+        "salumi",
+        "carni bianche"
+      ],
+      "descrizione_en": "From Verona, a minor part of Valpolicella. Pale colour and floral scent, it brings lightness rather than structure.",
+      "note_sensoriali_en": [
+        "flowers",
+        "red fruit",
+        "light body"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "cured meats",
+        "white meat"
+      ],
+      "alias": [
+        "Pelara"
+      ]
+    },
+    {
+      "nome": "Dolcetto",
+      "colore_bacca": "nera",
+      "descrizione": "Piemontese nonostante il nome: è l'uva a essere dolce, non il vino. Matura presto e dà rossi pronti, di bella immediatezza.",
+      "note_sensoriali": [
+        "mora",
+        "mandorla",
+        "tannino morbido"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "primi piatti",
+        "formaggi freschi"
+      ],
+      "descrizione_en": "Piedmontese despite the name: it is the grape that is sweet, not the wine. It ripens early and gives reds that are ready young and immediately appealing.",
+      "note_sensoriali_en": [
+        "blackberry",
+        "almond",
+        "soft tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "first courses",
+        "fresh cheeses"
+      ]
+    },
+    {
+      "nome": "Durella",
+      "colore_bacca": "bianca",
+      "descrizione": "Veronese e vicentino, dei Lessini. Buccia dura, da cui il nome, e acidità così alta da renderlo perfetto per il metodo classico.",
+      "note_sensoriali": [
+        "mela verde",
+        "crosta di pane",
+        "acidità alta"
+      ],
+      "temperatura_c": "9-11",
+      "abbinamenti": [
+        "aperitivo",
+        "frutti di mare",
+        "pesce magro"
+      ],
+      "descrizione_en": "From the Lessini hills between Verona and Vicenza. Hard skins, whence the name, and acidity so high it is perfect for traditional-method sparkling.",
+      "note_sensoriali_en": [
+        "green apple",
+        "bread crust",
+        "high acidity"
+      ],
+      "abbinamenti_en": [
+        "aperitif",
+        "seafood",
+        "lean fish"
+      ],
+      "alias": [
+        "Durello"
+      ]
+    },
+    {
+      "nome": "Erbaluce",
+      "colore_bacca": "bianca",
+      "descrizione": "Piemontese, del Canavese. Acidità notevole che lo rende adatto sia allo spumante sia al passito.",
+      "note_sensoriali": [
+        "agrumi",
+        "fiori bianchi",
+        "acidità alta"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "antipasti",
+        "dolci se passito"
+      ],
+      "descrizione_en": "Piedmontese, from the Canavese. Remarkable acidity makes it suited both to sparkling wine and to passito.",
+      "note_sensoriali_en": [
+        "citrus",
+        "white flowers",
+        "high acidity"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "desserts if made sweet"
+      ]
+    },
+    {
+      "nome": "Falanghina",
+      "colore_bacca": "bianca",
+      "descrizione": "Campana, diffusa fra Sannio e Campi Flegrei. Fresca, floreale, di beva facile ma non banale.",
+      "note_sensoriali": [
+        "fiori bianchi",
+        "agrumi",
+        "acidità viva"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "antipasti",
+        "pizza"
+      ],
+      "descrizione_en": "From Campania, grown between the Sannio and the Campi Flegrei. Fresh, floral, easy to drink but not banal.",
+      "note_sensoriali_en": [
+        "white flowers",
+        "citrus",
+        "lively acidity"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "pizza"
+      ],
+      "alias": [
+        "Falanghina Beneventana",
+        "Falanghina Flegrea"
+      ]
+    },
+    {
+      "nome": "Fiano",
+      "colore_bacca": "bianca",
+      "descrizione": "Campano, di antichissima origine. Vini di corpo, capaci di evolvere e di sviluppare note di miele e nocciola.",
+      "note_sensoriali": [
+        "nocciola",
+        "miele",
+        "pera",
+        "buon corpo"
+      ],
+      "temperatura_c": "11-13",
+      "abbinamenti": [
+        "pesce grasso",
+        "carni bianche",
+        "formaggi di media stagionatura"
+      ],
+      "descrizione_en": "From Campania, of very ancient origin. Wines of body, able to evolve and to develop notes of honey and hazelnut.",
+      "note_sensoriali_en": [
+        "hazelnut",
+        "honey",
+        "pear",
+        "good body"
+      ],
+      "abbinamenti_en": [
+        "oily fish",
+        "white meat",
+        "medium-aged cheeses"
+      ],
+      "alias": [
+        "Fiano di Avellino"
+      ]
+    },
+    {
+      "nome": "Fragolino",
+      "colore_bacca": "nera",
+      "descrizione": "Nome popolare dell'uva Isabella, ibrido americano dal profumo di fragola. In Italia non è ammesso alla vinificazione commerciale.",
+      "note_sensoriali": [
+        "fragola",
+        "uva americana",
+        "dolcezza"
+      ],
+      "temperatura_c": "12-14",
+      "abbinamenti": [
+        "dolci",
+        "frutta",
+        "pasticceria secca"
+      ],
+      "descrizione_en": "The popular name of the Isabella grape, an American hybrid smelling of strawberry. In Italy it is not permitted for commercial winemaking.",
+      "note_sensoriali_en": [
+        "strawberry",
+        "foxy note",
+        "sweetness"
+      ],
+      "abbinamenti_en": [
+        "desserts",
+        "fruit",
+        "dry pastries"
+      ],
+      "alias": [
+        "Isabella"
+      ]
+    },
+    {
+      "nome": "Frappato",
+      "colore_bacca": "nera",
+      "descrizione": "Siciliano, leggero e profumato. Insieme al Nero d'Avola forma il Cerasuolo di Vittoria, unica DOCG dell'isola.",
+      "note_sensoriali": [
+        "fragola",
+        "floreale",
+        "corpo leggero"
+      ],
+      "temperatura_c": "14-16",
+      "abbinamenti": [
+        "antipasti",
+        "carni bianche",
+        "pesce grasso"
+      ],
+      "descrizione_en": "Sicilian, light and perfumed. Together with Nero d'Avola it makes Cerasuolo di Vittoria, the island's only DOCG.",
+      "note_sensoriali_en": [
+        "strawberry",
+        "floral",
+        "light body"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "white meat",
+        "oily fish"
+      ]
+    },
+    {
+      "nome": "Freisa",
+      "colore_bacca": "nera",
+      "descrizione": "Piemontese, parente del Nebbiolo. Tannico e profumato, si trova secco o vivace, e divide chi lo beve.",
+      "note_sensoriali": [
+        "lampone",
+        "rosa",
+        "tannino asciutto"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "carni bianche",
+        "formaggi di media stagionatura"
+      ],
+      "descrizione_en": "Piedmontese, a relative of Nebbiolo. Tannic and perfumed, found dry or lightly fizzy, and it divides those who drink it.",
+      "note_sensoriali_en": [
+        "raspberry",
+        "rose",
+        "dry tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "white meat",
+        "medium-aged cheeses"
+      ]
+    },
+    {
+      "nome": "Friulano",
+      "colore_bacca": "bianca",
+      "descrizione": "Friulano di nome e di fatto, un tempo chiamato Tocai finché la denominazione ungherese non ha reclamato il nome. Nessun rapporto col Sauvignon, malgrado il sinonimo Sauvignonasse.",
+      "note_sensoriali": [
+        "mandorla",
+        "fiori di campo",
+        "nota erbacea"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "prosciutto crudo",
+        "pesce magro",
+        "formaggi freschi"
+      ],
+      "descrizione_en": "Friulian in name and in fact, once called Tocai until the Hungarian appellation reclaimed the name. No relation to Sauvignon, despite the synonym Sauvignonasse.",
+      "note_sensoriali_en": [
+        "almond",
+        "meadow flowers",
+        "herbaceous note"
+      ],
+      "abbinamenti_en": [
+        "cured ham",
+        "lean fish",
+        "fresh cheeses"
+      ],
+      "alias": [
+        "Friulano/Sauvignonasse",
+        "Tocai Friulano",
+        "Tocai",
+        "Sauvignonasse"
+      ]
+    },
+    {
+      "nome": "Gaglioppo",
+      "colore_bacca": "nera",
+      "descrizione": "Calabrese, del Cirò. Colore chiaro e tannino evidente, con una nota di macchia mediterranea che sa di casa.",
+      "note_sensoriali": [
+        "frutta rossa",
         "erbe mediterranee",
         "tannino asciutto"
       ],
       "temperatura_c": "16-18",
       "abbinamenti": [
         "carni rosse",
-        "pasta al ragu",
+        "agnello",
         "formaggi stagionati"
+      ],
+      "descrizione_en": "Calabrian, of Cirò. Pale colour and evident tannin, with a note of Mediterranean scrub that tastes of home.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "Mediterranean herbs",
+        "dry tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "lamb",
+        "aged cheeses"
+      ]
+    },
+    {
+      "nome": "Gamay",
+      "colore_bacca": "nera",
+      "descrizione": "Del Beaujolais, in Italia presente in Valle d'Aosta e in Umbria. Frutto immediato e tannino quasi assente.",
+      "note_sensoriali": [
+        "lampone",
+        "banana",
+        "tannino leggero"
+      ],
+      "temperatura_c": "13-15",
+      "abbinamenti": [
+        "salumi",
+        "carni bianche",
+        "formaggi freschi"
+      ],
+      "descrizione_en": "From Beaujolais, in Italy found in the Aosta Valley and Umbria. Immediate fruit and almost no tannin.",
+      "note_sensoriali_en": [
+        "raspberry",
+        "banana",
+        "light tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "white meat",
+        "fresh cheeses"
+      ],
+      "alias": [
+        "Gamay Noir"
+      ]
+    },
+    {
+      "nome": "Garganega",
+      "colore_bacca": "bianca",
+      "descrizione": "Il vitigno del Soave, veronese. Matura tardi e regge l'appassimento, che nel Recioto di Soave diventa dolcezza.",
+      "note_sensoriali": [
+        "mandorla",
+        "fiori bianchi",
+        "nota agrumata"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "antipasti",
+        "risotto"
+      ],
+      "descrizione_en": "The grape of Soave, from Verona. It ripens late and withstands drying, which in Recioto di Soave becomes sweetness.",
+      "note_sensoriali_en": [
+        "almond",
+        "white flowers",
+        "citrus note"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "risotto"
+      ],
+      "alias": [
+        "Grecanico",
+        "Grecanico Dorato"
+      ]
+    },
+    {
+      "nome": "Gewürztraminer",
+      "colore_bacca": "bianca",
+      "descrizione": "Altoatesino di Termeno, da cui il nome. Fra i bianchi più riconoscibili al mondo: il profilo aromatico è tanto marcato da dividere.",
+      "note_sensoriali": [
+        "litchi",
+        "rosa",
+        "spezie dolci",
+        "zenzero"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "cucina speziata",
+        "formaggi erborinati",
+        "foie gras"
+      ],
+      "descrizione_en": "From Termeno in Alto Adige, whence the name. Among the most recognisable whites in the world: its aromatic profile is so marked that it divides opinion.",
+      "note_sensoriali_en": [
+        "lychee",
+        "rose",
+        "sweet spice",
+        "ginger"
+      ],
+      "abbinamenti_en": [
+        "spicy cuisine",
+        "blue cheeses",
+        "foie gras"
+      ],
+      "alias": [
+        "Traminer",
+        "Traminer Aromatico",
+        "Gewurztraminer"
+      ]
+    },
+    {
+      "nome": "Glera",
+      "colore_bacca": "bianca",
+      "descrizione": "Il vitigno del Prosecco: si chiamava Prosecco anch'esso, finché il nome non è diventato denominazione. Neutro per natura, è fatto per la spuma.",
+      "note_sensoriali": [
+        "mela verde",
+        "fiori bianchi",
+        "bollicina leggera"
+      ],
+      "temperatura_c": "6-8",
+      "abbinamenti": [
+        "aperitivo",
+        "antipasti",
+        "pesce magro"
+      ],
+      "descrizione_en": "The grape of Prosecco: it too was called Prosecco, until the name became an appellation. Neutral by nature, it is made for the bubble.",
+      "note_sensoriali_en": [
+        "green apple",
+        "white flowers",
+        "light bubbles"
+      ],
+      "abbinamenti_en": [
+        "aperitif",
+        "antipasti",
+        "lean fish"
+      ],
+      "alias": [
+        "Glera/Prosecco",
+        "Prosecco",
+        "Glera Lunga"
+      ]
+    },
+    {
+      "nome": "Grechetto",
+      "colore_bacca": "bianca",
+      "descrizione": "Umbro, di Orvieto e di Todi. Corpo pieno per un bianco e finale di nocciola, regge bene anche il legno.",
+      "note_sensoriali": [
+        "nocciola",
+        "pera",
+        "fiori bianchi"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce grasso",
+        "carni bianche",
+        "primi piatti"
+      ],
+      "descrizione_en": "Umbrian, from Orvieto and Todi. Full-bodied for a white, with a hazelnut finish, and it takes oak well.",
+      "note_sensoriali_en": [
+        "hazelnut",
+        "pear",
+        "white flowers"
+      ],
+      "abbinamenti_en": [
+        "oily fish",
+        "white meat",
+        "first courses"
+      ],
+      "alias": [
+        "Grechetto di Todi",
+        "Grechetto Gentile"
+      ]
+    },
+    {
+      "nome": "Greco",
+      "colore_bacca": "bianca",
+      "descrizione": "Campano, di Tufo la sua espressione più nota. Acidità alta e carattere quasi minerale.",
+      "note_sensoriali": [
+        "pesca bianca",
+        "nota minerale",
+        "acidità alta"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "crostacei",
+        "verdure"
+      ],
+      "descrizione_en": "From Campania, with Tufo its best-known expression. High acidity and an almost mineral character.",
+      "note_sensoriali_en": [
+        "white peach",
+        "mineral note",
+        "high acidity"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "shellfish",
+        "vegetables"
+      ],
+      "alias": [
+        "Greco di Tufo",
+        "Greco Bianco"
+      ]
+    },
+    {
+      "nome": "Grignolino",
+      "colore_bacca": "nera",
+      "descrizione": "Monferrino, di colore chiarissimo e tannino sorprendente per quanto è pallido. Molti vinaccioli, da cui il nome dialettale.",
+      "note_sensoriali": [
+        "fragola",
+        "pepe bianco",
+        "tannino asciutto"
+      ],
+      "temperatura_c": "14-16",
+      "abbinamenti": [
+        "salumi",
+        "antipasti",
+        "carni bianche"
+      ],
+      "descrizione_en": "From the Monferrato, very pale in colour and with tannin surprising for how light it looks. Many pips, whence the dialect name.",
+      "note_sensoriali_en": [
+        "strawberry",
+        "white pepper",
+        "dry tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "antipasti",
+        "white meat"
+      ]
+    },
+    {
+      "nome": "Grillo",
+      "colore_bacca": "bianca",
+      "descrizione": "Siciliano, storicamente base del Marsala. Oggi dà bianchi fermi sapidi e di buona spalla acida.",
+      "note_sensoriali": [
+        "agrumi",
+        "erbe mediterranee",
+        "nota salina"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "frutti di mare",
+        "antipasti"
+      ],
+      "descrizione_en": "Sicilian, historically the base of Marsala. Today it gives savoury still whites with good acid backbone.",
+      "note_sensoriali_en": [
+        "citrus",
+        "Mediterranean herbs",
+        "saline note"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "seafood",
+        "antipasti"
+      ]
+    },
+    {
+      "nome": "Groppello",
+      "colore_bacca": "nera",
+      "descrizione": "Gardesano, della riviera bresciana. Rossi leggeri e rosati di grande delicatezza, il Chiaretto su tutti.",
+      "note_sensoriali": [
+        "fragola",
+        "frutta rossa",
+        "tannino gentile"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "pesce di lago",
+        "carni bianche",
+        "antipasti"
+      ],
+      "descrizione_en": "From Lake Garda, on the Brescia shore. Light reds and rosés of great delicacy, the Chiaretto above all.",
+      "note_sensoriali_en": [
+        "strawberry",
+        "red fruit",
+        "gentle tannin"
+      ],
+      "abbinamenti_en": [
+        "lake fish",
+        "white meat",
+        "antipasti"
+      ]
+    },
+    {
+      "nome": "Grüner Veltliner",
+      "colore_bacca": "bianca",
+      "descrizione": "Austriaco, in Italia coltivato in pochi ettari nel Nordest. Nota di pepe bianco inconfondibile.",
+      "note_sensoriali": [
+        "pepe bianco",
+        "agrumi",
+        "erbe"
+      ],
+      "temperatura_c": "9-11",
+      "abbinamenti": [
+        "verdure",
+        "pesce magro",
+        "antipasti"
+      ],
+      "descrizione_en": "Austrian, grown in Italy on a few hectares in the North-East. An unmistakable note of white pepper.",
+      "note_sensoriali_en": [
+        "white pepper",
+        "citrus",
+        "herbs"
+      ],
+      "abbinamenti_en": [
+        "vegetables",
+        "lean fish",
+        "antipasti"
+      ],
+      "alias": [
+        "Gruner Veltliner"
+      ]
+    },
+    {
+      "nome": "Incrocio Manzoni",
+      "colore_bacca": "bianca",
+      "descrizione": "Famiglia di incroci ottenuti da Luigi Manzoni a Conegliano negli anni trenta. Il 6.0.13, Riesling per Pinot Bianco, è il più diffuso.",
+      "note_sensoriali": [
+        "mela",
+        "agrumi",
+        "fiori bianchi"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "antipasti",
+        "carni bianche"
+      ],
+      "descrizione_en": "A family of crossings obtained by Luigi Manzoni at Conegliano in the 1930s. The 6.0.13, Riesling by Pinot Bianco, is the most widespread.",
+      "note_sensoriali_en": [
+        "apple",
+        "citrus",
+        "white flowers"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "white meat"
+      ],
+      "alias": [
+        "Manzoni Bianco",
+        "Incrocio Manzoni 6.0.13"
+      ]
+    },
+    {
+      "nome": "Inzolia",
+      "colore_bacca": "bianca",
+      "descrizione": "Siciliano, chiamato Ansonica in Toscana dove è arrivato dall'isola. Poco acido e molto sapido, con finale di mandorla.",
+      "note_sensoriali": [
+        "mandorla",
+        "agrumi",
+        "nota salina"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "frutti di mare",
+        "antipasti"
+      ],
+      "descrizione_en": "Sicilian, called Ansonica in Tuscany where it arrived from the island. Low in acidity and very savoury, with an almond finish.",
+      "note_sensoriali_en": [
+        "almond",
+        "citrus",
+        "saline note"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "seafood",
+        "antipasti"
+      ],
+      "alias": [
+        "Ansonica",
+        "Insolia"
+      ]
+    },
+    {
+      "nome": "Kerner",
+      "colore_bacca": "bianca",
+      "descrizione": "Incrocio tedesco fra Schiava Grossa e Riesling, in Italia si è trovato benissimo in Valle Isarco, in alta quota.",
+      "note_sensoriali": [
+        "pesca",
+        "noce moscata",
+        "acidità viva"
+      ],
+      "temperatura_c": "9-11",
+      "abbinamenti": [
+        "pesce magro",
+        "antipasti",
+        "formaggi freschi"
+      ],
+      "descrizione_en": "A German crossing of Schiava Grossa and Riesling, which in Italy has found itself thoroughly at home in the high Valle Isarco.",
+      "note_sensoriali_en": [
+        "peach",
+        "nutmeg",
+        "lively acidity"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "fresh cheeses"
+      ]
+    },
+    {
+      "nome": "Lacrima",
+      "colore_bacca": "nera",
+      "descrizione": "Marchigiano, di Morro d'Alba. Profumo di rosa così intenso da sembrare aromatizzato, e non lo è.",
+      "note_sensoriali": [
+        "rosa",
+        "violetta",
+        "frutta rossa"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "carni bianche",
+        "formaggi freschi"
+      ],
+      "descrizione_en": "From Morro d'Alba in the Marche. A scent of rose so intense it seems flavoured, and it is not.",
+      "note_sensoriali_en": [
+        "rose",
+        "violet",
+        "red fruit"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "white meat",
+        "fresh cheeses"
+      ],
+      "alias": [
+        "Lacrima di Morro d'Alba"
+      ]
+    },
+    {
+      "nome": "Lagrein",
+      "colore_bacca": "nera",
+      "descrizione": "Altoatesino, di Bolzano. Colore quasi nero e acidità che tiene in piedi la struttura.",
+      "note_sensoriali": [
+        "frutta scura",
+        "cacao",
+        "tannino deciso"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "selvaggina",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "From Bolzano, in Alto Adige. Almost black in colour, with acidity that holds the structure up.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "cocoa",
+        "firm tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "game",
+        "aged cheeses"
+      ]
+    },
+    {
+      "nome": "Lambrusco",
+      "colore_bacca": "nera",
+      "descrizione": "Famiglia di vitigni emiliani, non uno solo. Dà rossi frizzanti, secchi o amabili, nati per accompagnare la cucina grassa del territorio.",
+      "note_sensoriali": [
+        "frutta rossa",
+        "bollicina fine",
+        "acidità viva"
+      ],
+      "temperatura_c": "12-14",
+      "abbinamenti": [
+        "salumi",
+        "pasta",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "A family of grapes from Emilia, not a single one. It gives sparkling reds, dry or off-dry, born to accompany the rich cooking of the region.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "fine bubbles",
+        "lively acidity"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "pasta",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Lambrusco Salamino",
+        "Lambrusco Grasparossa",
+        "Lambrusco Di Sorbara",
+        "Lambrusco di Sorbara",
+        "Lambrusco Maestri",
+        "Lambrusco Marani",
+        "Lambrusco Montericco",
+        "Lambrusco Oliva",
+        "Lambrusco Viadanese",
+        "Lambrusco Barghi",
+        "Lambrusco Benetti",
+        "Lambrusco A Foglia Frastagliata"
+      ]
+    },
+    {
+      "nome": "Malbec",
+      "colore_bacca": "nera",
+      "descrizione": "Bordolese emigrato in Argentina, dove ha fatto fortuna. In Italia resta una presenza rara, quasi sempre nei blend.",
+      "note_sensoriali": [
+        "prugna",
+        "viola",
+        "tannino morbido"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "carne alla brace",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "Bordelais, emigrated to Argentina where it made its fortune. In Italy it remains rare, almost always in blends.",
+      "note_sensoriali_en": [
+        "plum",
+        "violet",
+        "soft tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "grilled meat",
+        "aged cheeses"
+      ]
+    },
+    {
+      "nome": "Malvasia",
+      "colore_bacca": "bianca",
+      "descrizione": "Non un vitigno ma una famiglia numerosa, sparsa in tutto il Mediterraneo, con varietà aromatiche e neutre.",
+      "note_sensoriali": [
+        "fiori",
+        "frutta bianca",
+        "aromaticità variabile"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "antipasti",
+        "pesce magro",
+        "dolci se passito"
+      ],
+      "descrizione_en": "Not one grape but a large family, spread across the whole Mediterranean, with both aromatic and neutral varieties.",
+      "note_sensoriali_en": [
+        "flowers",
+        "white fruit",
+        "variable aromatics"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "lean fish",
+        "desserts if made sweet"
+      ],
+      "alias": [
+        "Malvasia Bianca",
+        "Malvasia Bianca Lunga",
+        "Malvasia Bianca Di Candia",
+        "Malvasia di Candia",
+        "Malvasia Del Lazio",
+        "Malvasia Istriana",
+        "Malvasia Di Sardegna",
+        "Malvasia Di Lipari",
+        "Malvasia Di Candia Aromatica",
+        "Malvasia Bianca Di Basilicata"
+      ]
+    },
+    {
+      "nome": "Malvasia Nera",
+      "colore_bacca": "nera",
+      "descrizione": "Il ramo a bacca nera della famiglia Malvasia, diffuso fra Piemonte e Salento. Aromatico come le cugine bianche, ma con tannino e colore.",
+      "note_sensoriali": [
+        "frutta rossa",
+        "rosa",
+        "spezie dolci"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "salumi",
+        "carni rosse",
+        "formaggi di media stagionatura"
+      ],
+      "descrizione_en": "The black-berried branch of the Malvasia family, grown from Piedmont to the Salento. As aromatic as its white cousins, but with tannin and colour.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "rose",
+        "sweet spice"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "red meat",
+        "medium-aged cheeses"
+      ],
+      "alias": [
+        "Malvasia Nera Di Lecce",
+        "Malvasia Nera Lunga",
+        "Malvasia Nera Di Brindisi",
+        "Malvasia Nera Di Basilicata",
+        "Malvasia Di Casorzo",
+        "Malvasia Di Schierano"
+      ]
+    },
+    {
+      "nome": "Mammolo",
+      "colore_bacca": "nera",
+      "descrizione": "Toscano, minoritario nel Vino Nobile e nel Chianti. Il nome viene dal profumo di violetta mammola.",
+      "note_sensoriali": [
+        "violetta",
+        "frutta rossa",
+        "tannino gentile"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni bianche",
+        "salumi",
+        "pasta"
+      ],
+      "descrizione_en": "Tuscan, a minor part of Vino Nobile and Chianti. The name comes from its scent of sweet violet.",
+      "note_sensoriali_en": [
+        "violet",
+        "red fruit",
+        "gentle tannin"
+      ],
+      "abbinamenti_en": [
+        "white meat",
+        "cured meats",
+        "pasta"
+      ]
+    },
+    {
+      "nome": "Marzemino",
+      "colore_bacca": "nera",
+      "descrizione": "Trentino, citato nel Don Giovanni di Mozart. Frutto schietto, tannino discreto, poca voglia di invecchiare.",
+      "note_sensoriali": [
+        "prugna",
+        "viola",
+        "tannino discreto"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "pasta",
+        "carni bianche"
+      ],
+      "descrizione_en": "From Trentino, and named in Mozart's Don Giovanni. Straightforward fruit, restrained tannin, little wish to age.",
+      "note_sensoriali_en": [
+        "plum",
+        "violet",
+        "restrained tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "pasta",
+        "white meat"
+      ]
+    },
+    {
+      "nome": "Merlot",
+      "colore_bacca": "nera",
+      "descrizione": "Bordolese, diffusissimo in Italia soprattutto nel Nordest e in Toscana. Matura presto e dà vini morbidi e accessibili.",
+      "note_sensoriali": [
+        "prugna",
+        "frutta scura",
+        "tannino vellutato"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "carni bianche",
+        "formaggi di media stagionatura"
+      ],
+      "descrizione_en": "Bordelais, very widespread in Italy above all in the North-East and Tuscany. It ripens early and gives soft, approachable wines.",
+      "note_sensoriali_en": [
+        "plum",
+        "dark fruit",
+        "velvety tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "white meat",
+        "medium-aged cheeses"
+      ]
+    },
+    {
+      "nome": "Molinara",
+      "colore_bacca": "nera",
+      "descrizione": "Vitigno veronese dal colore tenue e dall'acidità viva, oggi usato in quote minori nei blend della Valpolicella.",
+      "note_sensoriali": [
+        "frutta rossa fresca",
+        "acidità viva",
+        "corpo leggero"
+      ],
+      "temperatura_c": "14-16",
+      "abbinamenti": [
+        "antipasti",
+        "salumi",
+        "carni bianche"
+      ],
+      "descrizione_en": "A Verona grape of pale colour and lively acidity, today used in smaller proportions in Valpolicella blends.",
+      "note_sensoriali_en": [
+        "fresh red fruit",
+        "lively acidity",
+        "light body"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "cured meats",
+        "white meat"
+      ]
+    },
+    {
+      "nome": "Monica",
+      "colore_bacca": "nera",
+      "descrizione": "Sardo, di origine incerta. Rossi morbidi e di pronta beva, poco tannici.",
+      "note_sensoriali": [
+        "prugna",
+        "frutta rossa",
+        "tannino morbido"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "pasta",
+        "carni bianche"
+      ],
+      "descrizione_en": "Sardinian, of uncertain origin. Soft, ready-to-drink reds, low in tannin.",
+      "note_sensoriali_en": [
+        "plum",
+        "red fruit",
+        "soft tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "pasta",
+        "white meat"
+      ],
+      "alias": [
+        "Monica di Sardegna"
+      ]
+    },
+    {
+      "nome": "Montepulciano",
+      "colore_bacca": "nera",
+      "descrizione": "Abruzzese, da non confondere col paese toscano di Montepulciano. Colore intenso, tannino morbido, prezzo storicamente onesto.",
+      "note_sensoriali": [
+        "amarena",
+        "prugna",
+        "tannino morbido"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "pasta al ragu",
+        "carni rosse",
+        "pizza"
+      ],
+      "descrizione_en": "From Abruzzo, not to be confused with the Tuscan town of Montepulciano. Deep colour, soft tannin, and a historically honest price.",
+      "note_sensoriali_en": [
+        "sour cherry",
+        "plum",
+        "soft tannin"
+      ],
+      "abbinamenti_en": [
+        "pasta with ragù",
+        "red meat",
+        "pizza"
+      ],
+      "alias": [
+        "Montepulciano d'Abruzzo"
+      ]
+    },
+    {
+      "nome": "Moscato",
+      "colore_bacca": "bianca",
+      "descrizione": "Famiglia aromatica antichissima. In Piemonte dà l'Asti e il Moscato d'Asti, dolci e a bassa gradazione.",
+      "note_sensoriali": [
+        "uva moscata",
+        "salvia",
+        "fiori d'arancio"
+      ],
+      "temperatura_c": "6-8",
+      "abbinamenti": [
+        "dolci",
+        "dolci alla frutta",
+        "frutta"
+      ],
+      "descrizione_en": "A very ancient aromatic family. In Piedmont it gives Asti and Moscato d'Asti, sweet and low in alcohol.",
+      "note_sensoriali_en": [
+        "muscat grape",
+        "sage",
+        "orange blossom"
+      ],
+      "abbinamenti_en": [
+        "desserts",
+        "fruit desserts",
+        "fruit"
+      ],
+      "alias": [
+        "Moscato Bianco",
+        "Moscato Bianco/Muscat Blanc",
+        "Moscato Giallo",
+        "Moscato Rosa",
+        "Moscato d'Asti",
+        "Moscato di Scanzo",
+        "Muscat",
+        "Muscat Blanc",
+        "Muscat/Moscato",
+        "Muscat/Moscato Bianco",
+        "Muscat/Moscato Giallo",
+        "Muscat/Moscato Rosa",
+        "Muscat/Moscato di Scanzo"
+      ]
+    },
+    {
+      "nome": "Müller Thurgau",
+      "colore_bacca": "bianca",
+      "descrizione": "Incrocio ottenuto in Svizzera nel 1882, in Italia coltivato in quota fra Trentino e Alto Adige. Fresco, erbaceo, di montagna.",
+      "note_sensoriali": [
+        "salvia",
+        "mela verde",
+        "erbe di montagna"
+      ],
+      "temperatura_c": "9-11",
+      "abbinamenti": [
+        "antipasti",
+        "pesce magro",
+        "formaggi freschi"
+      ],
+      "descrizione_en": "A crossing obtained in Switzerland in 1882, grown in Italy at altitude between Trentino and Alto Adige. Fresh, herbaceous, alpine.",
+      "note_sensoriali_en": [
+        "sage",
+        "green apple",
+        "mountain herbs"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "lean fish",
+        "fresh cheeses"
+      ],
+      "alias": [
+        "Muller Thurgau",
+        "Müller-Thurgau"
+      ]
+    },
+    {
+      "nome": "Nascetta",
+      "colore_bacca": "bianca",
+      "descrizione": "Piemontese, di Novello nelle Langhe. Uno dei pochi bianchi autoctoni del Barolo, recuperato da pochi ettari.",
+      "note_sensoriali": [
+        "salvia",
+        "agrumi",
+        "nota minerale"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "carni bianche",
+        "antipasti"
+      ],
+      "descrizione_en": "Piedmontese, from Novello in the Langhe. One of the few native whites of Barolo country, recovered from a handful of hectares.",
+      "note_sensoriali_en": [
+        "sage",
+        "citrus",
+        "mineral note"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "white meat",
+        "antipasti"
+      ],
+      "alias": [
+        "Nas-cetta"
       ]
     },
     {
@@ -35,119 +2070,50 @@
         "cacciagione",
         "tartufo",
         "formaggi stagionati"
-      ]
-    },
-    {
-      "nome": "Corvina",
-      "colore_bacca": "nera",
-      "descrizione": "La base dei vini della Valpolicella. Resiste bene all'appassimento, ed è per questo che regge Amarone e Recioto.",
-      "note_sensoriali": [
-        "ciliegia",
-        "mandorla amara",
-        "spezie dolci"
       ],
-      "temperatura_c": "16-18",
-      "abbinamenti": [
-        "carni rosse",
-        "risotto",
-        "formaggi stagionati"
-      ]
-    },
-    {
-      "nome": "Corvinone",
-      "colore_bacca": "nera",
-      "descrizione": "A lungo creduto una varietà di Corvina, è un vitigno a sé. Acini grandi e buccia spessa, ideale per l'appassimento.",
-      "note_sensoriali": [
-        "frutta scura",
-        "spezie",
-        "buona struttura"
+      "descrizione_en": "The grape of Barolo and Barbaresco, in the Langhe hills. Its pale colour is deceptive: beneath it lies one of the longest-lived tannic structures in the world.",
+      "note_sensoriali_en": [
+        "dried rose",
+        "tar",
+        "cherry",
+        "dense tannin"
       ],
-      "temperatura_c": "16-18",
-      "abbinamenti": [
-        "carni rosse",
-        "brasati",
-        "formaggi stagionati"
+      "abbinamenti_en": [
+        "braised meat",
+        "game meat",
+        "truffle",
+        "aged cheeses"
       ]
     },
     {
-      "nome": "Rondinella",
+      "nome": "Negrara",
       "colore_bacca": "nera",
-      "descrizione": "Compagna della Corvina nei vini veronesi. Porta colore e affidabilità in vigna più che complessità.",
+      "descrizione": "Veronese e trentina, un tempo diffusa nella Valpolicella e oggi quasi scomparsa dai blend.",
       "note_sensoriali": [
         "frutta rossa",
-        "erbe",
+        "viola",
         "tannino gentile"
-      ],
-      "temperatura_c": "16-18",
-      "abbinamenti": [
-        "salumi",
-        "carni bianche",
-        "pasta"
-      ]
-    },
-    {
-      "nome": "Molinara",
-      "colore_bacca": "nera",
-      "descrizione": "Vitigno veronese dal colore tenue e dall'acidità viva, oggi usato in quote minori nei blend della Valpolicella.",
-      "note_sensoriali": [
-        "frutta rossa fresca",
-        "acidità viva",
-        "corpo leggero"
-      ],
-      "temperatura_c": "14-16",
-      "abbinamenti": [
-        "antipasti",
-        "salumi",
-        "carni bianche"
-      ]
-    },
-    {
-      "nome": "Barbera",
-      "colore_bacca": "nera",
-      "descrizione": "Piemontese, generosa e di acidità spiccata, con tannino discreto. Da vino quotidiano si è guadagnata versioni di grande serietà.",
-      "note_sensoriali": [
-        "ciliegia matura",
-        "prugna",
-        "acidità viva"
-      ],
-      "temperatura_c": "16-18",
-      "abbinamenti": [
-        "salumi",
-        "pasta al ragu",
-        "carni bianche"
-      ]
-    },
-    {
-      "nome": "Dolcetto",
-      "colore_bacca": "nera",
-      "descrizione": "Piemontese nonostante il nome: è l'uva a essere dolce, non il vino. Matura presto e dà rossi pronti, di bella immediatezza.",
-      "note_sensoriali": [
-        "mora",
-        "mandorla",
-        "tannino morbido"
       ],
       "temperatura_c": "15-17",
       "abbinamenti": [
         "salumi",
-        "primi piatti",
-        "formaggi freschi"
-      ]
-    },
-    {
-      "nome": "Primitivo",
-      "colore_bacca": "nera",
-      "descrizione": "Pugliese, geneticamente identico allo Zinfandel californiano. Matura presto e concentra molto zucchero: da qui i vini caldi e generosi.",
-      "note_sensoriali": [
-        "prugna",
-        "confettura",
-        "spezie dolci",
-        "alcol caldo"
+        "pasta",
+        "carni bianche"
       ],
-      "temperatura_c": "16-18",
-      "abbinamenti": [
-        "carni rosse",
-        "carne alla brace",
-        "formaggi stagionati"
+      "descrizione_en": "From Verona and Trentino, once widespread in Valpolicella and today almost gone from the blends.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "violet",
+        "gentle tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "pasta",
+        "white meat"
+      ],
+      "alias": [
+        "Negrara Trentino",
+        "Negrara Veronese"
       ]
     },
     {
@@ -164,55 +2130,50 @@
         "carni rosse",
         "agnello",
         "formaggi stagionati"
+      ],
+      "descrizione_en": "The other great grape of the Salento. Its name tells of the colour and of the faintly bitter finish that marks it.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "tobacco",
+        "bitter finish"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "lamb",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Negro Amaro"
       ]
     },
     {
-      "nome": "Montepulciano",
+      "nome": "Nerello Cappuccio",
       "colore_bacca": "nera",
-      "descrizione": "Abruzzese, da non confondere col paese toscano di Montepulciano. Colore intenso, tannino morbido, prezzo storicamente onesto.",
+      "descrizione": "Etneo, compagno del Nerello Mascalese cui porta colore e polpa. Da solo è raro e più morbido.",
       "note_sensoriali": [
-        "amarena",
-        "prugna",
+        "frutta rossa",
+        "spezie dolci",
         "tannino morbido"
       ],
       "temperatura_c": "16-18",
       "abbinamenti": [
-        "pasta al ragu",
-        "carni rosse",
-        "pizza"
-      ]
-    },
-    {
-      "nome": "Aglianico",
-      "colore_bacca": "nera",
-      "descrizione": "Il grande rosso del Sud, fra Taurasi e Vulture. Matura tardissimo, spesso a novembre, e chiede anni per distendersi.",
-      "note_sensoriali": [
-        "frutta scura",
-        "cenere",
-        "tannino severo",
-        "acidità alta"
+        "carni bianche",
+        "salumi",
+        "formaggi di media stagionatura"
       ],
-      "temperatura_c": "17-19",
-      "abbinamenti": [
-        "carni rosse",
-        "brasati",
-        "formaggi stagionati"
-      ]
-    },
-    {
-      "nome": "Nero d'Avola",
-      "colore_bacca": "nera",
-      "descrizione": "Il rosso siciliano per eccellenza. Sopporta il caldo e la siccità, e restituisce vini pieni ma non pesanti quando la resa è contenuta.",
-      "note_sensoriali": [
-        "ciliegia nera",
-        "spezie",
-        "erbe mediterranee"
+      "descrizione_en": "From Etna, companion of Nerello Mascalese to which it brings colour and flesh. On its own it is rare and softer.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "sweet spice",
+        "soft tannin"
       ],
-      "temperatura_c": "16-18",
-      "abbinamenti": [
-        "carni rosse",
-        "carne alla brace",
-        "piatti speziati"
+      "abbinamenti_en": [
+        "white meat",
+        "cured meats",
+        "medium-aged cheeses"
+      ],
+      "alias": [
+        "Nerello Mantellato"
       ]
     },
     {
@@ -230,521 +2191,167 @@
         "carni bianche",
         "funghi",
         "formaggi di media stagionatura"
-      ]
-    },
-    {
-      "nome": "Frappato",
-      "colore_bacca": "nera",
-      "descrizione": "Siciliano, leggero e profumato. Insieme al Nero d'Avola forma il Cerasuolo di Vittoria, unica DOCG dell'isola.",
-      "note_sensoriali": [
-        "fragola",
-        "floreale",
-        "corpo leggero"
       ],
-      "temperatura_c": "14-16",
-      "abbinamenti": [
-        "antipasti",
-        "carni bianche",
-        "pesce grasso"
+      "descrizione_en": "It grows on the slopes of Etna, often on very old ungrafted vines. Its pale colour and finesse recall Nebbiolo.",
+      "note_sensoriali_en": [
+        "strawberry",
+        "herbs",
+        "mineral note",
+        "fine tannin"
+      ],
+      "abbinamenti_en": [
+        "white meat",
+        "mushrooms",
+        "medium-aged cheeses"
+      ],
+      "alias": [
+        "Nerello"
       ]
     },
     {
-      "nome": "Cannonau",
+      "nome": "Nero d'Avola",
       "colore_bacca": "nera",
-      "descrizione": "Il nome sardo del Grenache. Vini caldi e sapidi, spesso di alta gradazione, con tannino non aggressivo.",
+      "descrizione": "Il rosso siciliano per eccellenza. Sopporta il caldo e la siccità, e restituisce vini pieni ma non pesanti quando la resa è contenuta.",
       "note_sensoriali": [
-        "frutta rossa matura",
-        "macchia mediterranea",
-        "spezie"
+        "ciliegia nera",
+        "spezie",
+        "erbe mediterranee"
       ],
       "temperatura_c": "16-18",
       "abbinamenti": [
         "carni rosse",
-        "agnello",
-        "formaggi stagionati"
-      ]
-    },
-    {
-      "nome": "Sagrantino",
-      "colore_bacca": "nera",
-      "descrizione": "Umbro, di Montefalco. Fra i vitigni più ricchi di polifenoli al mondo: il tannino è la sua firma e richiede lunga attesa.",
-      "note_sensoriali": [
-        "mora",
-        "liquirizia",
-        "tannino imponente"
+        "carne alla brace",
+        "piatti speziati"
       ],
-      "temperatura_c": "17-19",
-      "abbinamenti": [
-        "carni rosse",
-        "cacciagione",
-        "formaggi stagionati"
+      "descrizione_en": "Sicily's red par excellence. It withstands heat and drought, and gives full but not heavy wines when yields are kept low.",
+      "note_sensoriali_en": [
+        "black cherry",
+        "spice",
+        "Mediterranean herbs"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "grilled meat",
+        "spicy dishes"
+      ],
+      "alias": [
+        "Nero D'Avola",
+        "Calabrese",
+        "Calabrese/Nero d'Avola"
       ]
     },
     {
-      "nome": "Teroldego",
+      "nome": "Nero di Troia",
       "colore_bacca": "nera",
-      "descrizione": "Trentino, coltivato soprattutto nella Piana Rotaliana. Colore profondo e frutto schietto.",
+      "descrizione": "Pugliese del nord, fra Castel del Monte e la Murgia. Matura tardi e dà tannino fine, più elegante di quanto il Sud faccia pensare.",
       "note_sensoriali": [
-        "mora",
+        "frutta scura",
         "viola",
-        "tannino levigato"
+        "spezie",
+        "tannino fine"
       ],
       "temperatura_c": "16-18",
-      "abbinamenti": [
-        "carni rosse",
-        "salumi",
-        "formaggi di media stagionatura"
-      ]
-    },
-    {
-      "nome": "Lagrein",
-      "colore_bacca": "nera",
-      "descrizione": "Altoatesino, di Bolzano. Colore quasi nero e acidità che tiene in piedi la struttura.",
-      "note_sensoriali": [
-        "frutta scura",
-        "cacao",
-        "tannino deciso"
-      ],
-      "temperatura_c": "16-18",
-      "abbinamenti": [
-        "carni rosse",
-        "selvaggina",
-        "formaggi stagionati"
-      ]
-    },
-    {
-      "nome": "Refosco",
-      "colore_bacca": "nera",
-      "descrizione": "Friulano, nella versione dal peduncolo rosso. Acidità alta e carattere rustico, nel senso buono.",
-      "note_sensoriali": [
-        "prugna",
-        "erbe",
-        "acidità viva"
-      ],
-      "temperatura_c": "16-18",
-      "abbinamenti": [
-        "carni rosse",
-        "salumi",
-        "piatti di terra"
-      ]
-    },
-    {
-      "nome": "Schiava",
-      "colore_bacca": "nera",
-      "descrizione": "Altoatesina, chiamata anche Vernatsch. Rossi leggerissimi, quasi rosati, da bere freschi.",
-      "note_sensoriali": [
-        "fragola",
-        "mandorla",
-        "corpo molto leggero"
-      ],
-      "temperatura_c": "13-15",
-      "abbinamenti": [
-        "salumi",
-        "carni bianche",
-        "formaggi freschi"
-      ]
-    },
-    {
-      "nome": "Lambrusco",
-      "colore_bacca": "nera",
-      "descrizione": "Famiglia di vitigni emiliani, non uno solo. Dà rossi frizzanti, secchi o amabili, nati per accompagnare la cucina grassa del territorio.",
-      "note_sensoriali": [
-        "frutta rossa",
-        "bollicina fine",
-        "acidità viva"
-      ],
-      "temperatura_c": "12-14",
-      "abbinamenti": [
-        "salumi",
-        "pasta",
-        "formaggi stagionati"
-      ]
-    },
-    {
-      "nome": "Pinot Nero",
-      "colore_bacca": "nera",
-      "descrizione": "Borgognone d'origine, in Italia trova casa in Alto Adige, Oltrepò e Franciacorta. Difficile in vigna quanto seducente nel bicchiere.",
-      "note_sensoriali": [
-        "lampone",
-        "sottobosco",
-        "tannino sottile"
-      ],
-      "temperatura_c": "15-17",
-      "abbinamenti": [
-        "carni bianche",
-        "funghi",
-        "pesce grasso"
-      ]
-    },
-    {
-      "nome": "Merlot",
-      "colore_bacca": "nera",
-      "descrizione": "Bordolese, diffusissimo in Italia soprattutto nel Nordest e in Toscana. Matura presto e dà vini morbidi e accessibili.",
-      "note_sensoriali": [
-        "prugna",
-        "frutta scura",
-        "tannino vellutato"
-      ],
-      "temperatura_c": "16-18",
-      "abbinamenti": [
-        "carni rosse",
-        "carni bianche",
-        "formaggi di media stagionatura"
-      ]
-    },
-    {
-      "nome": "Cabernet Sauvignon",
-      "colore_bacca": "nera",
-      "descrizione": "Il vitigno bordolese più diffuso al mondo. In Italia è protagonista dei rossi di Bolgheri e presenza costante nei blend.",
-      "note_sensoriali": [
-        "ribes nero",
-        "peperone",
-        "cedro",
-        "tannino saldo"
-      ],
-      "temperatura_c": "17-19",
       "abbinamenti": [
         "carni rosse",
         "agnello",
         "formaggi stagionati"
-      ]
-    },
-    {
-      "nome": "Cabernet Franc",
-      "colore_bacca": "nera",
-      "descrizione": "Genitore del Cabernet Sauvignon, più snello e profumato. Nel Nordest italiano ha una lunga tradizione.",
-      "note_sensoriali": [
-        "frutta rossa",
-        "foglia di pomodoro",
-        "erbaceo fine"
       ],
-      "temperatura_c": "16-18",
-      "abbinamenti": [
-        "carni rosse",
-        "carni bianche",
-        "verdure"
-      ]
-    },
-    {
-      "nome": "Syrah",
-      "colore_bacca": "nera",
-      "descrizione": "Rodaniano, in Italia trova espressioni convincenti in Sicilia e in Toscana. Speziatura riconoscibile.",
-      "note_sensoriali": [
-        "pepe nero",
-        "mora",
-        "viola"
+      "descrizione_en": "From northern Puglia, between Castel del Monte and the Murgia. It ripens late and gives fine tannin, more elegant than the South might suggest.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "violet",
+        "spice",
+        "fine tannin"
       ],
-      "temperatura_c": "16-18",
-      "abbinamenti": [
-        "carni rosse",
-        "piatti speziati",
-        "carne alla brace"
+      "abbinamenti_en": [
+        "red meat",
+        "lamb",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Uva di Troia",
+        "Nero Di Troia"
       ]
     },
     {
-      "nome": "Glera",
+      "nome": "Nosiola",
       "colore_bacca": "bianca",
-      "descrizione": "Il vitigno del Prosecco: si chiamava Prosecco anch'esso, finché il nome non è diventato denominazione. Neutro per natura, è fatto per la spuma.",
-      "note_sensoriali": [
-        "mela verde",
-        "fiori bianchi",
-        "bollicina leggera"
-      ],
-      "temperatura_c": "6-8",
-      "abbinamenti": [
-        "aperitivo",
-        "antipasti",
-        "pesce magro"
-      ]
-    },
-    {
-      "nome": "Garganega",
-      "colore_bacca": "bianca",
-      "descrizione": "Il vitigno del Soave, veronese. Matura tardi e regge l'appassimento, che nel Recioto di Soave diventa dolcezza.",
-      "note_sensoriali": [
-        "mandorla",
-        "fiori bianchi",
-        "nota agrumata"
-      ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
-        "pesce magro",
-        "antipasti",
-        "risotto"
-      ]
-    },
-    {
-      "nome": "Trebbiano Toscano",
-      "colore_bacca": "bianca",
-      "descrizione": "Fra i bianchi più piantati d'Italia. Neutro e acido, è la base storica del Vin Santo e dell'aceto balsamico.",
-      "note_sensoriali": [
-        "agrumi",
-        "acidità viva",
-        "corpo esile"
-      ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
-        "pesce magro",
-        "antipasti",
-        "verdure"
-      ]
-    },
-    {
-      "nome": "Verdicchio",
-      "colore_bacca": "bianca",
-      "descrizione": "Marchigiano, dei Castelli di Jesi e di Matelica. Fra i pochi bianchi italiani che guadagnano davvero con gli anni.",
-      "note_sensoriali": [
-        "mandorla amara",
-        "agrumi",
-        "nota salina"
-      ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
-        "pesce magro",
-        "crostacei",
-        "carni bianche"
-      ]
-    },
-    {
-      "nome": "Vermentino",
-      "colore_bacca": "bianca",
-      "descrizione": "Ligure, sardo e toscano. Sapidità marina e naso agrumato lo rendono un classico da tavola di mare.",
-      "note_sensoriali": [
-        "agrumi",
-        "erbe aromatiche",
-        "nota salina"
-      ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
-        "pesce magro",
-        "crostacei",
-        "frutti di mare"
-      ]
-    },
-    {
-      "nome": "Fiano",
-      "colore_bacca": "bianca",
-      "descrizione": "Campano, di antichissima origine. Vini di corpo, capaci di evolvere e di sviluppare note di miele e nocciola.",
+      "descrizione": "Trentino, unico bianco autoctono della regione. Dà il Vino Santo trentino, passito rarissimo.",
       "note_sensoriali": [
         "nocciola",
-        "miele",
-        "pera",
-        "buon corpo"
-      ],
-      "temperatura_c": "11-13",
-      "abbinamenti": [
-        "pesce grasso",
-        "carni bianche",
-        "formaggi di media stagionatura"
-      ]
-    },
-    {
-      "nome": "Greco",
-      "colore_bacca": "bianca",
-      "descrizione": "Campano, di Tufo la sua espressione più nota. Acidità alta e carattere quasi minerale.",
-      "note_sensoriali": [
-        "pesca bianca",
-        "nota minerale",
-        "acidità alta"
-      ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
-        "pesce magro",
-        "crostacei",
-        "verdure"
-      ]
-    },
-    {
-      "nome": "Falanghina",
-      "colore_bacca": "bianca",
-      "descrizione": "Campana, diffusa fra Sannio e Campi Flegrei. Fresca, floreale, di beva facile ma non banale.",
-      "note_sensoriali": [
-        "fiori bianchi",
-        "agrumi",
-        "acidità viva"
-      ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
-        "pesce magro",
-        "antipasti",
-        "pizza"
-      ]
-    },
-    {
-      "nome": "Ribolla Gialla",
-      "colore_bacca": "bianca",
-      "descrizione": "Friulana e slovena, spesso protagonista dei bianchi macerati sulle bucce. Acidità schietta.",
-      "note_sensoriali": [
-        "agrumi",
-        "fieno",
-        "acidità viva"
-      ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
-        "antipasti",
-        "pesce magro",
-        "formaggi freschi"
-      ]
-    },
-    {
-      "nome": "Cortese",
-      "colore_bacca": "bianca",
-      "descrizione": "Piemontese, il vitigno del Gavi. Delicato, agrumato, di grande pulizia.",
-      "note_sensoriali": [
-        "limone",
-        "fiori bianchi",
-        "nota minerale"
-      ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
-        "pesce magro",
-        "crostacei",
-        "antipasti"
-      ]
-    },
-    {
-      "nome": "Arneis",
-      "colore_bacca": "bianca",
-      "descrizione": "Piemontese, del Roero. Il nome in dialetto significa pressappoco birichino, per quanto è capriccioso in vigna.",
-      "note_sensoriali": [
-        "pera",
-        "mandorla",
+        "mela",
         "fiori bianchi"
       ],
       "temperatura_c": "10-12",
       "abbinamenti": [
-        "antipasti",
         "pesce magro",
-        "carni bianche"
-      ]
-    },
-    {
-      "nome": "Pinot Grigio",
-      "colore_bacca": "grigia",
-      "descrizione": "Mutazione del Pinot Nero, con buccia ramata. Nel Nordest italiano ha trovato la sua diffusione mondiale.",
-      "note_sensoriali": [
-        "pera",
-        "mela",
-        "corpo medio"
+        "antipasti",
+        "dolci se passito"
       ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
-        "antipasti",
-        "pesce magro",
-        "carni bianche"
-      ]
-    },
-    {
-      "nome": "Pinot Bianco",
-      "colore_bacca": "bianca",
-      "descrizione": "Sobrio e preciso, dà il meglio in Alto Adige e in Franciacorta, dove entra nelle basi spumante.",
-      "note_sensoriali": [
-        "mela",
-        "fiori bianchi",
-        "acidità equilibrata"
+      "descrizione_en": "From Trentino, the region's only native white. It gives Vino Santo Trentino, a very rare passito.",
+      "note_sensoriali_en": [
+        "hazelnut",
+        "apple",
+        "white flowers"
       ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
+      "abbinamenti_en": [
+        "lean fish",
         "antipasti",
-        "pesce magro",
-        "carni bianche"
+        "desserts if made sweet"
       ]
     },
     {
-      "nome": "Chardonnay",
-      "colore_bacca": "bianca",
-      "descrizione": "Borgognone, ovunque nel mondo. In Italia va dalla Franciacorta ai bianchi da legno dell'Alto Adige.",
+      "nome": "Oseleta",
+      "colore_bacca": "nera",
+      "descrizione": "Veronese, quasi estinto e recuperato negli anni ottanta. Acini piccolissimi, buccia spessa: pochissimo succo e moltissimo tannino.",
       "note_sensoriali": [
-        "mela",
+        "frutta scura",
+        "spezie",
+        "tannino fitto"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "brasati",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "From Verona, nearly extinct and recovered in the 1980s. Very small berries with thick skins: very little juice and a great deal of tannin.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "spice",
+        "dense tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "braised meat",
+        "aged cheeses"
+      ]
+    },
+    {
+      "nome": "Passerina",
+      "colore_bacca": "bianca",
+      "descrizione": "Marchigiana e abruzzese, spesso confusa col Pecorino con cui divide i territori. Acidità alta e beva rapida.",
+      "note_sensoriali": [
         "agrumi",
-        "nocciola se affinato in legno"
-      ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
-        "pesce grasso",
-        "carni bianche",
-        "formaggi a pasta molle"
-      ]
-    },
-    {
-      "nome": "Sauvignon",
-      "colore_bacca": "bianca",
-      "descrizione": "Riconoscibile fra mille per il suo profilo aromatico. In Italia eccelle in Friuli e Alto Adige.",
-      "note_sensoriali": [
-        "sambuco",
-        "peperone verde",
-        "pompelmo",
+        "mela verde",
         "acidità alta"
       ],
-      "temperatura_c": "9-11",
-      "abbinamenti": [
-        "verdure",
-        "formaggi caprini",
-        "pesce magro"
-      ]
-    },
-    {
-      "nome": "Moscato",
-      "colore_bacca": "bianca",
-      "descrizione": "Famiglia aromatica antichissima. In Piemonte dà l'Asti e il Moscato d'Asti, dolci e a bassa gradazione.",
-      "note_sensoriali": [
-        "uva moscata",
-        "salvia",
-        "fiori d'arancio"
-      ],
-      "temperatura_c": "6-8",
-      "abbinamenti": [
-        "dolci",
-        "dolci alla frutta",
-        "frutta"
-      ]
-    },
-    {
-      "nome": "Malvasia",
-      "colore_bacca": "bianca",
-      "descrizione": "Non un vitigno ma una famiglia numerosa, sparsa in tutto il Mediterraneo, con varietà aromatiche e neutre.",
-      "note_sensoriali": [
-        "fiori",
-        "frutta bianca",
-        "aromaticità variabile"
-      ],
       "temperatura_c": "10-12",
       "abbinamenti": [
         "antipasti",
         "pesce magro",
-        "dolci se passito"
-      ]
-    },
-    {
-      "nome": "Grillo",
-      "colore_bacca": "bianca",
-      "descrizione": "Siciliano, storicamente base del Marsala. Oggi dà bianchi fermi sapidi e di buona spalla acida.",
-      "note_sensoriali": [
-        "agrumi",
-        "erbe mediterranee",
-        "nota salina"
+        "frutti di mare"
       ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
-        "pesce magro",
-        "frutti di mare",
-        "antipasti"
-      ]
-    },
-    {
-      "nome": "Catarratto",
-      "colore_bacca": "bianca",
-      "descrizione": "Il bianco più coltivato in Sicilia. Versatile, dalla base per Marsala ai bianchi di territorio.",
-      "note_sensoriali": [
-        "agrumi",
-        "fiori",
-        "acidità equilibrata"
+      "descrizione_en": "From the Marche and Abruzzo, often confused with Pecorino with which it shares its ground. High acidity, quick to drink.",
+      "note_sensoriali_en": [
+        "citrus",
+        "green apple",
+        "high acidity"
       ],
-      "temperatura_c": "10-12",
-      "abbinamenti": [
-        "pesce magro",
+      "abbinamenti_en": [
         "antipasti",
-        "verdure"
+        "lean fish",
+        "seafood"
       ]
     },
     {
@@ -762,22 +2369,1518 @@
         "pesce grasso",
         "crostacei",
         "carni bianche"
+      ],
+      "descrizione_en": "From Abruzzo and the Marche, recovered after nearly disappearing. No relation to the cheese: the name is said to come from the flocks that were fond of it.",
+      "note_sensoriali_en": [
+        "aniseed",
+        "citrus",
+        "herbs",
+        "good structure"
+      ],
+      "abbinamenti_en": [
+        "oily fish",
+        "shellfish",
+        "white meat"
       ]
     },
     {
-      "nome": "Erbaluce",
+      "nome": "Perera",
       "colore_bacca": "bianca",
-      "descrizione": "Piemontese, del Canavese. Acidità notevole che lo rende adatto sia allo spumante sia al passito.",
+      "descrizione": "Veneta, minoritaria nel Prosecco cui porta profumo di pera, da cui il nome.",
+      "note_sensoriali": [
+        "pera",
+        "fiori bianchi",
+        "acidità viva"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "aperitivo",
+        "antipasti",
+        "pesce magro"
+      ],
+      "descrizione_en": "From the Veneto, a minor part of Prosecco to which it brings a scent of pear, whence the name.",
+      "note_sensoriali_en": [
+        "pear",
+        "white flowers",
+        "lively acidity"
+      ],
+      "abbinamenti_en": [
+        "aperitif",
+        "antipasti",
+        "lean fish"
+      ]
+    },
+    {
+      "nome": "Perricone",
+      "colore_bacca": "nera",
+      "descrizione": "Siciliano, quasi scomparso nel Novecento. Tannino severo e nota di macchia, in netta ripresa.",
+      "note_sensoriali": [
+        "frutta scura",
+        "erbe mediterranee",
+        "tannino severo"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "agnello",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "Sicilian, nearly lost in the twentieth century. Severe tannin and a note of Mediterranean scrub, now clearly recovering.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "Mediterranean herbs",
+        "severe tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "lamb",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Pignatello"
+      ]
+    },
+    {
+      "nome": "Petit Manseng",
+      "colore_bacca": "bianca",
+      "descrizione": "Del Sud-Ovest francese, in Italia rarissimo. Acidità altissima che regge dolcezze importanti.",
+      "note_sensoriali": [
+        "frutta esotica",
+        "agrumi",
+        "acidità alta"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "dolci",
+        "formaggi erborinati",
+        "pesce grasso"
+      ],
+      "descrizione_en": "From south-west France, very rare in Italy. Extremely high acidity that carries considerable sweetness.",
+      "note_sensoriali_en": [
+        "exotic fruit",
+        "citrus",
+        "high acidity"
+      ],
+      "abbinamenti_en": [
+        "desserts",
+        "blue cheeses",
+        "oily fish"
+      ]
+    },
+    {
+      "nome": "Petit Rouge",
+      "colore_bacca": "nera",
+      "descrizione": "Valdostano, il rosso più diffuso della valle. Profumo floreale e struttura leggera, da alta quota.",
+      "note_sensoriali": [
+        "viola",
+        "frutta rossa",
+        "tannino gentile"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "carni bianche",
+        "formaggi di montagna"
+      ],
+      "descrizione_en": "From the Aosta Valley, the most widespread red of the valley. Floral scent and light structure, from high altitude.",
+      "note_sensoriali_en": [
+        "violet",
+        "red fruit",
+        "gentle tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "white meat",
+        "mountain cheeses"
+      ]
+    },
+    {
+      "nome": "Petit Verdot",
+      "colore_bacca": "nera",
+      "descrizione": "Bordolese, in patria matura a fatica e resta minoritario. Nel caldo italiano arriva a maturazione piena e dà colore e spezia ai blend.",
+      "note_sensoriali": [
+        "viola",
+        "frutta scura",
+        "pepe",
+        "tannino saldo"
+      ],
+      "temperatura_c": "17-19",
+      "abbinamenti": [
+        "carni rosse",
+        "cacciagione",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "Bordelais, in its homeland it struggles to ripen and stays a minor player. In the Italian heat it reaches full ripeness and gives colour and spice to blends.",
+      "note_sensoriali_en": [
+        "violet",
+        "dark fruit",
+        "pepper",
+        "firm tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "game meat",
+        "aged cheeses"
+      ]
+    },
+    {
+      "nome": "Petite Arvine",
+      "colore_bacca": "bianca",
+      "descrizione": "Valdostana e vallesana, di alta quota. Sapidità salina spiccata e acidità che tiene.",
+      "note_sensoriali": [
+        "pompelmo",
+        "nota salina",
+        "fiori bianchi"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "formaggi di montagna",
+        "antipasti"
+      ],
+      "descrizione_en": "From the Aosta Valley and the Valais, at altitude. Marked saline savour and acidity that holds.",
+      "note_sensoriali_en": [
+        "grapefruit",
+        "saline note",
+        "white flowers"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "mountain cheeses",
+        "antipasti"
+      ]
+    },
+    {
+      "nome": "Picolit",
+      "colore_bacca": "bianca",
+      "descrizione": "Friulano, raro e capriccioso: l'aborto floreale gli fa perdere gran parte degli acini, e quel che resta si concentra. Da qui un passito prezioso.",
+      "note_sensoriali": [
+        "miele",
+        "fiori secchi",
+        "frutta candita"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pasticceria secca",
+        "formaggi erborinati",
+        "frutta secca"
+      ],
+      "descrizione_en": "Friulian, rare and capricious: floral abortion costs it most of its berries, and what remains concentrates. Hence a precious sweet wine.",
+      "note_sensoriali_en": [
+        "honey",
+        "dried flowers",
+        "candied fruit"
+      ],
+      "abbinamenti_en": [
+        "dry pastries",
+        "blue cheeses",
+        "nuts"
+      ]
+    },
+    {
+      "nome": "Piedirosso",
+      "colore_bacca": "nera",
+      "descrizione": "Campano, dei Campi Flegrei e del Vesuvio. Il nome viene dal raspo, che a maturità diventa rosso come una zampa di piccione.",
+      "note_sensoriali": [
+        "frutta rossa",
+        "nota vulcanica",
+        "tannino gentile"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "pizza",
+        "carni bianche",
+        "pesce grasso"
+      ],
+      "descrizione_en": "From Campania, of the Campi Flegrei and Vesuvius. The name comes from the stalk, which at ripeness turns red like a pigeon's foot.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "volcanic note",
+        "gentle tannin"
+      ],
+      "abbinamenti_en": [
+        "pizza",
+        "white meat",
+        "oily fish"
+      ],
+      "alias": [
+        "Per e Palummo"
+      ]
+    },
+    {
+      "nome": "Pigato",
+      "colore_bacca": "bianca",
+      "descrizione": "Ligure, del Ponente. Parente del Vermentino, se ne distingue per le macchie sugli acini che gli danno il nome e per un corpo più pieno.",
+      "note_sensoriali": [
+        "pesca",
+        "erbe aromatiche",
+        "nota salina"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "frutti di mare",
+        "verdure"
+      ],
+      "descrizione_en": "Ligurian, from the western Riviera. A relative of Vermentino, told apart by the freckles on its berries that give it its name and by a fuller body.",
+      "note_sensoriali_en": [
+        "peach",
+        "aromatic herbs",
+        "saline note"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "seafood",
+        "vegetables"
+      ]
+    },
+    {
+      "nome": "Pignoletto",
+      "colore_bacca": "bianca",
+      "descrizione": "Bolognese, dei Colli. Fermo o frizzante, è il bianco quotidiano dell'Emilia, agrumato e senza pretese di complessità.",
+      "note_sensoriali": [
+        "agrumi",
+        "mela verde",
+        "acidità viva"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "antipasti",
+        "salumi",
+        "pesce magro"
+      ],
+      "descrizione_en": "From the hills of Bologna. Still or lightly fizzy, it is Emilia's everyday white, citrusy and with no pretence of complexity.",
+      "note_sensoriali_en": [
+        "citrus",
+        "green apple",
+        "lively acidity"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "cured meats",
+        "lean fish"
+      ],
+      "alias": [
+        "Grechetto Gentile di Bologna"
+      ]
+    },
+    {
+      "nome": "Pignolo",
+      "colore_bacca": "nera",
+      "descrizione": "Friulano, quasi scomparso e recuperato da pochi filari. Tannino imponente e maturazione lentissima: è vino da lungo affinamento.",
+      "note_sensoriali": [
+        "frutta scura",
+        "spezie",
+        "tannino imponente"
+      ],
+      "temperatura_c": "17-19",
+      "abbinamenti": [
+        "carni rosse",
+        "brasati",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "Friulian, nearly lost and recovered from a handful of rows. Imposing tannin and very slow ripening: a wine for long ageing.",
+      "note_sensoriali_en": [
+        "dark fruit",
+        "spice",
+        "imposing tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "braised meat",
+        "aged cheeses"
+      ]
+    },
+    {
+      "nome": "Pinot Bianco",
+      "colore_bacca": "bianca",
+      "descrizione": "Sobrio e preciso, dà il meglio in Alto Adige e in Franciacorta, dove entra nelle basi spumante.",
+      "note_sensoriali": [
+        "mela",
+        "fiori bianchi",
+        "acidità equilibrata"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "antipasti",
+        "pesce magro",
+        "carni bianche"
+      ],
+      "descrizione_en": "Sober and precise, at its best in Alto Adige and in Franciacorta, where it goes into sparkling bases.",
+      "note_sensoriali_en": [
+        "apple",
+        "white flowers",
+        "balanced acidity"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "lean fish",
+        "white meat"
+      ],
+      "alias": [
+        "Pinot Blanc",
+        "Weissburgunder"
+      ]
+    },
+    {
+      "nome": "Pinot Grigio",
+      "colore_bacca": "grigia",
+      "descrizione": "Mutazione del Pinot Nero, con buccia ramata. Nel Nordest italiano ha trovato la sua diffusione mondiale.",
+      "note_sensoriali": [
+        "pera",
+        "mela",
+        "corpo medio"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "antipasti",
+        "pesce magro",
+        "carni bianche"
+      ],
+      "descrizione_en": "A mutation of Pinot Nero, with coppery skins. In Italy's North-East it found its worldwide diffusion.",
+      "note_sensoriali_en": [
+        "pear",
+        "apple",
+        "medium body"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "lean fish",
+        "white meat"
+      ],
+      "alias": [
+        "Pinot Gris",
+        "Pinot Grigio/Pinot Gris",
+        "Ruländer"
+      ]
+    },
+    {
+      "nome": "Pinot Meunier",
+      "colore_bacca": "nera",
+      "descrizione": "Il terzo vitigno dello Champagne, mutazione del Pinot Nero con foglie farinose. In Italia è presenza rara.",
+      "note_sensoriali": [
+        "frutta rossa",
+        "crosta di pane",
+        "corpo medio"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "aperitivo",
+        "antipasti",
+        "carni bianche"
+      ],
+      "descrizione_en": "The third grape of Champagne, a mutation of Pinot Noir with floury leaves. In Italy it is a rare presence.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "bread crust",
+        "medium body"
+      ],
+      "abbinamenti_en": [
+        "aperitif",
+        "antipasti",
+        "white meat"
+      ],
+      "alias": [
+        "Meunier"
+      ]
+    },
+    {
+      "nome": "Pinot Nero",
+      "colore_bacca": "nera",
+      "descrizione": "Borgognone d'origine, in Italia trova casa in Alto Adige, Oltrepò e Franciacorta. Difficile in vigna quanto seducente nel bicchiere.",
+      "note_sensoriali": [
+        "lampone",
+        "sottobosco",
+        "tannino sottile"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "carni bianche",
+        "funghi",
+        "pesce grasso"
+      ],
+      "descrizione_en": "Burgundian in origin, in Italy it finds a home in Alto Adige, Oltrepò and Franciacorta. As difficult in the vineyard as it is seductive in the glass.",
+      "note_sensoriali_en": [
+        "raspberry",
+        "undergrowth",
+        "fine tannin"
+      ],
+      "abbinamenti_en": [
+        "white meat",
+        "mushrooms",
+        "oily fish"
+      ],
+      "alias": [
+        "Pinot Noir",
+        "Pinot Nero/Pinot Noir",
+        "Blauburgunder"
+      ]
+    },
+    {
+      "nome": "Primitivo",
+      "colore_bacca": "nera",
+      "descrizione": "Pugliese, geneticamente identico allo Zinfandel californiano. Matura presto e concentra molto zucchero: da qui i vini caldi e generosi.",
+      "note_sensoriali": [
+        "prugna",
+        "confettura",
+        "spezie dolci",
+        "alcol caldo"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "carne alla brace",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "From Puglia, genetically identical to California's Zinfandel. It ripens early and concentrates a great deal of sugar: hence the warm, generous wines.",
+      "note_sensoriali_en": [
+        "plum",
+        "preserves",
+        "sweet spice",
+        "warm alcohol"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "grilled meat",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Primitivo/Zinfandel",
+        "Zinfandel"
+      ]
+    },
+    {
+      "nome": "Raboso",
+      "colore_bacca": "nera",
+      "descrizione": "Veneto, del Piave. Acidità e tannino così spinti che il nome verrebbe da rabbioso. Chiede anni, o l'appassimento del Fràgolino.",
+      "note_sensoriali": [
+        "amarena",
+        "frutta scura",
+        "acidità alta",
+        "tannino severo"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "salumi",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "From the Piave in the Veneto. Acidity and tannin so pushed that the name is said to come from 'rabid'. It demands years, or the drying of Fràgolino.",
+      "note_sensoriali_en": [
+        "sour cherry",
+        "dark fruit",
+        "high acidity",
+        "severe tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "cured meats",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Raboso Piave",
+        "Raboso Veronese",
+        "Raboso del Piave"
+      ]
+    },
+    {
+      "nome": "Rebo",
+      "colore_bacca": "nera",
+      "descrizione": "Incrocio trentino fra Merlot e Teroldego, ottenuto da Rebo Rigotti. Morbidezza del primo, colore del secondo.",
+      "note_sensoriali": [
+        "prugna",
+        "mora",
+        "tannino morbido"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "salumi",
+        "formaggi di media stagionatura"
+      ],
+      "descrizione_en": "A Trentino crossing of Merlot and Teroldego, obtained by Rebo Rigotti. The softness of the first, the colour of the second.",
+      "note_sensoriali_en": [
+        "plum",
+        "blackberry",
+        "soft tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "cured meats",
+        "medium-aged cheeses"
+      ]
+    },
+    {
+      "nome": "Refosco",
+      "colore_bacca": "nera",
+      "descrizione": "Friulano, nella versione dal peduncolo rosso. Acidità alta e carattere rustico, nel senso buono.",
+      "note_sensoriali": [
+        "prugna",
+        "erbe",
+        "acidità viva"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "salumi",
+        "piatti di terra"
+      ],
+      "descrizione_en": "From Friuli, in its dal peduncolo rosso version. High acidity and a rustic character, in the good sense.",
+      "note_sensoriali_en": [
+        "plum",
+        "herbs",
+        "lively acidity"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "cured meats",
+        "earthy dishes"
+      ],
+      "alias": [
+        "Refosco Dal Peduncolo Rosso",
+        "Refosco dal Peduncolo Rosso",
+        "Refosco Nostrano"
+      ]
+    },
+    {
+      "nome": "Ribolla Gialla",
+      "colore_bacca": "bianca",
+      "descrizione": "Friulana e slovena, spesso protagonista dei bianchi macerati sulle bucce. Acidità schietta.",
+      "note_sensoriali": [
+        "agrumi",
+        "fieno",
+        "acidità viva"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "antipasti",
+        "pesce magro",
+        "formaggi freschi"
+      ],
+      "descrizione_en": "From Friuli and Slovenia, often the lead in whites macerated on the skins. Straightforward acidity.",
+      "note_sensoriali_en": [
+        "citrus",
+        "hay",
+        "lively acidity"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "lean fish",
+        "fresh cheeses"
+      ],
+      "alias": [
+        "Ribolla"
+      ]
+    },
+    {
+      "nome": "Riesling",
+      "colore_bacca": "bianca",
+      "descrizione": "Renano d'origine, in Italia sta bene in Alto Adige e in Oltrepò. Acidità che sfida gli anni e nota minerale inconfondibile.",
+      "note_sensoriali": [
+        "lime",
+        "pietra focaia",
+        "fiori bianchi",
+        "acidità alta"
+      ],
+      "temperatura_c": "9-11",
+      "abbinamenti": [
+        "pesce magro",
+        "cucina speziata",
+        "crostacei"
+      ],
+      "descrizione_en": "Rhenish in origin, in Italy it does well in Alto Adige and the Oltrepò. Acidity that defies the years and an unmistakable mineral note.",
+      "note_sensoriali_en": [
+        "lime",
+        "flint",
+        "white flowers",
+        "high acidity"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "spicy cuisine",
+        "shellfish"
+      ],
+      "alias": [
+        "Riesling Renano",
+        "Riesling Italico"
+      ]
+    },
+    {
+      "nome": "Rondinella",
+      "colore_bacca": "nera",
+      "descrizione": "Compagna della Corvina nei vini veronesi. Porta colore e affidabilità in vigna più che complessità.",
+      "note_sensoriali": [
+        "frutta rossa",
+        "erbe",
+        "tannino gentile"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "salumi",
+        "carni bianche",
+        "pasta"
+      ],
+      "descrizione_en": "Corvina's companion in the wines of Verona. It brings colour and reliability in the vineyard more than complexity.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "herbs",
+        "gentle tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "white meat",
+        "pasta"
+      ]
+    },
+    {
+      "nome": "Rossignola",
+      "colore_bacca": "nera",
+      "descrizione": "Veronese, minoritaria nella Valpolicella. Colore tenue e acidità viva, porta freschezza al blend.",
+      "note_sensoriali": [
+        "frutta rossa",
+        "erbe",
+        "acidità viva"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "carni bianche",
+        "antipasti"
+      ],
+      "descrizione_en": "From Verona, a minor part of Valpolicella. Pale colour and lively acidity, it brings freshness to the blend.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "herbs",
+        "lively acidity"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "white meat",
+        "antipasti"
+      ]
+    },
+    {
+      "nome": "Ruché",
+      "colore_bacca": "nera",
+      "descrizione": "Monferrino, di Castagnole. Aromatico e speziato, raro e riconoscibilissimo.",
+      "note_sensoriali": [
+        "rosa",
+        "pepe",
+        "frutta rossa"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "carni bianche",
+        "salumi",
+        "formaggi di media stagionatura"
+      ],
+      "descrizione_en": "From Castagnole in the Monferrato. Aromatic and spicy, rare and instantly recognisable.",
+      "note_sensoriali_en": [
+        "rose",
+        "pepper",
+        "red fruit"
+      ],
+      "abbinamenti_en": [
+        "white meat",
+        "cured meats",
+        "medium-aged cheeses"
+      ],
+      "alias": [
+        "Ruche'",
+        "Ruchè"
+      ]
+    },
+    {
+      "nome": "Sagrantino",
+      "colore_bacca": "nera",
+      "descrizione": "Umbro, di Montefalco. Fra i vitigni più ricchi di polifenoli al mondo: il tannino è la sua firma e richiede lunga attesa.",
+      "note_sensoriali": [
+        "mora",
+        "liquirizia",
+        "tannino imponente"
+      ],
+      "temperatura_c": "17-19",
+      "abbinamenti": [
+        "carni rosse",
+        "cacciagione",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "From Montefalco, in Umbria. Among the most polyphenol-rich grapes in the world: tannin is its signature, and it demands a long wait.",
+      "note_sensoriali_en": [
+        "blackberry",
+        "liquorice",
+        "imposing tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "game meat",
+        "aged cheeses"
+      ]
+    },
+    {
+      "nome": "Sangiovese",
+      "colore_bacca": "nera",
+      "descrizione": "Il vitigno più coltivato d'Italia e l'anima della Toscana, dal Chianti al Brunello di Montalcino. Matura tardi e sa restituire il carattere del suolo con precisione rara.",
+      "note_sensoriali": [
+        "amarena",
+        "viola",
+        "erbe mediterranee",
+        "tannino asciutto"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "pasta al ragu",
+        "formaggi stagionati"
+      ],
+      "descrizione_en": "Italy's most planted grape and the soul of Tuscany, from Chianti to Brunello di Montalcino. It ripens late and renders the character of the soil with rare precision.",
+      "note_sensoriali_en": [
+        "sour cherry",
+        "violet",
+        "Mediterranean herbs",
+        "dry tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "pasta with ragù",
+        "aged cheeses"
+      ],
+      "alias": [
+        "Brunello",
+        "Morellino",
+        "Prugnolo Gentile",
+        "Sangiovese Grosso"
+      ]
+    },
+    {
+      "nome": "Sauvignon",
+      "colore_bacca": "bianca",
+      "descrizione": "Riconoscibile fra mille per il suo profilo aromatico. In Italia eccelle in Friuli e Alto Adige.",
+      "note_sensoriali": [
+        "sambuco",
+        "peperone verde",
+        "pompelmo",
+        "acidità alta"
+      ],
+      "temperatura_c": "9-11",
+      "abbinamenti": [
+        "verdure",
+        "formaggi caprini",
+        "pesce magro"
+      ],
+      "descrizione_en": "Recognisable among a thousand for its aromatic profile. In Italy it excels in Friuli and Alto Adige.",
+      "note_sensoriali_en": [
+        "elderflower",
+        "green pepper",
+        "grapefruit",
+        "high acidity"
+      ],
+      "abbinamenti_en": [
+        "vegetables",
+        "goat cheeses",
+        "lean fish"
+      ],
+      "alias": [
+        "Sauvignon Blanc"
+      ]
+    },
+    {
+      "nome": "Schiava",
+      "colore_bacca": "nera",
+      "descrizione": "Altoatesina, chiamata anche Vernatsch. Rossi leggerissimi, quasi rosati, da bere freschi.",
+      "note_sensoriali": [
+        "fragola",
+        "mandorla",
+        "corpo molto leggero"
+      ],
+      "temperatura_c": "13-15",
+      "abbinamenti": [
+        "salumi",
+        "carni bianche",
+        "formaggi freschi"
+      ],
+      "descrizione_en": "From Alto Adige, also called Vernatsch. Very light reds, almost rosé, to be drunk cool.",
+      "note_sensoriali_en": [
+        "strawberry",
+        "almond",
+        "very light body"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "white meat",
+        "fresh cheeses"
+      ],
+      "alias": [
+        "Vernatsch",
+        "Schiava Gentile",
+        "Schiava Grossa",
+        "Schiava Grigia"
+      ]
+    },
+    {
+      "nome": "Schioppettino",
+      "colore_bacca": "nera",
+      "descrizione": "Friulano, di Prepotto. Pepe nero nel bicchiere e acidità viva: era quasi estinto negli anni settanta.",
+      "note_sensoriali": [
+        "pepe nero",
+        "frutta rossa",
+        "acidità viva"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "salumi",
+        "piatti speziati"
+      ],
+      "descrizione_en": "Friulian, from Prepotto. Black pepper in the glass and lively acidity: it was nearly extinct in the 1970s.",
+      "note_sensoriali_en": [
+        "black pepper",
+        "red fruit",
+        "lively acidity"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "cured meats",
+        "spicy dishes"
+      ],
+      "alias": [
+        "Ribolla Nera"
+      ]
+    },
+    {
+      "nome": "Semillon",
+      "colore_bacca": "bianca",
+      "descrizione": "Bordolese, in Italia raro. Corpo pieno e poca acidità, si presta alla muffa nobile.",
+      "note_sensoriali": [
+        "miele",
+        "frutta bianca",
+        "cera"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce grasso",
+        "formaggi erborinati",
+        "carni bianche"
+      ],
+      "descrizione_en": "Bordelais, rare in Italy. Full-bodied and low in acidity, it lends itself to noble rot.",
+      "note_sensoriali_en": [
+        "honey",
+        "white fruit",
+        "wax"
+      ],
+      "abbinamenti_en": [
+        "oily fish",
+        "blue cheeses",
+        "white meat"
+      ],
+      "alias": [
+        "Sémillon"
+      ]
+    },
+    {
+      "nome": "Susumaniello",
+      "colore_bacca": "nera",
+      "descrizione": "Pugliese, di Brindisi. Il nome viene dal somaro: la vite da giovane carica di grappoli come un asino carico di some.",
+      "note_sensoriali": [
+        "mora",
+        "frutta scura",
+        "tannino gentile"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "carne alla brace",
+        "salumi"
+      ],
+      "descrizione_en": "From Brindisi, in Puglia. The name comes from the donkey: when young the vine is loaded with bunches like a donkey with panniers.",
+      "note_sensoriali_en": [
+        "blackberry",
+        "dark fruit",
+        "gentle tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "grilled meat",
+        "cured meats"
+      ]
+    },
+    {
+      "nome": "Sylvaner",
+      "colore_bacca": "bianca",
+      "descrizione": "Mitteleuropeo, in Italia solo in Valle Isarco. Sobrio, erbaceo, di montagna.",
+      "note_sensoriali": [
+        "erbe",
+        "mela verde",
+        "nota minerale"
+      ],
+      "temperatura_c": "9-11",
+      "abbinamenti": [
+        "antipasti",
+        "pesce magro",
+        "formaggi freschi"
+      ],
+      "descrizione_en": "Central European, in Italy grown only in the Valle Isarco. Sober, herbaceous, alpine.",
+      "note_sensoriali_en": [
+        "herbs",
+        "green apple",
+        "mineral note"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "lean fish",
+        "fresh cheeses"
+      ],
+      "alias": [
+        "Silvaner/Sylvaner",
+        "Silvaner"
+      ]
+    },
+    {
+      "nome": "Syrah",
+      "colore_bacca": "nera",
+      "descrizione": "Rodaniano, in Italia trova espressioni convincenti in Sicilia e in Toscana. Speziatura riconoscibile.",
+      "note_sensoriali": [
+        "pepe nero",
+        "mora",
+        "viola"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "piatti speziati",
+        "carne alla brace"
+      ],
+      "descrizione_en": "From the Rhône, in Italy it finds convincing expression in Sicily and Tuscany. Its spice is unmistakable.",
+      "note_sensoriali_en": [
+        "black pepper",
+        "blackberry",
+        "violet"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "spicy dishes",
+        "grilled meat"
+      ],
+      "alias": [
+        "Syrah/Shiraz",
+        "Shiraz"
+      ]
+    },
+    {
+      "nome": "Teroldego",
+      "colore_bacca": "nera",
+      "descrizione": "Trentino, coltivato soprattutto nella Piana Rotaliana. Colore profondo e frutto schietto.",
+      "note_sensoriali": [
+        "mora",
+        "viola",
+        "tannino levigato"
+      ],
+      "temperatura_c": "16-18",
+      "abbinamenti": [
+        "carni rosse",
+        "salumi",
+        "formaggi di media stagionatura"
+      ],
+      "descrizione_en": "From Trentino, grown above all on the Rotaliano plain. Deep colour and straightforward fruit.",
+      "note_sensoriali_en": [
+        "blackberry",
+        "violet",
+        "polished tannin"
+      ],
+      "abbinamenti_en": [
+        "red meat",
+        "cured meats",
+        "medium-aged cheeses"
+      ],
+      "alias": [
+        "Teroldego Rotaliano"
+      ]
+    },
+    {
+      "nome": "Trebbiano",
+      "colore_bacca": "bianca",
+      "descrizione": "Non un vitigno solo ma una famiglia numerosa e sparsa per l'Italia: il Toscano, l'Abruzzese, quello di Soave e altri ancora, imparentati alla lontana o per niente. In comune hanno acidità viva e discrezione aromatica.",
       "note_sensoriali": [
         "agrumi",
         "fiori bianchi",
+        "acidità viva"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "antipasti",
+        "verdure"
+      ],
+      "descrizione_en": "Not a single grape but a large family scattered across Italy: the Tuscan, the Abruzzese, the Soave one and others, distantly related or not at all. What they share is lively acidity and aromatic restraint.",
+      "note_sensoriali_en": [
+        "citrus",
+        "white flowers",
+        "lively acidity"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "vegetables"
+      ]
+    },
+    {
+      "nome": "Trebbiano Toscano",
+      "colore_bacca": "bianca",
+      "descrizione": "Fra i bianchi più piantati d'Italia. Neutro e acido, è la base storica del Vin Santo e dell'aceto balsamico.",
+      "note_sensoriali": [
+        "agrumi",
+        "acidità viva",
+        "corpo esile"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "antipasti",
+        "verdure"
+      ],
+      "descrizione_en": "Among the most planted white grapes in Italy. Neutral and acidic, it is the historic base of Vin Santo and of balsamic vinegar.",
+      "note_sensoriali_en": [
+        "citrus",
+        "lively acidity",
+        "slender body"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "vegetables"
+      ],
+      "alias": [
+        "Trebbiano Toscano/Ugni Blanc",
+        "Ugni Blanc",
+        "Procanico"
+      ]
+    },
+    {
+      "nome": "Trebbiano d'Abruzzo",
+      "colore_bacca": "bianca",
+      "descrizione": "Abruzzese, distinto dal Trebbiano Toscano nonostante il nome vicino. Nelle mani giuste dà bianchi di sorprendente longevità.",
+      "note_sensoriali": [
+        "mela",
+        "mandorla",
+        "nota salina"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "carni bianche",
+        "verdure"
+      ],
+      "descrizione_en": "From Abruzzo, and distinct from Trebbiano Toscano despite the similar name. In the right hands it gives whites of surprising longevity.",
+      "note_sensoriali_en": [
+        "apple",
+        "almond",
+        "saline note"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "white meat",
+        "vegetables"
+      ]
+    },
+    {
+      "nome": "Uva Rara",
+      "colore_bacca": "nera",
+      "descrizione": "Piemontese e lombarda, malgrado il nome non è rara affatto: il nome viene dai grappoli spargoli.",
+      "note_sensoriali": [
+        "frutta rossa",
+        "fiori",
+        "tannino gentile"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "pasta",
+        "carni bianche"
+      ],
+      "descrizione_en": "From Piedmont and Lombardy: despite the name it is not rare at all, which comes from its loose bunches.",
+      "note_sensoriali_en": [
+        "red fruit",
+        "flowers",
+        "gentle tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "pasta",
+        "white meat"
+      ],
+      "alias": [
+        "Bonarda Novarese"
+      ]
+    },
+    {
+      "nome": "Verdeca",
+      "colore_bacca": "bianca",
+      "descrizione": "Pugliese, della Valle d'Itria. Storicamente base per il vermouth, oggi bianco fresco e agrumato.",
+      "note_sensoriali": [
+        "agrumi",
+        "mela verde",
+        "erbe"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "frutti di mare",
+        "antipasti"
+      ],
+      "descrizione_en": "From the Valle d'Itria in Puglia. Historically a base for vermouth, today a fresh, citrusy white.",
+      "note_sensoriali_en": [
+        "citrus",
+        "green apple",
+        "herbs"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "seafood",
+        "antipasti"
+      ]
+    },
+    {
+      "nome": "Verdelho",
+      "colore_bacca": "bianca",
+      "descrizione": "Portoghese, di Madeira. In Italia è presenza rara, con acidità alta e nota agrumata.",
+      "note_sensoriali": [
+        "agrumi",
+        "nota salina",
+        "acidità alta"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "frutti di mare",
+        "antipasti"
+      ],
+      "descrizione_en": "Portuguese, from Madeira. A rare presence in Italy, with high acidity and a citrus note.",
+      "note_sensoriali_en": [
+        "citrus",
+        "saline note",
+        "high acidity"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "seafood",
+        "antipasti"
+      ]
+    },
+    {
+      "nome": "Verdello",
+      "colore_bacca": "bianca",
+      "descrizione": "Umbro, minoritario nell'Orvieto. Acidità alta che sostiene i bianchi del territorio.",
+      "note_sensoriali": [
+        "agrumi",
+        "mela verde",
         "acidità alta"
       ],
       "temperatura_c": "10-12",
       "abbinamenti": [
         "pesce magro",
         "antipasti",
-        "dolci se passito"
+        "verdure"
+      ],
+      "descrizione_en": "Umbrian, a minor part of Orvieto. High acidity that props up the whites of the area.",
+      "note_sensoriali_en": [
+        "citrus",
+        "green apple",
+        "high acidity"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "vegetables"
+      ]
+    },
+    {
+      "nome": "Verdicchio",
+      "colore_bacca": "bianca",
+      "descrizione": "Marchigiano, dei Castelli di Jesi e di Matelica. Fra i pochi bianchi italiani che guadagnano davvero con gli anni.",
+      "note_sensoriali": [
+        "mandorla amara",
+        "agrumi",
+        "nota salina"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "crostacei",
+        "carni bianche"
+      ],
+      "descrizione_en": "From the Marche, of Castelli di Jesi and Matelica. One of the few Italian whites that genuinely gains with age.",
+      "note_sensoriali_en": [
+        "bitter almond",
+        "citrus",
+        "saline note"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "shellfish",
+        "white meat"
+      ],
+      "alias": [
+        "Verdicchio Bianco"
+      ]
+    },
+    {
+      "nome": "Verduzzo",
+      "colore_bacca": "bianca",
+      "descrizione": "Friulano, nella versione friulana dà il Ramandolo, passito di grande dolcezza sostenuta da un tannino insolito per un bianco.",
+      "note_sensoriali": [
+        "miele",
+        "fichi secchi",
+        "frutta candita"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "dolci",
+        "pasticceria secca",
+        "formaggi erborinati"
+      ],
+      "descrizione_en": "Friulian: in its Friulano version it gives Ramandolo, a sweet wine of great richness held up by tannin unusual in a white.",
+      "note_sensoriali_en": [
+        "honey",
+        "dried figs",
+        "candied fruit"
+      ],
+      "abbinamenti_en": [
+        "desserts",
+        "dry pastries",
+        "blue cheeses"
+      ],
+      "alias": [
+        "Verduzzo Friulano",
+        "Verduzzo Trevigiano"
+      ]
+    },
+    {
+      "nome": "Vermentino",
+      "colore_bacca": "bianca",
+      "descrizione": "Ligure, sardo e toscano. Sapidità marina e naso agrumato lo rendono un classico da tavola di mare.",
+      "note_sensoriali": [
+        "agrumi",
+        "erbe aromatiche",
+        "nota salina"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "crostacei",
+        "frutti di mare"
+      ],
+      "descrizione_en": "Ligurian, Sardinian and Tuscan. Sea-salt savour and a citrus nose make it a classic of the seaside table.",
+      "note_sensoriali_en": [
+        "citrus",
+        "aromatic herbs",
+        "saline note"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "shellfish",
+        "seafood"
+      ],
+      "alias": [
+        "Vermentino di Sardegna",
+        "Favorita"
+      ]
+    },
+    {
+      "nome": "Vernaccia",
+      "colore_bacca": "bianca",
+      "descrizione": "Non un vitigno ma un nome antico usato per uve diverse e non imparentate: quella di San Gimignano è bianca, quella di Serrapetrona è nera.",
+      "note_sensoriali": [
+        "agrumi",
+        "mandorla",
+        "acidità viva"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "antipasti",
+        "pesce magro",
+        "verdure"
+      ],
+      "descrizione_en": "Not one grape but an old name used for different and unrelated varieties: the San Gimignano one is white, the Serrapetrona one is black.",
+      "note_sensoriali_en": [
+        "citrus",
+        "almond",
+        "lively acidity"
+      ],
+      "abbinamenti_en": [
+        "antipasti",
+        "lean fish",
+        "vegetables"
+      ]
+    },
+    {
+      "nome": "Vernaccia di San Gimignano",
+      "colore_bacca": "bianca",
+      "descrizione": "Toscana, della città delle torri. Primo vino italiano a ottenere la DOC, nel 1966. Finale ammandorlato che è la sua firma.",
+      "note_sensoriali": [
+        "mandorla amara",
+        "agrumi",
+        "nota minerale"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "antipasti",
+        "carni bianche"
+      ],
+      "descrizione_en": "Tuscan, from the town of towers. The first Italian wine to be granted DOC status, in 1966. An almond finish is its signature.",
+      "note_sensoriali_en": [
+        "bitter almond",
+        "citrus",
+        "mineral note"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "white meat"
+      ]
+    },
+    {
+      "nome": "Vespaiola",
+      "colore_bacca": "bianca",
+      "descrizione": "Vicentina, di Breganze. Dà il Torcolato, passito celebre. Il nome viene dalle vespe, ghiotte dei suoi acini zuccherini.",
+      "note_sensoriali": [
+        "miele",
+        "agrumi",
+        "acidità alta"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "dolci",
+        "formaggi erborinati",
+        "pasticceria secca"
+      ],
+      "descrizione_en": "From Breganze in the Vicenza hills. It gives Torcolato, a celebrated passito. The name comes from the wasps, fond of its sugary berries.",
+      "note_sensoriali_en": [
+        "honey",
+        "citrus",
+        "high acidity"
+      ],
+      "abbinamenti_en": [
+        "desserts",
+        "blue cheeses",
+        "dry pastries"
+      ]
+    },
+    {
+      "nome": "Vespolina",
+      "colore_bacca": "nera",
+      "descrizione": "Piemontese del nord, compagna del Nebbiolo a Gattinara e Ghemme. Pepe nero netto e tannino asciutto.",
+      "note_sensoriali": [
+        "pepe nero",
+        "frutta rossa",
+        "tannino asciutto"
+      ],
+      "temperatura_c": "15-17",
+      "abbinamenti": [
+        "salumi",
+        "carni rosse",
+        "formaggi di media stagionatura"
+      ],
+      "descrizione_en": "From northern Piedmont, companion to Nebbiolo at Gattinara and Ghemme. Clear black pepper and dry tannin.",
+      "note_sensoriali_en": [
+        "black pepper",
+        "red fruit",
+        "dry tannin"
+      ],
+      "abbinamenti_en": [
+        "cured meats",
+        "red meat",
+        "medium-aged cheeses"
+      ],
+      "alias": [
+        "Ughetta"
+      ]
+    },
+    {
+      "nome": "Viognier",
+      "colore_bacca": "bianca",
+      "descrizione": "Rodaniano, di Condrieu. Aromatico e di corpo pieno, con poca acidità: va colto al momento giusto o perde tensione.",
+      "note_sensoriali": [
+        "albicocca",
+        "fiori bianchi",
+        "pesca"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce grasso",
+        "carni bianche",
+        "cucina speziata"
+      ],
+      "descrizione_en": "From the Rhône, of Condrieu. Aromatic and full-bodied, with low acidity: it must be picked at the right moment or it loses tension.",
+      "note_sensoriali_en": [
+        "apricot",
+        "white flowers",
+        "peach"
+      ],
+      "abbinamenti_en": [
+        "oily fish",
+        "white meat",
+        "spicy cuisine"
+      ]
+    },
+    {
+      "nome": "Vitovska",
+      "colore_bacca": "bianca",
+      "descrizione": "Carsico, fra Trieste e la Slovenia. Delicato e salino, spesso vinificato sulle bucce come vuole la tradizione del Carso.",
+      "note_sensoriali": [
+        "pera",
+        "fiori",
+        "nota salina"
+      ],
+      "temperatura_c": "10-12",
+      "abbinamenti": [
+        "pesce magro",
+        "antipasti",
+        "verdure"
+      ],
+      "descrizione_en": "From the Carso, between Trieste and Slovenia. Delicate and saline, often fermented on the skins as the Carso tradition demands.",
+      "note_sensoriali_en": [
+        "pear",
+        "flowers",
+        "saline note"
+      ],
+      "abbinamenti_en": [
+        "lean fish",
+        "antipasti",
+        "vegetables"
+      ]
+    },
+    {
+      "nome": "Zibibbo",
+      "colore_bacca": "bianca",
+      "descrizione": "Il Moscato d'Alessandria, a Pantelleria. Dà il passito più famoso d'Italia, ma anche bianchi secchi di grande profumo.",
+      "note_sensoriali": [
+        "uva passa",
+        "zagara",
+        "albicocca",
+        "miele"
+      ],
+      "temperatura_c": "8-10",
+      "abbinamenti": [
+        "dolci",
+        "formaggi erborinati",
+        "pasticceria secca"
+      ],
+      "descrizione_en": "Muscat of Alexandria, on Pantelleria. It gives Italy's most famous passito, but also dry whites of great perfume.",
+      "note_sensoriali_en": [
+        "raisin",
+        "orange blossom",
+        "apricot",
+        "honey"
+      ],
+      "abbinamenti_en": [
+        "desserts",
+        "blue cheeses",
+        "dry pastries"
+      ],
+      "alias": [
+        "Moscato d'Alessandria",
+        "Muscat of Alexandria"
       ]
     }
   ]

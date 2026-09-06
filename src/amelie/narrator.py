@@ -168,64 +168,78 @@ def _apertura(f: Fatti, lex: Lessico, lingua: str) -> str:
     annata, tutto — trovato con una somiglianza del 60%. Annunciarlo come
     «Questo è il Barolo di Marchesi di Barolo» sarebbe una bugia detta bene.
     Sotto la soglia della certezza si dice al tavolo che è una supposizione.
+
+    Le frasi vengono da `data/lessico/frasi.json`: qui c'è solo la logica di
+    quale dire, mai il testo, perché il testo cambia con la lingua.
     """
-    colore = lex.traduci("tipo", f.colore, lingua=lingua) if f.colore else None
+    d = lambda chiave, **kw: lex.frase("apertura", chiave, lingua=lingua, **kw)
+
     if f.livello is Livello.VINO and f.nome:
-        pezzi = [f"«{f.nome}»"]
+        pezzi = [d("pezzo_nome", nome=f.nome)]
         if f.cantina:
-            pezzi.append(f"di {f.cantina}")
+            pezzi.append(d("pezzo_cantina", cantina=f.cantina))
         if f.annata:
-            pezzi.append(f"annata {f.annata}")
-        cosa = " ".join(pezzi)
+            pezzi.append(d("pezzo_annata", annata=f.annata))
+        cosa = " ".join(p for p in pezzi if p)
         if f.certo:
-            return "Questo è il " + cosa + "."
+            return d("vino_certo", cosa=cosa)
         if f.dubbio:
-            return "Direi che è il " + cosa + "."
-        return "L'etichetta non è nitida: potrebbe essere il " + cosa + "."
+            return d("vino_dubbio", cosa=cosa)
+        return d("vino_incerto", cosa=cosa)
+
     if f.livello is Livello.TIPOLOGIA and f.tipologia:
-        if f.sicurezza < SOGLIA_DUBBIA:
-            return (f"L'etichetta non è nitida. Potrebbe essere "
-                    f"un {f.tipologia}.")
-        return (f"Non riesco a leggere l'etichetta con certezza, "
-                f"ma questo è un {f.tipologia}.")
+        chiave = ("tipologia_incerta" if f.sicurezza < SOGLIA_DUBBIA
+                  else "tipologia_nota")
+        return d(chiave, tipologia=f.tipologia)
+
     if f.livello is Livello.DENOMINAZIONE and f.denominazione:
-        etichetta = "DOCG o DOC" if f.tipo_denominazione == "DOP" else "IGT"
-        return (f"L'etichetta non è nitida, ma riconosco la denominazione: "
-                f"{f.denominazione}, {etichetta}.")
+        sigla = lex.frase("sigle", f.tipo_denominazione or "IGP", lingua=lingua)
+        return d("denominazione", denominazione=f.denominazione, sigla=sigla)
+
     if f.livello is Livello.VITIGNO and f.vitigni:
-        if f.sicurezza < SOGLIA_DUBBIA:
-            return f"L'etichetta non è nitida. Mi pare un {f.vitigni[0]}."
-        return (f"Del produttore non sono sicuro, ma il vitigno sì: "
-                f"{f.vitigni[0]}.")
-    return "Non riesco a leggere questa etichetta."
+        chiave = ("vitigno_incerto" if f.sicurezza < SOGLIA_DUBBIA
+                  else "vitigno_noto")
+        return d(chiave, vitigno=f.vitigni[0])
+
+    return d("illeggibile")
 
 
 def _corpo(f: Fatti, lex: Lessico, lingua: str) -> list[str]:
+    d = lambda chiave, **kw: lex.frase("corpo", chiave, lingua=lingua, **kw)
     frasi = []
-    if f.note_vitigno:
-        frasi.append(f.note_vitigno)
-    elif f.vitigni:
-        frasi.append("Nasce da " + elenca_in_lingua(f.vitigni[:3], lingua) + ".")
 
-    tratti = []
-    if f.corpo:
-        tratti.append(lex.traduci("corpo", f.corpo, lingua=lingua, forma="narrativa"))
-    if f.acidita:
-        tratti.append(lex.traduci("acidita", f.acidita, lingua=lingua, forma="narrativa"))
-    if tratti:
-        frasi.append("È un vino " + elenca_in_lingua(tratti, lingua) + ".")
+    nota = f.nota_vitigno_in(lingua) if hasattr(f, "nota_vitigno_in") else f.note_vitigno
+    if nota:
+        frasi.append(nota)
+    elif f.vitigni:
+        frasi.append(d("nasce_da", vitigni=elenca_in_lingua(f.vitigni[:3], lingua)))
+
+    corpo = (lex.traduci("corpo", f.corpo, lingua=lingua, forma="narrativa")
+             if f.corpo else None)
+    acidita = (lex.traduci("acidita", f.acidita, lingua=lingua, forma="narrativa")
+               if f.acidita else None)
+    if corpo and acidita:
+        frasi.append(d("tratti_entrambi", corpo=corpo, acidita=acidita))
+    elif corpo:
+        frasi.append(d("tratti_corpo", corpo=corpo))
+    elif acidita:
+        frasi.append(d("tratti_acidita", acidita=acidita))
 
     if f.abbinamenti:
         piatti = lex.traduci_molti("abbinamento", f.abbinamenti[:3], lingua=lingua)
-        frasi.append("Si accompagna bene a " + elenca_in_lingua(piatti, lingua) + ".")
+        frasi.append(d("abbinamenti", piatti=elenca_in_lingua(piatti, lingua)))
+
     if f.temperatura_c:
         # "16-18" letto ad alta voce diventa "sedici trattino diciotto": va
         # sciolto, perche' questo testo lo pronuncia una voce sintetica.
-        t = f.temperatura_c.replace("–", "-")
-        frasi.append(
-            f"Servilo fra {t.replace('-', ' e ')} gradi." if "-" in t
-            else f"Servilo a {t} gradi.")
-    return frasi
+        t = f.temperatura_c.replace("\u2013", "-")
+        if "-" in t:
+            da, _, a = t.partition("-")
+            frasi.append(d("temperatura_intervallo", da=da.strip(), a=a.strip()))
+        else:
+            frasi.append(d("temperatura_puntuale", gradi=t.strip()))
+
+    return [x for x in frasi if x]
 
 
 def corpo_neutro(f: Fatti, lex: Lessico | None = None, lingua: str = "it") -> str:

@@ -37,6 +37,7 @@ from __future__ import annotations
 import ast
 import csv
 import json
+import re
 import sqlite3
 import sys
 import unicodedata
@@ -67,13 +68,37 @@ def normalizza(s: str) -> str:
     """
     s = "".join(
         c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)
-    ).lower().replace(".", "")
+    ).lower()
+    s = _sciogli_punti(s)
     fuori = []
     for pezzo in "".join(c if c.isalnum() else " " for c in s).split():
         fuori.append(pezzo if pezzo.isdigit() else pezzo.translate(
             str.maketrans({"0": "o", "1": "l", "5": "s", "8": "b", "6": "g", "2": "z"})
         ))
     return " ".join(fuori)
+
+
+def _sciogli_punti(s: str) -> str:
+    """Come `amelie.text._sciogli_punti`. Vedi la' il perche'."""
+    def _unisci(m) -> str:
+        pezzi = [p for p in m.group(0).split(".") if p]
+        if all(p.isdigit() for p in pezzi):
+            return "".join(pezzi)
+        fuori, sigla = [], []
+        for p in pezzi:
+            if len(p) == 1 or (sigla and len(p) <= 3):
+                sigla.append(p)
+                if len(p) > 1:
+                    fuori.append("".join(sigla)); sigla = []
+                continue
+            if sigla:
+                fuori.append("".join(sigla)); sigla = []
+            fuori.append(p)
+        if sigla:
+            fuori.append("".join(sigla))
+        return " ".join(fuori)
+
+    return re.sub(r"[0-9a-z]+(?:\.[0-9a-z]+)*\.?", _unisci, s)
 
 
 def pulisci_vitigno(grezzo: str) -> tuple[str, str | None]:
@@ -144,11 +169,16 @@ CREATE TABLE vitigno (
     nome          TEXT UNIQUE NOT NULL,
     nome_norm     TEXT NOT NULL,
     colore_bacca  TEXT,
-    -- i campi sotto arrivano da data/vitigni.json, scritto a mano
+    -- i campi sotto arrivano da data/vitigni.json, scritto a mano.
+    -- Bilingui: la lingua si sceglie a schermo, e una descrizione tradotta a
+    -- meta' produrrebbe un periodo inglese con dentro una frase italiana.
     descrizione   TEXT,
     note_sensoriali TEXT,
     temperatura_c TEXT,
-    abbinamenti   TEXT
+    abbinamenti   TEXT,
+    descrizione_en     TEXT,
+    note_sensoriali_en TEXT,
+    abbinamenti_en     TEXT
 );
 CREATE INDEX i_vit_norm ON vitigno(nome_norm);
 
@@ -390,70 +420,63 @@ class Costruttore:
     # ------------------------------------------- conoscenza scritta a mano
 
     def arricchisci_vitigni(self) -> int:
+        """Applica data/vitigni.json, alias compresi.
+
+        Gli alias servono perche' i dataset chiamano lo stesso vitigno in modi
+        diversi - «Syrah/Shiraz», «Pinot Noir», «Glera/Prosecco» - e senza
+        aggancio 1.215 Prosecco restavano senza una riga da dire. Si applicano
+        solo i sinonimi VERI, dichiarati a mano nel file: attaccare la
+        descrizione della Barbera alla «Barbera Bianca», che e' un altro
+        vitigno, sarebbe inventare.
+        """
         if not VITIGNI.exists():
             print(f"  (salto le note sui vitigni: manca {VITIGNI.name})")
             return 0
         dati = json.loads(VITIGNI.read_text(encoding="utf-8"))
         n = 0
         for voce in dati.get("vitigni", []):
-            chiave = normalizza(voce["nome"])
-            cur = self.con.execute(
-                "UPDATE vitigno SET descrizione=?, note_sensoriali=?,"
-                " temperatura_c=?, abbinamenti=? WHERE nome_norm=?",
-                (voce.get("descrizione"),
-                 "; ".join(voce.get("note_sensoriali", [])) or None,
-                 voce.get("temperatura_c"),
-                 "; ".join(voce.get("abbinamenti", [])) or None,
-                 chiave),
+            campi = (
+                voce.get("descrizione"),
+                "; ".join(voce.get("note_sensoriali", [])) or None,
+                voce.get("temperatura_c"),
+                "; ".join(voce.get("abbinamenti", [])) or None,
+                voce.get("descrizione_en"),
+                "; ".join(voce.get("note_sensoriali_en", [])) or None,
+                "; ".join(voce.get("abbinamenti_en", [])) or None,
             )
-            if cur.rowcount:
-                n += cur.rowcount
-            else:
+            # Il nome canonico piu' tutti i suoi alias: la stessa descrizione
+            # va su ognuno, perche' sono la stessa uva scritta in modi diversi.
+            nomi = [voce["nome"], *voce.get("alias", [])]
+            colpito = False
+            for nome in nomi:
+                cur = self.con.execute(
+                    "UPDATE vitigno SET descrizione=?, note_sensoriali=?,"
+                    " temperatura_c=?, abbinamenti=?, descrizione_en=?,"
+                    " note_sensoriali_en=?, abbinamenti_en=? WHERE nome_norm=?",
+                    (*campi, normalizza(nome)))
+                if cur.rowcount:
+                    n += cur.rowcount
+                    colpito = True
+            if not colpito:
                 # Un vitigno che il progetto descrive ma che i dataset non
                 # nominano va inserito lo stesso: serve al fallback.
                 self.con.execute(
                     "INSERT OR IGNORE INTO vitigno"
                     "(nome, nome_norm, colore_bacca, descrizione, note_sensoriali,"
-                    " temperatura_c, abbinamenti) VALUES (?,?,?,?,?,?,?)",
-                    (voce["nome"], chiave, voce.get("colore_bacca"),
-                     voce.get("descrizione"),
-                     "; ".join(voce.get("note_sensoriali", [])) or None,
-                     voce.get("temperatura_c"),
-                     "; ".join(voce.get("abbinamenti", [])) or None),
-                )
+                    " temperatura_c, abbinamenti, descrizione_en,"
+                    " note_sensoriali_en, abbinamenti_en)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (voce["nome"], normalizza(voce["nome"]),
+                     voce.get("colore_bacca"), *campi))
                 n += 1
+            # Il colore della bacca manca su molte voci dei dataset, e senza di
+            # esso salta il controllo che impedisce di chiamare bianco un rosso.
+            if voce.get("colore_bacca"):
+                self.con.execute(
+                    "UPDATE vitigno SET colore_bacca=? WHERE colore_bacca IS NULL"
+                    f" AND nome_norm IN ({','.join('?' * len(nomi))})",
+                    (voce["colore_bacca"], *(normalizza(x) for x in nomi)))
         return n
-
-    # ------------------------------------------------------------- ricerca
-
-    def costruisci_indice(self) -> int:
-        """Un solo indice per tutto, con un peso che dice quanto è specifico.
-
-        L'ordine dei pesi è la cascata del fallback: se l'OCR permette di
-        arrivare al vino esatto si racconta quello; altrimenti la tipologia,
-        poi la denominazione, poi il vitigno. Si scende, non si tace.
-        """
-        righe = []
-        for vid, nome, cantina in self.con.execute(
-            "SELECT id, nome, COALESCE(cantina,'') FROM vino"
-        ):
-            righe.append((f"{cantina} {nome}".strip(), "vino", vid, 100))
-        for tid, nome, den in self.con.execute(
-            "SELECT t.id, t.nome, d.nome FROM tipologia t"
-            " JOIN denominazione d ON d.id = t.denominazione_id"
-        ):
-            testo = nome if normalizza(den) in normalizza(nome) else f"{den} {nome}"
-            righe.append((testo, "tipologia", tid, 70))
-        for did, nome in self.con.execute("SELECT id, nome FROM denominazione"):
-            righe.append((nome, "denominazione", did, 50))
-        for gid, nome in self.con.execute("SELECT id, nome FROM vitigno"):
-            righe.append((nome, "vitigno", gid, 30))
-
-        self.con.executemany(
-            "INSERT INTO ricerca(testo, ambito, ambito_id, peso) VALUES (?,?,?,?)",
-            [(normalizza(t), a, i, p) for t, a, i, p in righe],
-        )
-        return len(righe)
 
 
 def _numero(v) -> float | None:
@@ -465,7 +488,31 @@ def _numero(v) -> float | None:
         return None
 
 
+def solo_vitigni() -> None:
+    """Riapplica data/vitigni.json a un database gia' costruito.
+
+    Serve perche' le sorgenti CSV pesano centinaia di megabyte e non stanno nel
+    repository: chi aggiunge un vitigno o una traduzione non deve riscaricarle,
+    e soprattutto non deve rifare gli identificativi, a cui sono agganciati i
+    testi gia' pre-generati.
+    """
+    if not USCITA.exists():
+        sys.exit(f"non trovo {USCITA}: serve un database gia' costruito")
+    con = sqlite3.connect(USCITA)
+    esistenti = {r[1] for r in con.execute("PRAGMA table_info(vitigno)")}
+    for colonna in ("descrizione_en", "note_sensoriali_en", "abbinamenti_en"):
+        if colonna not in esistenti:
+            con.execute(f"ALTER TABLE vitigno ADD COLUMN {colonna} TEXT")
+            print(f"  aggiunta la colonna {colonna}")
+    n = Costruttore(con).arricchisci_vitigni()
+    con.commit()
+    con.close()
+    print(f"  {n} voci di vitigno aggiornate")
+
+
 def main() -> None:
+    if "--solo-vitigni" in sys.argv:
+        return solo_vitigni()
     if USCITA.exists():
         USCITA.unlink()
     for extra in (".db-wal", ".db-shm"):
