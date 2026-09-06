@@ -68,6 +68,13 @@ if [ "$SALTA_MODELLO" = 0 ] && [ ! -f "models/$MODELLO_LLM" ]; then
     echo "    scarico il modello linguistico (~700 MB)"
     curl -sL --retry 3 -o "models/$MODELLO_LLM" "$URL_LLM"
 fi
+# I Gemma Terms of Use, par. 3.1, impongono che ogni distribuzione dei pesi sia
+# accompagnata da questo avviso. Cedere un dispositivo con il modello a
+# bordo E' una distribuzione.
+cat > models/NOTICE <<'EOF'
+Gemma is provided under and subject to the Gemma Terms of Use found at
+ai.google.dev/gemma/terms
+EOF
 for est in onnx onnx.json; do
     [ -f "models/$VOCE.$est" ] || curl -sL --retry 3 \
         -o "models/$VOCE.$est" "$URL_VOCE/$VOCE.$est" || true
