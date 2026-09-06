@@ -100,6 +100,10 @@ class Configurazione:
     device_audio: str = "hw:0,3"
     porta: int = 8080
     periodo_sensore_s: float = 0.15
+    # La lingua di partenza. Si cambia a schermo, con un tocco, e il
+    # dispositivo torna a questa quando la bottiglia viene tolta: il tavolo
+    # dopo trova il dispositivo come lo trova sempre.
+    lingua: str = "it"
 
 
 class Amelie:
@@ -113,7 +117,10 @@ class Amelie:
         self.matcher = Matcher()
         self.voce = None if cfg.senza_voce else Voce(
             ImpostazioniVoce(device_alsa=cfg.device_audio))
-        self.narratore = Narratore(genera=self._genera if not cfg.senza_modello else None)
+        self.narratore = Narratore(genera=self._genera if not cfg.senza_modello else None,
+                                   lingua=cfg.lingua)
+        self.lex = self.narratore.lex
+        self.lingua = cfg.lingua
 
         self._ascoltatori: set[asyncio.Queue] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -149,16 +156,23 @@ class Amelie:
             self._esegui(e)
 
     def _mostra(self, stato: Stato) -> None:
-        vista = VISTA[stato]
+        """Che cosa vede l'ospite. Le frasi vengono dal lessico, non da qui.
+
+        Cablarle nel codice significava avere lo schermo in italiano e il
+        racconto in inglese, che e' il modo peggiore di essere bilingui.
+        """
+        def frase(chiave: str) -> str:
+            return self.lex.frase("schermo", chiave, lingua=self.lingua)
+
         if stato is Stato.CONCLUSO and self._fatti.vuoto:
             # Ci si arriva dopo aver rinunciato a leggere l'etichetta: la vista
             # "racconto" mostrerebbe un titolo vuoto e nessun testo, cioe' uno
             # schermo nero con una bottiglia ancora appoggiata sopra.
             self._pubblica({"tipo": "stato", "vista": "avviso", "simbolo": "☐",
-                            "frase": "Non sono riuscito a leggere questa "
-                                     "etichetta. Può togliere la bottiglia."})
+                            "frase": frase("rinuncia")})
             return
-        m: dict[str, Any] = {"tipo": "stato", "vista": vista}
+
+        m: dict[str, Any] = {"tipo": "stato", "vista": VISTA[stato]}
         if stato is Stato.RACCONTO:
             f = self._fatti
             m["titolo"] = f.nome or f.tipologia or f.denominazione or (
@@ -166,18 +180,66 @@ class Amelie:
             pezzi = [x for x in (f.cantina, str(f.annata) if f.annata else None) if x]
             m["sottotitolo"] = " · ".join(pezzi)
         elif stato is Stato.SCANSIONE:
-            m["frase"] = "Sto leggendo l'etichetta…"
+            m["frase"] = frase("sto_leggendo")
         elif stato is Stato.RICONOSCIMENTO:
-            m["frase"] = "Un attimo…"
+            m["frase"] = frase("un_attimo")
         elif stato is Stato.ASSESTAMENTO:
-            m["frase"] = "Fammi guardare…"
+            m["frase"] = frase("fammi_guardare")
         elif stato is Stato.RIPOSIZIONA:
             m["simbolo"] = "↻"
-            m["frase"] = "Non riesco a leggere l'etichetta. Provi a girarla verso di me?"
+            m["frase"] = frase("invito_a_girare")
         elif stato is Stato.GUASTO:
             m["simbolo"] = "⚠"
-            m["frase"] = "Qualcosa non ha funzionato. Riprovo fra un istante."
+            m["frase"] = frase("guasto")
         self._pubblica(m)
+
+    def _manda_lingua(self) -> None:
+        """Le scritte fisse della pagina: quelle che nessun evento porta con se'."""
+        self._pubblica({
+            "tipo": "lingua",
+            "lingua": self.lingua,
+            "disponibili": list(self.lex.lingue),
+            "invito": self.lex.frase("schermo", "appoggia_bottiglia",
+                                     lingua=self.lingua),
+            "domanda": self.lex.frase("schermo", "quale_di_questi",
+                                      lingua=self.lingua),
+            "voce_muta": not self._voce_disponibile(),
+            "avviso_muto": self.lex.frase("schermo", "voce_assente",
+                                          lingua=self.lingua),
+        })
+
+    def _voce_disponibile(self) -> bool:
+        """C'e' una voce per la lingua a schermo?
+
+        Non e' la stessa cosa che «l'audio funziona»: la voce puo' esserci e
+        l'altoparlante no. Qui si risponde solo alla prima domanda, che e'
+        quella che cambia col tocco dell'ospite.
+        """
+        return self.voce is None or getattr(
+            self.voce, "disponibile_per_lingua", True)
+
+    def cambia_lingua(self, codice: str) -> bool:
+        """L'ospite ha toccato la bandierina.
+
+        Se un racconto e' a schermo si rifa' SUBITO nella lingua nuova, senza
+        chiedere di rimettere la bottiglia: i fatti sono gia' in mano e si
+        portano dietro tutte le lingue proprio per questo.
+        """
+        if codice not in self.lex.lingue or codice == self.lingua:
+            return False
+        log.info("lingua: %s -> %s", self.lingua, codice)
+        self.lingua = codice
+        self.narratore.lingua = codice
+        if self.voce is not None:
+            self.voce.per_lingua(codice)
+        self._manda_lingua()
+        self._mostra(self.macchina.stato)
+        if self.macchina.stato in (Stato.RACCONTO, Stato.CONCLUSO):
+            self._ferma_voce.set()
+            if self.voce:
+                self.voce.zittisci()
+            self.macchina.invia(Evento.RIPETI)
+        return True
 
     # -------------------------------------------------------------- effetti
 
@@ -398,7 +460,8 @@ class Amelie:
 
     async def salute(self) -> None:
         while True:
-            self._pubblica({"tipo": "salute", "tutto_bene": self._tutto_bene()})
+            self._pubblica({"tipo": "salute", "tutto_bene": self._tutto_bene(),
+                            "voce_muta": not self._voce_disponibile()})
             await asyncio.sleep(20)
 
     def _tutto_bene(self) -> bool:
@@ -419,6 +482,7 @@ def crea_app(amelie: Amelie):
         compiti = [asyncio.create_task(amelie.sorveglia()),
                    asyncio.create_task(amelie.salute())]
         amelie._mostra(amelie.macchina.stato)
+        amelie._manda_lingua()
         try:
             yield
         finally:
@@ -443,6 +507,7 @@ def crea_app(amelie: Amelie):
                 # Appena la pagina si apre le si dice dove siamo: se il browser
                 # si e' riavviato a meta' racconto, deve ritrovare la scena.
                 amelie._mostra(amelie.macchina.stato)
+                amelie._manda_lingua()
                 while True:
                     dati = await coda.get()
                     yield f"data: {dati}\n\n"
@@ -457,6 +522,16 @@ def crea_app(amelie: Amelie):
     async def scegli(indice: int):
         amelie.scegli(indice)
         return JSONResponse({"ok": True})
+
+    @app.post("/lingua/{codice}")
+    async def lingua(codice: str):
+        cambiata = amelie.cambia_lingua(codice)
+        return JSONResponse({"ok": cambiata, "lingua": amelie.lingua})
+
+    @app.get("/lingue")
+    async def lingue():
+        return JSONResponse({"lingua": amelie.lingua,
+                             "disponibili": list(amelie.lex.lingue)})
 
     @app.get("/stato")
     async def stato():

@@ -151,6 +151,10 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
     (Stato.RACCONTO, Evento.RACCONTO_FINITO): Stato.CONCLUSO,
 
     (Stato.CONCLUSO, Evento.RIPETI): Stato.RACCONTO,
+    # Anche a racconto in corso: succede quando l'ospite cambia lingua mentre
+    # il dispositivo sta parlando. Rientrare in RACCONTO rifa' partire gli
+    # effetti d'ingresso, e la storia riparte da capo nella lingua nuova.
+    (Stato.RACCONTO, Evento.RIPETI): Stato.RACCONTO,
 
     (Stato.RIPOSIZIONA, Evento.SCADENZA): Stato.SCANSIONE,
     # Dopo qualche tentativo si smette. Senza questa uscita, un oggetto

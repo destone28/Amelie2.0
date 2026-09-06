@@ -41,6 +41,14 @@ from typing import Iterable, Iterator
 log = logging.getLogger(__name__)
 
 VOCE_PREDEFINITA = "it_IT-serena-medium"
+
+# Una voce per lingua. La scelta e' di LICENZA prima che di gusto: vedi la nota
+# in testa al modulo per l'italiano, e docs/ATTRIBUZIONI.md per l'inglese.
+# Se per una lingua non c'e' voce, il dispositivo mostra il testo e tace: e'
+# meglio del sentire un motore italiano leggere l'inglese.
+VOCI = {
+    "it": "it_IT-serena-medium",
+}
 CARTELLA_CACHE = Path.home() / ".cache" / "amelie" / "voce"
 
 
@@ -120,6 +128,10 @@ class Voce:
         self.imp = impostazioni or ImpostazioniVoce()
         self._voce = None
         self._lock = threading.Lock()
+        # Falso quando la lingua a schermo non ha una voce: il racconto si legge
+        # ma non si sente. Meglio del silenzio inspiegato, e molto meglio di un
+        # motore italiano che prova a leggere l'inglese.
+        self.disponibile_per_lingua = True
         self.cache = CARTELLA_CACHE
         self.cache.mkdir(parents=True, exist_ok=True)
 
@@ -231,6 +243,27 @@ class Voce:
                 proc.wait(timeout=30)
             except subprocess.TimeoutExpired:
                 proc.kill()
+
+    def per_lingua(self, codice: str) -> bool:
+        """Passa alla voce di quella lingua, se ce n'e' una.
+
+        Restituisce False quando la lingua non ha voce: chi chiama lo sa e puo'
+        dirlo a schermo, invece di far leggere l'inglese a un motore italiano -
+        che non e' un accento, e' incomprensibile.
+        """
+        nuovo = VOCI.get(codice)
+        if not nuovo:
+            log.info("nessuna voce per %r: il racconto resta scritto", codice)
+            self.disponibile_per_lingua = False
+            return False
+        self.disponibile_per_lingua = True
+        if nuovo == self.imp.modello:
+            return True
+        with self._lock:
+            self.imp.modello = nuovo
+            self._voce = None      # si ricarica alla prossima frase
+        log.info("voce: %s", nuovo)
+        return True
 
     def zittisci(self) -> None:
         """Interrompe qualunque riproduzione in corso.

@@ -301,3 +301,58 @@ class TestCicloCompleto:
         finale = self._attendi(a, {Stato.RIPOSIZIONA, Stato.RACCONTO,
                                    Stato.CONCLUSO, Stato.GUASTO})
         assert finale is not Stato.GUASTO
+
+
+class TestLingua:
+    """La lingua si sceglie a schermo, con un tocco, anche a racconto in corso."""
+
+    def test_si_parte_dalla_lingua_configurata(self, amelie):
+        assert amelie.lingua == "it"
+        assert amelie.narratore.lingua == "it"
+
+    def test_cambiare_lingua_cambia_anche_il_narratore(self, amelie):
+        assert amelie.cambia_lingua("en")
+        assert amelie.lingua == "en"
+        assert amelie.narratore.lingua == "en"
+
+    def test_una_lingua_che_non_esiste_non_cambia_nulla(self, amelie):
+        prima = amelie.lingua
+        assert not amelie.cambia_lingua("de")
+        assert amelie.lingua == prima
+
+    def test_scegliere_la_lingua_gia_attiva_non_fa_nulla(self, amelie):
+        assert not amelie.cambia_lingua(amelie.lingua)
+
+    def test_le_scritte_dello_schermo_seguono_la_lingua(self, amelie):
+        """Schermo in italiano e racconto in inglese e' il modo peggiore
+        di essere bilingui: le frasi venivano da stringhe cablate nel codice."""
+        visti = {}
+        for lingua in ("it", "en"):
+            amelie.cambia_lingua(lingua)
+            catturati = []
+            amelie._pubblica = lambda m, c=catturati: c.append(m)
+            amelie._mostra(Stato.RIPOSIZIONA)
+            visti[lingua] = catturati[0]["frase"]
+        assert visti["it"] != visti["en"]
+        assert visti["en"], "manca la frase inglese"
+
+    def test_il_racconto_riparte_quando_si_cambia_lingua(self, amelie):
+        """Coi fatti gia' in mano non serve rimettere la bottiglia."""
+        amelie.macchina.stato = Stato.CONCLUSO
+        amelie.cambia_lingua("en")
+        assert amelie.macchina.stato is Stato.RACCONTO
+
+    def test_si_puo_cambiare_lingua_mentre_parla(self, amelie):
+        """Senza la transizione (RACCONTO, RIPETI) l'evento cadeva nel vuoto."""
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.cambia_lingua("en")
+        assert amelie.macchina.stato is Stato.RACCONTO
+        assert amelie._ferma_voce.is_set(), "la voce vecchia deve tacere subito"
+
+    def test_la_rinuncia_parla_la_lingua_scelta(self, amelie):
+        amelie.cambia_lingua("en")
+        catturati = []
+        amelie._pubblica = lambda m: catturati.append(m)
+        amelie._mostra(Stato.CONCLUSO)          # senza fatti: e' una rinuncia
+        assert catturati[0]["vista"] == "avviso"
+        assert catturati[0]["frase"], "nessun messaggio: lo schermo resterebbe vuoto"

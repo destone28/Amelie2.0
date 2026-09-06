@@ -119,6 +119,10 @@
     "appoggia_bottiglia": {
       "it": "Appoggi una bottiglia",
       "en": "Place a bottle"
+    },
+    "voce_assente": {
+      "it": "In questa lingua il racconto si legge, non si ascolta.",
+      "en": "In this language the story is written, not spoken."
     }
   },
   "sigle": {
