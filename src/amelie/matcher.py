@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import threading
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -227,8 +228,17 @@ class Matcher:
                 f"manca {self.percorso}. Costruiscilo con: python3 data/build_db.py"
             )
         # Sola lettura: il dispositivo non deve poter corrompere il proprio sapere.
-        self.con = sqlite3.connect(f"file:{self.percorso}?mode=ro", uri=True)
+        #
+        # check_same_thread=False e' NECESSARIO, non una comodita': la connessione
+        # nasce nel thread principale e viene usata nel thread di lavoro che
+        # l'orchestratore crea per ogni scansione. Senza, ogni ricerca solleva
+        # ProgrammingError e il dispositivo non riconosce nessun vino. Il lock
+        # serializza gli accessi, e non costa nulla perche' la pipeline e' gia'
+        # sequenziale per costruzione: un solo lavoro alla volta.
+        self.con = sqlite3.connect(
+            f"file:{self.percorso}?mode=ro", uri=True, check_same_thread=False)
         self.con.row_factory = sqlite3.Row
+        self._db = threading.Lock()
 
     def chiudi(self) -> None:
         self.con.close()

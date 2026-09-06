@@ -121,3 +121,78 @@ class TestColore:
         from amelie.bridge import AMBRA, VERDE, ROSSO
         for c in (AMBRA, VERDE, ROSSO):
             assert c.luminosita <= 40
+
+
+class TestDifettiTrovatiDallaVerifica:
+    """I tre difetti che la verifica avversariale ha trovato, e che i test
+    precedenti non vedevano. Restano qui perche' non tornino."""
+
+    def test_il_database_si_usa_da_un_altro_thread(self):
+        """Il difetto bloccante: SQLite rifiuta le connessioni fra thread.
+
+        L'orchestratore crea la connessione nel thread principale e la usa nel
+        thread di lavoro. Senza check_same_thread=False ogni ricerca solleva
+        ProgrammingError e NESSUN vino viene mai riconosciuto. Il test
+        precedente non lo vedeva perche' passava righe vuote, e cerca()
+        ritornava prima di toccare la connessione.
+        """
+        import threading
+
+        import pytest as _pytest
+        _pytest.importorskip("rapidfuzz")
+        from amelie.matcher import DatabaseAssente, Matcher
+
+        try:
+            m = Matcher()
+        except DatabaseAssente as e:
+            _pytest.skip(str(e))
+
+        esito: list = []
+
+        def cerca_da_un_altro_thread():
+            try:
+                esito.append(m.cerca(["MARCHESI DI BAROLO", "Barolo", "Cannubi"]))
+            except Exception as e:                          # noqa: BLE001
+                esito.append(e)
+
+        t = threading.Thread(target=cerca_da_un_altro_thread)
+        t.start()
+        t.join(timeout=30)
+        m.chiudi()
+
+        assert esito, "il thread non ha prodotto nulla"
+        assert not isinstance(esito[0], Exception), (
+            f"ricerca fallita da un altro thread: {esito[0]!r}")
+        assert esito[0].livello is not Stato and esito[0].nome
+
+    def test_non_si_riprova_all_infinito(self, amelie):
+        """Un oggetto illeggibile sul piatto non deve far lampeggiare il flash
+        tutta la sera."""
+        from amelie.app import TENTATIVI_MAX
+        assert TENTATIVI_MAX <= 5
+
+        amelie._tentativi = TENTATIVI_MAX
+        amelie.macchina.stato = Stato.RIPOSIZIONA
+        t = amelie.macchina.invia(Evento.RINUNCIA)
+        assert t.a is Stato.CONCLUSO, "dopo troppi tentativi si deve smettere"
+
+    def test_gli_stati_che_dipendono_da_un_thread_hanno_un_tetto(self):
+        """Se il lavoro non torna, la macchina non deve restare li' per sempre."""
+        from amelie.state import DURATE_S, TRANSIZIONI
+        for stato in (Stato.SCANSIONE, Stato.RICONOSCIMENTO):
+            assert DURATE_S[stato] is not None, f"{stato} senza tetto"
+            assert (stato, Evento.SCADENZA) in TRANSIZIONI, f"{stato} non gestisce SCADENZA"
+
+    def test_lavoro_sovrapposto_dichiara_guasto(self, amelie):
+        """Ignorare e basta lasciava la macchina bloccata in SCANSIONE."""
+        import threading
+        import time
+
+        fermo = threading.Event()
+        amelie._lavoro = threading.Thread(target=fermo.wait, daemon=True)
+        amelie._lavoro.start()
+        time.sleep(0.05)
+        amelie.macchina.stato = Stato.SCANSIONE
+        amelie._avvia(lambda: None)
+        fermo.set()
+        assert amelie.macchina.stato is Stato.GUASTO

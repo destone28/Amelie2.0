@@ -58,6 +58,7 @@ class Evento(enum.Enum):
     CANDIDATO_SCELTO = "candidato_scelto"
     RACCONTO_FINITO = "racconto_finito"
     RIPETI = "ripeti"                  # tocco sullo schermo a racconto concluso
+    RINUNCIA = "rinuncia"              # troppi tentativi di lettura falliti
     ERRORE = "errore"
 
 
@@ -89,8 +90,11 @@ DURATE_S: dict[Stato, float | None] = {
     # Il tempo che serve alla bottiglia per smettere di oscillare. Sotto i
     # 400 ms si fotografa il movimento; sopra il secondo l'attesa si nota.
     Stato.ASSESTAMENTO: 0.6,
-    Stato.SCANSIONE: None,
-    Stato.RICONOSCIMENTO: None,
+    # Nessuno stato che dipende da un thread puo' restare senza tetto: se il
+    # lavoro non torna, la macchina resterebbe li' per sempre con il calice che
+    # gira. Succede davvero, togliendo e rimettendo la bottiglia mentre parla.
+    Stato.SCANSIONE: 25.0,
+    Stato.RICONOSCIMENTO: 15.0,
     # Se nessuno tocca lo schermo si prende il primo candidato: meglio
     # raccontare il vino più probabile che restare fermi.
     Stato.CONFERMA: 12.0,
@@ -145,6 +149,15 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
     (Stato.CONCLUSO, Evento.RIPETI): Stato.RACCONTO,
 
     (Stato.RIPOSIZIONA, Evento.SCADENZA): Stato.SCANSIONE,
+    # Dopo qualche tentativo si smette. Senza questa uscita, un oggetto
+    # illeggibile lasciato sul piatto - un bicchiere, una bottiglia senza
+    # etichetta - fa lampeggiare il flash e girare l'OCR per tutta la sera.
+    (Stato.RIPOSIZIONA, Evento.RINUNCIA): Stato.CONCLUSO,
+
+    # Se il lavoro non torna entro il tetto, si passa da GUASTO, che scade da
+    # solo e riporta in attesa.
+    (Stato.SCANSIONE, Evento.SCADENZA): Stato.GUASTO,
+    (Stato.RICONOSCIMENTO, Evento.SCADENZA): Stato.GUASTO,
 
     (Stato.GUASTO, Evento.SCADENZA): Stato.ATTESA,
 }

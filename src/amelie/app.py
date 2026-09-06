@@ -69,6 +69,9 @@ VISTA = {
     Stato.GUASTO: "avviso",
 }
 
+# Dopo tre letture a vuoto si smette di riprovare.
+TENTATIVI_MAX = 3
+
 COLORE_ANELLO = {
     Effetto.ANELLO_RESPIRO: AMBRA,
     Effetto.ANELLO_ACCESO: VERDE,
@@ -118,6 +121,10 @@ class Amelie:
         self._scadenza: float | None = None
         self._fatti: Fatti = Fatti()
         self._candidati: list[str] = []
+        # Quante volte di fila l'OCR non ha letto nulla. Senza un tetto, un
+        # oggetto illeggibile lasciato sul piatto fa lampeggiare il flash e
+        # girare l'OCR per tutta la sera, su una board senza ventola.
+        self._tentativi = 0
         self._ferma_voce = threading.Event()
 
     # --------------------------------------------------------- comunicazione
@@ -187,7 +194,14 @@ class Amelie:
     def _avvia(self, funzione) -> None:
         """Esegue in un thread. Uno alla volta: la pipeline è sequenziale."""
         if self._lavoro and self._lavoro.is_alive():
-            log.warning("lavoro già in corso, ignoro %s", funzione.__name__)
+            # Ignorare e basta lascerebbe la macchina in uno stato che aspetta
+            # un evento che nessuno mandera' mai: succede togliendo e rimettendo
+            # la bottiglia mentre il dispositivo parla, e resta bloccata in
+            # SCANSIONE per sempre. Meglio dichiarare il guasto, che scade da
+            # solo e riporta in attesa.
+            log.warning("lavoro già in corso, dichiaro guasto invece di %s",
+                        funzione.__name__)
+            self.macchina.invia(Evento.ERRORE)
             return
         self._lavoro = threading.Thread(target=self._protetto, args=(funzione,),
                                         daemon=True)
@@ -232,8 +246,18 @@ class Amelie:
         self._righe = [r.testo for r in lettura.righe]
         log.info("lette %d righe in %.1f s (nitidezza %.0f)",
                  len(self._righe), lettura.durata_s, scatto.nitidezza)
-        self.macchina.invia(
-            Evento.LETTURA_RIUSCITA if self._righe else Evento.LETTURA_FALLITA)
+        if self._righe:
+            self._tentativi = 0
+            self.macchina.invia(Evento.LETTURA_RIUSCITA)
+            return
+        self._tentativi += 1
+        self.macchina.invia(Evento.LETTURA_FALLITA)
+        if self._tentativi >= TENTATIVI_MAX:
+            # Si e' provato abbastanza: si mostra il messaggio e si tace, invece
+            # di riaccendere il flash ogni quattro secondi finche' qualcuno non
+            # toglie l'oggetto dal piatto.
+            log.info("rinuncio dopo %d tentativi", self._tentativi)
+            self.macchina.invia(Evento.RINUNCIA)
 
     def _riconosci(self) -> None:
         self._fatti = self.matcher.cerca(getattr(self, "_righe", []))
@@ -315,6 +339,8 @@ class Amelie:
             c_era = self.presenza.presente
             ora = self.presenza.aggiorna(mm)
             if ora != c_era:
+                if ora:
+                    self._tentativi = 0     # bottiglia nuova, si riparte da capo
                 self.macchina.invia(
                     Evento.BOTTIGLIA_PRESENTE if ora else Evento.BOTTIGLIA_ASSENTE)
 

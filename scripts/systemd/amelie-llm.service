@@ -24,5 +24,22 @@ RestartSec=10
 MemoryMax=1400M
 Nice=5
 
+# Confinamento. Il dispositivo sta su un tavolo di ristorante, con porte USB
+# raggiungibili: se qualcuno arriva a una shell, questi limiti riducono cosa
+# puo' fare. ProtectSystem=strict rende /usr e /etc di sola lettura, e si apre
+# in scrittura solo cio' che serve davvero.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=no
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+ReadWritePaths=/home/arduino/.cache
+
 [Install]
 WantedBy=multi-user.target
