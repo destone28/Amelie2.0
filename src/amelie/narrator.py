@@ -180,6 +180,18 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str) -> list[str]:
     return frasi
 
 
+def corpo_neutro(f: Fatti, lex: Lessico | None = None, lingua: str = "it") -> str:
+    """Il racconto SENZA la frase d'apertura.
+
+    È questo che si pre-genera e si mette in cache: l'apertura dipende da quanto
+    il dispositivo è sicuro di ciò che ha davanti, e quella certezza si conosce
+    solo al momento. Un testo che comincia con «Del produttore non sono sicuro»
+    sarebbe sbagliato per una bottiglia riconosciuta con certezza.
+    """
+    lex = lex or carica()
+    return " ".join(_corpo(f, lex, lingua)).strip()
+
+
 def template(f: Fatti, lex: Lessico | None = None, lingua: str = "it") -> str:
     """Il racconto senza modello: la rete di sicurezza.
 
@@ -193,34 +205,45 @@ def template(f: Fatti, lex: Lessico | None = None, lingua: str = "it") -> str:
 
 # ---------------------------------------------------------------- il prompt
 
-ISTRUZIONI = """Sei la voce di un supporto da tavolo che racconta i vini in un ristorante.
+ISTRUZIONI = """Scrivi la descrizione di un vino per il display di un dispositivo da tavolo.
 
-Scrivi UN SOLO paragrafo in italiano, da 60 a 100 parole, caldo e discorsivo,
-come lo direbbe un sommelier gentile a un ospite seduto.
+UN SOLO paragrafo in italiano, da 50 a 90 parole, tono caldo e sobrio, come una
+buona scheda di sala: si parla DEL VINO, non a chi legge.
 
 REGOLE INDEROGABILI:
 - Usa ESCLUSIVAMENTE le informazioni del blocco FATTI qui sotto.
-- Non aggiungere premi, punteggi, medaglie, annate, gradi, nomi di persone,
-  luoghi o vitigni che non siano scritti nei FATTI.
+- Non aggiungere premi, punteggi, medaglie, annate, gradi, colori, profumi,
+  luoghi, persone o vitigni che non siano scritti nei FATTI.
 - Se un'informazione non c'è, non nominarla: non tentare di indovinarla.
-- Niente elenchi puntati, niente titoli, niente virgolette: solo prose.
-- Non rivolgerti al lettore con domande.
+- NON salutare, non ringraziare, non rivolgerti a chi legge: niente «vi», «la
+  vostra», «buona degustazione», niente domande.
+- Non cominciare con «Questo vino è»: entra nel merito.
+- Niente elenchi, titoli, virgolette o note finali: solo il paragrafo.
 
 FATTI:
 {fatti}
 
-Racconto:"""
+Descrizione:"""
 
 ISTRUZIONI_INCERTO = """
 NOTA: l'etichetta non è stata letta con certezza. Non attribuire nulla a un
-produttore specifico: parla della denominazione o del vitigno, non della
-bottiglia.
+produttore specifico: parla della denominazione o del vitigno in generale, non
+di questa bottiglia.
 """
 
 
-def prompt(f: Fatti) -> str:
+ISTRUZIONI_CACHE = """
+NOTA: il testo verrà preceduto da una frase che nomina il vino, quindi NON
+ripetere il nome all'inizio e non aprire con «Questo è…». Comincia direttamente
+dalla sostanza.
+"""
+
+
+def prompt(f: Fatti, *, per_cache: bool = False) -> str:
     testo = ISTRUZIONI.format(fatti=f.blocco_fatti())
-    if f.livello is not Livello.VINO:
+    if per_cache:
+        testo = testo.replace("\nFATTI:", ISTRUZIONI_CACHE + "\nFATTI:")
+    elif f.livello is not Livello.VINO:
         testo = testo.replace("\nFATTI:", ISTRUZIONI_INCERTO + "\nFATTI:")
     return testo
 
@@ -276,7 +299,12 @@ class Narratore:
         ).fetchone()
         if not r:
             return None
-        return Racconto(testo=r["testo"], origine="cache", livello=f.livello)
+        # L'apertura si compone ADESSO, perché dice quanto siamo sicuri; il
+        # corpo viene dalla cache. Un testo pre-generato non può sapere se
+        # l'etichetta è stata letta bene.
+        apertura = _apertura(f, self.lex, self.lingua)
+        return Racconto(testo=f"{apertura} {r['testo']}".strip(),
+                        origine="cache", livello=f.livello)
 
     def _chiave(self, f: Fatti) -> tuple[str, int | None]:
         """A che cosa è agganciato il testo pre-generato.

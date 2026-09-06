@@ -12,7 +12,7 @@ WorkingDirectory=/home/arduino/amelie
 # secondi a ogni bottiglia. Rilette una volta sola, costano zero.
 ExecStart=/home/arduino/amelie/llama.cpp/build/bin/llama-server \
     --model /home/arduino/amelie/models/gemma-3-1b-it-Q4_K_M.gguf \
-    --host 127.0.0.1 --port 8080 \
+    --host 127.0.0.1 --port 8081 \
     --threads 4 --ctx-size 2048 \
     --cache-reuse 256 \
     --no-webui

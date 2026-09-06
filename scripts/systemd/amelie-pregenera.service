@@ -1,12 +1,15 @@
 [Unit]
 Description=Amelie - pre-generazione dei racconti (lotto notturno)
 After=amelie-llm.service
-Requires=amelie-llm.service
+# Wants, non Requires: se il modello viene riavviato il lotto non deve morire.
+# Lo script e' riprendibile, quindi al massimo ritenta.
+Wants=amelie-llm.service
 
 [Service]
 Type=oneshot
 User=arduino
 WorkingDirectory=/home/arduino/amelie
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/arduino/amelie/venv/bin/python scripts/pregenera.py
 # Nove ore di calcolo: il servizio non deve essere ucciso da un timeout.
 TimeoutStartSec=infinity

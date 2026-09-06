@@ -31,7 +31,9 @@ sys.path.insert(0, str(RADICE / "src"))
 
 from amelie.llm import Modello, ModelloNonDisponibile        # noqa: E402
 from amelie.matcher import Fatti, Livello, Matcher           # noqa: E402
-from amelie.narrator import _ripulisci, prompt, template, verifica  # noqa: E402
+from amelie.narrator import (  # noqa: E402
+    _ripulisci, corpo_neutro, prompt, verifica,
+)
 
 DB = RADICE / "data" / "amelie.db"
 MODELLO = "gemma-3-1b-it-Q4_K_M"
@@ -105,7 +107,7 @@ def main() -> None:
         testo, origine = "", "template"
         try:
             for _ in (1, 2):
-                grezzo = _ripulisci(mod.genera(prompt(f)))
+                grezzo = _ripulisci(mod.genera(prompt(f, per_cache=True)))
                 if not grezzo:
                     continue
                 ok, invenzioni = verifica(grezzo, f)
@@ -118,9 +120,10 @@ def main() -> None:
             break
 
         if not testo:
-            # Il template e' vero per costruzione: meglio una frase asciutta
-            # che una bella frase falsa.
-            testo, origine = template(f), "template"
+            # Il corpo da template e' vero per costruzione: meglio una frase
+            # asciutta che una bella frase falsa. Si salva SENZA apertura,
+            # perche' quella la compone il narratore al momento.
+            testo, origine = corpo_neutro(f), "template"
             n_template += 1
         else:
             n_ok += 1

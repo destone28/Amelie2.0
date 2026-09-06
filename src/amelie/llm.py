@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ImpostazioniLLM:
-    url: str = "http://127.0.0.1:8080"
+    url: str = "http://127.0.0.1:8081"
     max_token: int = 120
     temperatura: float = 0.7
     # Sopra 0.9 il modello comincia a divagare e la verifica anti-invenzione
@@ -47,7 +47,7 @@ class ImpostazioniLLM:
     # Le sequenze su cui fermarsi: il modello tende a continuare con un secondo
     # paragrafo o a commentare quello che ha scritto.
     stop: tuple[str, ...] = (
-        "\n\n", "FATTI:", "Racconto:",
+        "\n\n", "FATTI:", "Racconto:", "Descrizione:",
         # Il modello, finito il paragrafo, tende a proseguire con un blocco di
         # codice o con una nota su cio' che ha scritto: visto sul campo.
         "```", "Nota:", "(Nota", "---",
