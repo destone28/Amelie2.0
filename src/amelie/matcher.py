@@ -33,6 +33,7 @@ Le soglie sono empiriche e vanno ritarate sulle catture reali.
 
 from __future__ import annotations
 
+import functools
 import logging
 import sqlite3
 import threading
@@ -262,6 +263,22 @@ class Fatti:
         return "\n".join(righe)
 
 
+def sotto_lucchetto(f):
+    """Esegue il metodo tenendo il lucchetto del database.
+
+    Serve a una cosa sola, ed e' successa davvero: `chiudi()` chiudeva la
+    connessione SQLite mentre il thread di lavoro ci stava ancora leggendo, e il
+    processo moriva di segmentation fault - non un'eccezione che si cattura, un
+    crash. Il lucchetto e' RIENTRANTE perche' questi metodi si chiamano fra
+    loro: `cerca` chiama `_candidati`, che chiama `_norme_vino`.
+    """
+    @functools.wraps(f)
+    def dentro(self, *a, **kw):
+        with self._db:
+            return f(self, *a, **kw)
+    return dentro
+
+
 class Matcher:
     """Interroga il database. Sola lettura, e non tiene stato fra una ricerca e l'altra."""
 
@@ -282,13 +299,16 @@ class Matcher:
         self.con = sqlite3.connect(
             f"file:{self.percorso}?mode=ro", uri=True, check_same_thread=False)
         self.con.row_factory = sqlite3.Row
-        self._db = threading.Lock()
+        self._db = threading.RLock()
 
+    @sotto_lucchetto
     def chiudi(self) -> None:
+        # Sotto lucchetto: chi sta leggendo in un altro thread finisce prima.
         self.con.close()
 
     # ------------------------------------------------------------- ricerca
 
+    @sotto_lucchetto
     def cerca(self, righe: Sequence[str], *, anno_massimo: int | None = None) -> Fatti:
         """Il punto d'ingresso: righe dell'OCR -> fatti."""
         testo = " ".join(righe)
@@ -366,6 +386,7 @@ class Matcher:
                 return True
         return False
 
+    @sotto_lucchetto
     def fatti_di(self, ambito: str, ambito_id: int) -> Fatti:
         """I fatti di un record preciso, senza ripassare dalla ricerca.
 
@@ -380,6 +401,7 @@ class Matcher:
         f.ripiego = self.catena_di_ripiego(f)
         return f
 
+    @sotto_lucchetto
     def etichetta(self, ambito: str, ambito_id: int) -> str:
         """Come si scrive un record su uno schermo, per farlo scegliere."""
         f = self._componi(Candidato(ambito=ambito, ambito_id=ambito_id,
@@ -395,6 +417,7 @@ class Matcher:
             return f.vitigni[0]
         return ""
 
+    @sotto_lucchetto
     def _candidati(self, token: list[str], testo_norm: str) -> list[Candidato]:
         from rapidfuzz import fuzz
 
@@ -486,6 +509,7 @@ class Matcher:
             totale += fuzz.ratio(p, libere.pop(i))
         return totale / len(parole)
 
+    @sotto_lucchetto
     def _norme_vino(self, ids: list[int]) -> dict[int, tuple[str, str]]:
         """nome_norm e cantina_norm di tutti i vini candidati, in una query."""
         if not ids:
@@ -496,6 +520,7 @@ class Matcher:
                 f" WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()
         return {r[0]: (r[1] or "", r[2]) for r in righe}
 
+    @sotto_lucchetto
     def _sicurezza_verificata(self, c: Candidato, testo_norm: str,
                               norme: dict[int, tuple[str, str]] | None = None) -> float:
         """Ricalcola la sicurezza in base a quanto pesa l'affermazione.
@@ -537,6 +562,7 @@ class Matcher:
 
     # ------------------------------------------------------------ composizione
 
+    @sotto_lucchetto
     def _componi(self, c: Candidato) -> Fatti:
         f = {
             "vino": self._fatti_vino,
@@ -550,6 +576,7 @@ class Matcher:
 
     # ------------------------------------------------------------ ripiego
 
+    @sotto_lucchetto
     def catena_di_ripiego(self, f: Fatti) -> list[tuple[str, int]]:
         """Dal record trovato, giu' fino al piu' generico che sappia dire qualcosa.
 
@@ -596,6 +623,7 @@ class Matcher:
                 catena.append(("vitigno", r["id"]))
         return catena
 
+    @sotto_lucchetto
     def _tipologia_del_vino(self, den_id: int, nome_norm: str) -> int | None:
         """Quale tipologia della denominazione somiglia di piu' a questo vino.
 
@@ -617,6 +645,7 @@ class Matcher:
             nome_norm, r["nome_norm"]))
         return migliore["id"]
 
+    @sotto_lucchetto
     def _fatti_vino(self, vid: int) -> Fatti:
         r = self.con.execute(
             "SELECT v.*, d.nome AS den_nome, d.tipo AS den_tipo"
@@ -640,6 +669,7 @@ class Matcher:
         self._aggiungi_nota_vitigno(f)
         return f
 
+    @sotto_lucchetto
     def _fatti_tipologia(self, tid: int) -> Fatti:
         r = self.con.execute(
             "SELECT t.*, d.nome AS den_nome, d.tipo AS den_tipo"
@@ -665,6 +695,7 @@ class Matcher:
         self._aggiungi_nota_vitigno(f)
         return f
 
+    @sotto_lucchetto
     def _fatti_denominazione(self, did: int) -> Fatti:
         r = self.con.execute(
             "SELECT nome, tipo FROM denominazione WHERE id = ?", (did,)).fetchone()
@@ -688,6 +719,7 @@ class Matcher:
         self._aggiungi_nota_vitigno(f)
         return f
 
+    @sotto_lucchetto
     def _fatti_vitigno(self, gid: int) -> Fatti:
         r = self.con.execute("SELECT * FROM vitigno WHERE id = ?", (gid,)).fetchone()
         if not r:
@@ -718,6 +750,7 @@ class Matcher:
             }
         return f
 
+    @sotto_lucchetto
     def _aggiungi_nota_vitigno(self, f: Fatti) -> None:
         """Aggancia la scheda scritta a mano del vitigno principale, se c'è.
 

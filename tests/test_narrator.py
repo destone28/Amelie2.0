@@ -282,3 +282,39 @@ class TestDueLingue:
         testo = template(f, lingua="en")
         assert "17-19" not in testo, "il trattino va sciolto: lo legge una voce"
         assert "between 17 and 19" in testo
+
+
+class TestChiusura:
+    """Chiudere il database mentre qualcuno ci legge era un segmentation fault.
+
+    Non un'eccezione che si cattura: il processo moriva. Si vedeva solo sulla
+    board, dove i test girano nell'ambiente vero e un thread di lavoro puo'
+    essere ancora dentro `_dalla_cache` quando la fixture chiude tutto.
+    """
+
+    def test_chiudere_aspetta_chi_sta_leggendo(self):
+        import threading
+        from amelie.matcher import Matcher
+        from amelie.narrator import Narratore
+
+        m, n = Matcher(), Narratore()
+        errori = []
+        fermo = threading.Event()
+
+        def legge():
+            try:
+                for _ in range(40):
+                    f = m.cerca(["Barolo", "Marchesi di Barolo", "Cannubi"])
+                    n.racconta(f)
+            except Exception as e:                      # noqa: BLE001
+                errori.append(e)
+            finally:
+                fermo.set()
+
+        t = threading.Thread(target=legge, daemon=True)
+        t.start()
+        t.join(timeout=30)
+        m.chiudi()
+        n.chiudi()
+        assert fermo.is_set(), "il lettore non ha finito"
+        assert not errori, errori

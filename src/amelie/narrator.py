@@ -353,10 +353,13 @@ class Narratore:
         self.con = sqlite3.connect(
             f"file:{self.percorso}?mode=ro", uri=True, check_same_thread=False)
         self.con.row_factory = sqlite3.Row
-        self._db = threading.Lock()
+        self._db = threading.RLock()
 
     def chiudi(self) -> None:
-        self.con.close()
+        # Sotto lucchetto: se un thread di lavoro sta leggendo la cache, chiudere
+        # sotto di lui non e' un errore che si cattura, e' un segmentation fault.
+        with self._db:
+            self.con.close()
 
     def racconta(self, f: Fatti, *, consenti_modello: bool = True) -> Racconto:
         """Da dove far venire il racconto, dal piu' specifico al piu' generico.
