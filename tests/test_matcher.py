@@ -278,3 +278,84 @@ class TestVerificaCompleta:
         """
         from amelie.matcher import CANDIDATI, VERIFICATI
         assert VERIFICATI >= CANDIDATI
+
+
+class TestRipiego:
+    """Ogni bottiglia deve poter ricadere sul suo vino generico.
+
+    Un vino commerciale e' uno di diciannovemila, e per quasi tutti non c'e'
+    niente da dire che non sia gia' vero del loro vino generico. Il ripiego
+    scende per IDENTIFICATIVO, non ricercando il nome: cercare "Primitivo di
+    Manduria" fra i nomi puo' riportare al vino di un altro produttore.
+    """
+
+    def test_i_fatti_sanno_da_quale_record_vengono(self, m):
+        f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI", "2016"])
+        assert f.origine is not None
+        ambito, ident = f.origine
+        assert ambito in ("vino", "tipologia", "denominazione", "vitigno")
+        assert isinstance(ident, int)
+
+    def test_un_vino_ricade_sul_suo_generico(self, m):
+        """Il caso raccontato: il Primitivo di Manduria di un produttore."""
+        f = m.cerca(["Cooperativa Produttori Vini Manduria",
+                     "PRIMITIVO DI MANDURIA", "2019"])
+        ambiti = [a for a, _ in f.ripiego]
+        assert "tipologia" in ambiti or "denominazione" in ambiti, \
+            f"nessun gradino generico nella catena: {f.ripiego}"
+
+    def test_la_catena_scende_dal_specifico_al_generico(self, m):
+        f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI", "2016"])
+        ordine = {"vino": 0, "tipologia": 1, "denominazione": 2, "vitigno": 3}
+        gradi = [ordine[a] for a, _ in f.ripiego]
+        assert gradi == sorted(gradi), f"la catena non scende: {f.ripiego}"
+
+    def test_la_tipologia_scelta_e_quella_che_somiglia_di_piu(self, m):
+        """Una denominazione ha spesso una base e una Riserva.
+
+        Prendere la prima a caso significherebbe raccontare una Riserva per un
+        vino base, o viceversa.
+        """
+        f = m.cerca(["Cooperativa Produttori Vini Manduria",
+                     "PRIMITIVO DI MANDURIA", "2019"])
+        tipologie = [i for a, i in f.ripiego if a == "tipologia"]
+        if not tipologie:
+            pytest.skip("questa etichetta non passa da una tipologia")
+        nome = m.con.execute("SELECT nome FROM tipologia WHERE id=?",
+                             (tipologie[0],)).fetchone()[0]
+        assert "riserva" not in nome.lower(), \
+            f"scelta la tipologia {nome!r} per un'etichetta che non la nomina"
+
+    def test_ogni_gradino_esiste_davvero(self, m):
+        for righe in (["Chianti Classico"], ["Etna Rosso"], ["Nebbiolo"],
+                      ["MARCHESI DI BAROLO", "BAROLO", "CANNUBI"]):
+            f = m.cerca(righe)
+            for ambito, ident in f.ripiego:
+                assert m.con.execute(
+                    f"SELECT 1 FROM {ambito} WHERE id=?", (ident,)).fetchone(), \
+                    f"{ambito}/{ident} non esiste, da {righe}"
+
+
+class TestDueLingue:
+    def test_i_fatti_portano_la_scheda_in_entrambe_le_lingue(self, m):
+        """Cosi' l'ospite cambia lingua senza rifare la scansione."""
+        f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI", "2016"])
+        assert f.nota_in("it"), "manca la scheda italiana"
+        assert f.nota_in("en"), "manca la scheda inglese"
+        assert f.nota_in("it") != f.nota_in("en")
+
+    def test_una_lingua_assente_ripiega_su_quella_che_c_e(self, m):
+        f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI", "2016"])
+        assert f.nota_in("de") == f.note_vitigno
+
+    def test_gli_abbinamenti_del_vino_valgono_in_tutte_le_lingue(self, m):
+        """Non si sente il vino in italiano e l'uva in inglese.
+
+        La scheda del vitigno SUBENTRA solo dove il vino non ha nulla di suo, e
+        la sostituzione dev'essere la stessa in ogni lingua: altrimenti la
+        stessa bottiglia dava due risposte diverse alla stessa domanda.
+        """
+        f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI", "2016"])
+        if not f.abbinamenti:
+            pytest.skip("questo vino non ha abbinamenti propri")
+        assert len(f.abbinamenti_in("en")) == len(f.abbinamenti)

@@ -2,7 +2,6 @@
   "_nota": "L'impalcatura delle frasi del racconto, una per lingua. I vocabolari di vocabolari.json traducono le PAROLE; qui si traducono le FRASI che le tengono insieme. Senza questo file il dispositivo, in inglese, direbbe parole inglesi dentro periodi italiani.",
   "_registro": "Due registri, e non è una svista. Quando il dispositivo si rivolge all'ospite gli dà del lei: è un oggetto da sala, e un tavolo di ristorante non si tratta con confidenza. Quando invece descrive il vino non si rivolge a nessuno: forma impersonale. Vale la regola già scritta nelle istruzioni al modello - si parla DEL VINO, non a chi legge - e in italiano l'impersonale la rispetta meglio di qualunque persona verbale. Da qui «Si serve fra 16 e 18 gradi», non «Servilo» e nemmeno «Lo serva».",
   "_segnaposto": "Fra graffe. Chi aggiunge una lingua deve usare gli stessi segnaposto della voce italiana: il test di copertura fallisce se ne manca uno o se ne compare uno inventato.",
-
   "apertura": {
     "vino_certo": {
       "it": "Questo è il {cosa}.",
@@ -29,12 +28,12 @@
       "en": "{annata} vintage"
     },
     "tipologia_nota": {
-      "it": "Non riesco a leggere l'etichetta con certezza, ma questo è un {tipologia}.",
-      "en": "I can't read the label with certainty, but this is a {tipologia}."
+      "it": "Non riesco a leggere l'etichetta con certezza, ma questo è {cosa}.",
+      "en": "I can't read the label with certainty, but this is {cosa}."
     },
     "tipologia_incerta": {
-      "it": "L'etichetta non è nitida. Potrebbe essere un {tipologia}.",
-      "en": "The label isn't sharp. This could be a {tipologia}."
+      "it": "L'etichetta non è nitida. Potrebbe essere {cosa}.",
+      "en": "The label isn't sharp. This could be {cosa}."
     },
     "denominazione": {
       "it": "L'etichetta non è nitida, ma riconosco la denominazione: {denominazione}, {sigla}.",
@@ -45,15 +44,14 @@
       "en": "I'm not sure of the producer, but I am of the grape: {vitigno}."
     },
     "vitigno_incerto": {
-      "it": "L'etichetta non è nitida. Mi pare un {vitigno}.",
-      "en": "The label isn't sharp. It looks like a {vitigno}."
+      "it": "L'etichetta non è nitida. Mi pare {cosa}.",
+      "en": "The label isn't sharp. It looks like {cosa}."
     },
     "illeggibile": {
       "it": "Non riesco a leggere questa etichetta.",
       "en": "I can't read this label."
     }
   },
-
   "corpo": {
     "nasce_da": {
       "it": "Nasce da {vitigni}.",
@@ -84,7 +82,6 @@
       "en": "Best served at {gradi} degrees."
     }
   },
-
   "schermo": {
     "_nota": "Qui il dispositivo parla all'ospite, non del vino: si dà del lei.",
     "invito_a_girare": {
@@ -124,7 +121,6 @@
       "en": "Place a bottle"
     }
   },
-
   "sigle": {
     "DOP": {
       "it": "DOCG o DOC",
@@ -134,5 +130,6 @@
       "it": "IGT",
       "en": "IGT"
     }
-  }
+  },
+  "_articolo": "Le frasi che presentano una tipologia o un vitigno ricevono il nome GIA' con l'articolo: in inglese «a» diventa «an» davanti a vocale, e «a Etna Rosso» si sente subito. L'articolo lo mette il narratore, che conosce il nome; il modello di frase non puo' saperlo."
 }

@@ -161,6 +161,35 @@ class Fatti:
     candidati: list[str] = field(default_factory=list)
     riferimenti: list[tuple[str, int]] = field(default_factory=list)
 
+    # Le schede scritte a mano dei vitigni esistono in piu' lingue. I fatti se
+    # le portano dietro TUTTE, invece di risolvere la lingua qui: cosi' l'ospite
+    # puo' cambiarla a schermo e riascoltare lo stesso vino senza che il
+    # dispositivo debba rileggere l'etichetta. I campi non tradotti - nomi,
+    # annata, colore, misure - restano dove sono: non hanno una lingua.
+    per_lingua: dict[str, dict] = field(default_factory=dict)
+
+    # Da quale record vengono questi fatti: ("vino", 5993). Serve al ripiego
+    # sul vino generico - un Primitivo di Manduria di un produttore qualunque
+    # deve poter ricadere sul Primitivo di Manduria e basta - e quel ripiego va
+    # fatto per IDENTIFICATIVO, non ricercando il nome: cercare "Primitivo di
+    # Manduria" fra i nomi puo' riportare a un vino di un altro produttore.
+    origine: tuple[str, int] | None = None
+    # I gradini su cui ripiegare, dal piu' specifico al piu' generico. Li
+    # calcola il matcher, che e' l'unico a conoscere come sono legate le
+    # tabelle; il narratore si limita a percorrerli.
+    ripiego: list[tuple[str, int]] = field(default_factory=list)
+
+    def nota_in(self, lingua: str) -> str | None:
+        """La scheda del vitigno nella lingua chiesta, o quella che c'e'."""
+        return self.per_lingua.get(lingua, {}).get("note_vitigno") or self.note_vitigno
+
+    def abbinamenti_in(self, lingua: str) -> list[str]:
+        return self.per_lingua.get(lingua, {}).get("abbinamenti") or self.abbinamenti
+
+    def sensoriali_in(self, lingua: str) -> list[str]:
+        return (self.per_lingua.get(lingua, {}).get("note_sensoriali")
+                or self.note_sensoriali)
+
     @property
     def certo(self) -> bool:
         return self.sicurezza >= SOGLIA_CERTA
@@ -297,6 +326,7 @@ class Matcher:
             fatti.candidati.append(self.etichetta(c.ambito, c.ambito_id)
                                    or c.testo)
             fatti.riferimenti.append((c.ambito, c.ambito_id))
+        fatti.ripiego = self.catena_di_ripiego(fatti)
         return fatti
 
     def _c_e_un_altro_produttore(self, candidati: list[Candidato]) -> bool:
@@ -347,6 +377,7 @@ class Matcher:
         # L'ha scelto una persona guardando la bottiglia: e' la conferma piu'
         # forte che il dispositivo possa ricevere.
         f.sicurezza = 100.0
+        f.ripiego = self.catena_di_ripiego(f)
         return f
 
     def etichetta(self, ambito: str, ambito_id: int) -> str:
@@ -507,12 +538,84 @@ class Matcher:
     # ------------------------------------------------------------ composizione
 
     def _componi(self, c: Candidato) -> Fatti:
-        return {
+        f = {
             "vino": self._fatti_vino,
             "tipologia": self._fatti_tipologia,
             "denominazione": self._fatti_denominazione,
             "vitigno": self._fatti_vitigno,
         }[c.ambito](c.ambito_id)
+        if f.livello is not Livello.NULLA:
+            f.origine = (c.ambito, c.ambito_id)
+        return f
+
+    # ------------------------------------------------------------ ripiego
+
+    def catena_di_ripiego(self, f: Fatti) -> list[tuple[str, int]]:
+        """Dal record trovato, giu' fino al piu' generico che sappia dire qualcosa.
+
+        Un vino commerciale e' uno di diciannovemila: pre-generarne il testo
+        sarebbe giorni di calcolo, e per quasi tutti non c'e' niente da dire che
+        non sia gia' vero del suo vino generico. Quindi si scende: il Primitivo
+        di Manduria della Cooperativa Produttori Vini Manduria ricade sul
+        Primitivo di Manduria, e se manca anche quello sulla denominazione, e se
+        manca ancora sul vitigno principale.
+
+        Restituisce i gradini in ordine, dal piu' specifico al piu' generico.
+        Chi chiama prende il primo che ha un testo pronto.
+        """
+        if f.origine is None:
+            return []
+        ambito, ident = f.origine
+        catena: list[tuple[str, int]] = [f.origine]
+
+        if ambito == "vino":
+            with self._db:
+                r = self.con.execute(
+                    "SELECT denominazione_id, nome_norm FROM vino WHERE id = ?",
+                    (ident,)).fetchone()
+            if r and r["denominazione_id"]:
+                tid = self._tipologia_del_vino(r["denominazione_id"], r["nome_norm"])
+                if tid:
+                    catena.append(("tipologia", tid))
+                catena.append(("denominazione", r["denominazione_id"]))
+        elif ambito == "tipologia":
+            with self._db:
+                r = self.con.execute(
+                    "SELECT denominazione_id FROM tipologia WHERE id = ?",
+                    (ident,)).fetchone()
+            if r and r["denominazione_id"]:
+                catena.append(("denominazione", r["denominazione_id"]))
+
+        if ambito != "vitigno" and f.vitigni:
+            with self._db:
+                r = self.con.execute(
+                    "SELECT id FROM vitigno WHERE nome_norm = ?"
+                    " AND descrizione IS NOT NULL", (normalizza(f.vitigni[0]),)
+                ).fetchone()
+            if r:
+                catena.append(("vitigno", r["id"]))
+        return catena
+
+    def _tipologia_del_vino(self, den_id: int, nome_norm: str) -> int | None:
+        """Quale tipologia della denominazione somiglia di piu' a questo vino.
+
+        Una denominazione ne ha spesso molte - Primitivo di Manduria e Primitivo
+        di Manduria Riserva - e prendere la prima a caso significherebbe
+        raccontare una Riserva per un vino base.
+        """
+        from rapidfuzz import fuzz
+
+        with self._db:
+            righe = self.con.execute(
+                "SELECT id, nome_norm FROM tipologia WHERE denominazione_id = ?",
+                (den_id,)).fetchall()
+        if not righe:
+            return None
+        if len(righe) == 1:
+            return righe[0]["id"]
+        migliore = max(righe, key=lambda r: fuzz.token_set_ratio(
+            nome_norm, r["nome_norm"]))
+        return migliore["id"]
 
     def _fatti_vino(self, vid: int) -> Fatti:
         r = self.con.execute(
@@ -601,9 +704,18 @@ class Matcher:
         # «tannicita' bassa». Non e' un'imprecisione, e' un errore che un
         # sommelier coglie all'istante.
         f.colore_bacca = r["colore_bacca"]
+        spezza = lambda v: [x.strip() for x in (v or "").split(";") if x.strip()]
         if r["note_sensoriali"]:
-            f.note_sensoriali = [
-                x.strip() for x in r["note_sensoriali"].split(";") if x.strip()]
+            f.note_sensoriali = spezza(r["note_sensoriali"])
+        # Le altre lingue vanno portate dietro qui come altrove, altrimenti un
+        # racconto costruito a partire dal solo vitigno esce in italiano anche
+        # quando lo schermo e' in inglese.
+        if r["descrizione_en"]:
+            f.per_lingua["en"] = {
+                "note_vitigno": r["descrizione_en"],
+                "abbinamenti": spezza(r["abbinamenti_en"]),
+                "note_sensoriali": spezza(r["note_sensoriali_en"]),
+            }
         return f
 
     def _aggiungi_nota_vitigno(self, f: Fatti) -> None:
@@ -614,21 +726,38 @@ class Matcher:
         """
         if not f.vitigni or f.note_vitigno:
             return
-        r = self.con.execute(
-            "SELECT descrizione, temperatura_c, abbinamenti, note_sensoriali"
-            " FROM vitigno WHERE nome_norm = ? AND descrizione IS NOT NULL",
-            (normalizza(f.vitigni[0]),),
-        ).fetchone()
+        with self._db:
+            r = self.con.execute(
+                "SELECT descrizione, temperatura_c, abbinamenti, note_sensoriali,"
+                " descrizione_en, abbinamenti_en, note_sensoriali_en"
+                " FROM vitigno WHERE nome_norm = ? AND descrizione IS NOT NULL",
+                (normalizza(f.vitigni[0]),),
+            ).fetchone()
         if not r:
             return
+        spezza = lambda v: [x.strip() for x in (v or "").split(";") if x.strip()]
+
         f.note_vitigno = r["descrizione"]
-        if r["note_sensoriali"] and not f.note_sensoriali:
-            f.note_sensoriali = [
-                x.strip() for x in r["note_sensoriali"].split(";") if x.strip()]
         f.temperatura_c = f.temperatura_c or r["temperatura_c"]
-        if not f.abbinamenti:
-            f.abbinamenti = [
-                a.strip() for a in (r["abbinamenti"] or "").split(";") if a.strip()]
+        # La scheda del vitigno SUBENTRA solo dove il vino non ha nulla di suo:
+        # gli abbinamenti di una bottiglia precisa valgono piu' di quelli
+        # generici dell'uva. E la sostituzione dev'essere la stessa in tutte le
+        # lingue, altrimenti in italiano si sentono gli abbinamenti del vino e
+        # in inglese quelli dell'uva - due risposte diverse alla stessa domanda.
+        prende_sensoriali = bool(r["note_sensoriali"]) and not f.note_sensoriali
+        prende_abbinamenti = not f.abbinamenti
+        if prende_sensoriali:
+            f.note_sensoriali = spezza(r["note_sensoriali"])
+        if prende_abbinamenti:
+            f.abbinamenti = spezza(r["abbinamenti"])
+
+        if r["descrizione_en"]:
+            altra = {"note_vitigno": r["descrizione_en"]}
+            if prende_abbinamenti:
+                altra["abbinamenti"] = spezza(r["abbinamenti_en"])
+            if prende_sensoriali:
+                altra["note_sensoriali"] = spezza(r["note_sensoriali_en"])
+            f.per_lingua["en"] = altra
 
 
 class DatabaseAssente(FileNotFoundError):

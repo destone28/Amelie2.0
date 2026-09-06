@@ -237,3 +237,48 @@ class TestRacconto:
         r = Racconto(testo="Prima. Seconda! Terza?", origine="template",
                      livello=Livello.VINO)
         assert len(r.frasi) == 3
+
+
+@pytest.fixture(scope="module")
+def matcher():
+    from amelie.matcher import Matcher
+    m = Matcher()
+    yield m
+    m.chiudi()
+
+
+class TestDueLingue:
+    """Il racconto in inglese dev'essere inglese, non parole inglesi in frasi italiane."""
+
+    # Solo connettivi inequivocabili. Fuori « di », « un », « con »: compaiono
+    # nei NOMI PROPRI - "Marchesi di Barolo", "Nero d'Avola" - che non si
+    # traducono, e un test che li vietasse fallirebbe sul testo giusto.
+    PAROLE_ITALIANE = (" è ", " si serve ", " nasce da ", " gradi.",
+                       " bene a ", "questo è", "l'etichetta")
+
+    def test_il_racconto_inglese_non_contiene_impalcatura_italiana(self, matcher):
+        for righe in (["MARCHESI DI BAROLO", "BAROLO", "CANNUBI", "2016"],
+                      ["Etna Rosso"], ["Nebbiolo"], ["Chianti Classico"]):
+            f = matcher.cerca(righe)
+            testo = f" {template(f, lingua='en').lower()} "
+            trovate = [p for p in self.PAROLE_ITALIANE if p in testo]
+            assert not trovate, f"{righe}: {trovate} in {testo!r}"
+
+    def test_l_articolo_inglese_segue_il_suono(self, matcher):
+        """«a Etna Rosso» si sente subito."""
+        f = matcher.cerca(["Etna Rosso"])
+        assert "an Etna Rosso" in template(f, lingua="en")
+
+    def test_lo_stesso_vino_si_racconta_in_due_lingue(self, matcher):
+        f = matcher.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI", "2016"])
+        it, en = template(f, lingua="it"), template(f, lingua="en")
+        assert it != en
+        for testo in (it, en):
+            assert "Cannubi" in testo, "il nome del vino sparisce"
+            assert "2016" in testo, "l'annata sparisce"
+
+    def test_la_temperatura_non_si_spezza_in_inglese(self, matcher):
+        f = matcher.cerca(["Nebbiolo"])
+        testo = template(f, lingua="en")
+        assert "17-19" not in testo, "il trattino va sciolto: lo legge una voce"
+        assert "between 17 and 19" in testo

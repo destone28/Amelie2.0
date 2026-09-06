@@ -159,6 +159,18 @@ def _colore_sbagliato(testo: str, fatti: Fatti) -> str | None:
 
 # ---------------------------------------------------------------- template
 
+def _con_articolo(nome: str, lingua: str) -> str:
+    """«Etna Rosso» -> «un Etna Rosso» / «an Etna Rosso».
+
+    In inglese l'articolo cambia davanti a vocale, e «a Etna Rosso» si sente
+    subito. In italiano un vino resta maschile anche quando il nome non lo e' -
+    si sottintende «vino» - quindi «un» va bene sempre.
+    """
+    if lingua == "en":
+        return f"{'an' if nome[:1].lower() in 'aeiou' else 'a'} {nome}"
+    return f"un {nome}"
+
+
 def _apertura(f: Fatti, lex: Lessico, lingua: str) -> str:
     """La prima frase dice CHE COSA si ha davanti, con l'onestà del livello.
 
@@ -190,16 +202,16 @@ def _apertura(f: Fatti, lex: Lessico, lingua: str) -> str:
     if f.livello is Livello.TIPOLOGIA and f.tipologia:
         chiave = ("tipologia_incerta" if f.sicurezza < SOGLIA_DUBBIA
                   else "tipologia_nota")
-        return d(chiave, tipologia=f.tipologia)
+        return d(chiave, cosa=_con_articolo(f.tipologia, lingua))
 
     if f.livello is Livello.DENOMINAZIONE and f.denominazione:
         sigla = lex.frase("sigle", f.tipo_denominazione or "IGP", lingua=lingua)
         return d("denominazione", denominazione=f.denominazione, sigla=sigla)
 
     if f.livello is Livello.VITIGNO and f.vitigni:
-        chiave = ("vitigno_incerto" if f.sicurezza < SOGLIA_DUBBIA
-                  else "vitigno_noto")
-        return d(chiave, vitigno=f.vitigni[0])
+        if f.sicurezza < SOGLIA_DUBBIA:
+            return d("vitigno_incerto", cosa=_con_articolo(f.vitigni[0], lingua))
+        return d("vitigno_noto", vitigno=f.vitigni[0])
 
     return d("illeggibile")
 
@@ -208,8 +220,7 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str) -> list[str]:
     d = lambda chiave, **kw: lex.frase("corpo", chiave, lingua=lingua, **kw)
     frasi = []
 
-    nota = f.nota_vitigno_in(lingua) if hasattr(f, "nota_vitigno_in") else f.note_vitigno
-    if nota:
+    if (nota := f.nota_in(lingua)):
         frasi.append(nota)
     elif f.vitigni:
         frasi.append(d("nasce_da", vitigni=elenca_in_lingua(f.vitigni[:3], lingua)))
@@ -225,8 +236,12 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str) -> list[str]:
     elif acidita:
         frasi.append(d("tratti_acidita", acidita=acidita))
 
-    if f.abbinamenti:
-        piatti = lex.traduci_molti("abbinamento", f.abbinamenti[:3], lingua=lingua)
+    # Due sorgenti diverse: gli abbinamenti di un vino commerciale sono chiavi
+    # del vocabolario e si traducono; quelli di un vitigno sono prosa scritta a
+    # mano, e per l'inglese esiste gia' la sua versione. Passare la prosa
+    # italiana per il vocabolario non la tradurrebbe: la lascerebbe li'.
+    if (abbinamenti := f.abbinamenti_in(lingua)):
+        piatti = lex.traduci_molti("abbinamento", abbinamenti[:3], lingua=lingua)
         frasi.append(d("abbinamenti", piatti=elenca_in_lingua(piatti, lingua)))
 
     if f.temperatura_c:
@@ -344,10 +359,33 @@ class Narratore:
         self.con.close()
 
     def racconta(self, f: Fatti, *, consenti_modello: bool = True) -> Racconto:
+        """Da dove far venire il racconto, dal piu' specifico al piu' generico.
+
+        L'ordine non e' per costo, e' per QUANTO SI SA della bottiglia:
+
+        1. un testo gia' scritto per QUESTO record, se c'e';
+        2. il template sui fatti trovati, che e' vero per costruzione e piu'
+           specifico di qualunque ripiego: di un vino riconosciuto fino al
+           produttore si conoscono corpo, acidita' e abbinamenti suoi, e
+           raccontarlo col testo generico del suo vino sarebbe buttarli via;
+        3. i gradini di ripiego gia' scritti - la tipologia, la denominazione,
+           il vitigno - per le bottiglie di cui si sa poco;
+        4. il modello dal vivo, se qualcuno l'ha acceso;
+        5. la sola apertura, che dice almeno che cosa si ha davanti.
+        """
         if f.vuoto:
             return Racconto(
-                testo="Non riesco a leggere questa etichetta. Prova a girarla verso di me.",
+                testo=self.lex.frase("schermo", "illeggibile_con_invito",
+                                     lingua=self.lingua),
                 origine="template", livello=f.livello)
+
+        if (pronto := self._dalla_cache(f, solo_esatto=True)) is not None:
+            return pronto
+
+        if (corpo := corpo_neutro(f, self.lex, self.lingua)):
+            apertura = _apertura(f, self.lex, self.lingua)
+            return Racconto(testo=f"{apertura} {corpo}".strip(),
+                            origine="template", livello=f.livello)
 
         if (pronto := self._dalla_cache(f)) is not None:
             return pronto
@@ -361,49 +399,40 @@ class Narratore:
 
     # -------------------------------------------------------------- strati
 
-    def _dalla_cache(self, f: Fatti) -> Racconto | None:
-        ambito, ident = self._chiave(f)
-        if ident is None:
-            return None
-        r = self.con.execute(
-            "SELECT testo FROM racconto WHERE ambito=? AND ambito_id=? AND lingua=?",
-            (ambito, ident, self.lingua),
-        ).fetchone()
-        if not r:
-            return None
-        # L'apertura si compone ADESSO, perché dice quanto siamo sicuri; il
-        # corpo viene dalla cache. Un testo pre-generato non può sapere se
-        # l'etichetta è stata letta bene.
-        apertura = _apertura(f, self.lex, self.lingua)
-        return Racconto(testo=f"{apertura} {r['testo']}".strip(),
-                        origine="cache", livello=f.livello)
+    def _dalla_cache(self, f: Fatti, *, solo_esatto: bool = False) -> Racconto | None:
+        """Il primo gradino della catena che abbia un testo pronto.
 
-    def _chiave(self, f: Fatti) -> tuple[str, int | None]:
-        """A che cosa è agganciato il testo pre-generato.
-
-        Si pre-genera per denominazione, tipologia e vitigno — poche centinaia
-        di testi — non per i 19.358 vini commerciali, che sarebbero giorni di
-        calcolo.
+        Si scende dal record trovato verso il generico: il Primitivo di
+        Manduria di un produttore qualunque ricade sul Primitivo di Manduria,
+        poi sulla denominazione, poi sul vitigno. La catena la costruisce il
+        matcher, che sa come sono legate le tabelle.
         """
-        mappa = {
-            Livello.VINO: ("tipologia", None),
-            Livello.TIPOLOGIA: ("tipologia", None),
-            Livello.DENOMINAZIONE: ("denominazione", None),
-            Livello.VITIGNO: ("vitigno", None),
-        }
-        ambito, _ = mappa.get(f.livello, ("tipologia", None))
-        nome = {"tipologia": f.tipologia or f.denominazione,
-                "denominazione": f.denominazione,
-                "vitigno": f.vitigni[0] if f.vitigni else None}[ambito]
-        if not nome:
-            return ambito, None
-        tabella = {"tipologia": "tipologia", "denominazione": "denominazione",
-                   "vitigno": "vitigno"}[ambito]
-        from .text import normalizza
-        r = self.con.execute(
-            f"SELECT id FROM {tabella} WHERE nome_norm = ? LIMIT 1", (normalizza(nome),)
-        ).fetchone()
-        return ambito, (r["id"] if r else None)
+        gradini = self._gradini(f)
+        for ambito, ident in (gradini[:1] if solo_esatto else gradini):
+            with self._db:
+                r = self.con.execute(
+                    "SELECT testo FROM racconto"
+                    " WHERE ambito=? AND ambito_id=? AND lingua=?",
+                    (ambito, ident, self.lingua),
+                ).fetchone()
+            if not r:
+                continue
+            # L'apertura si compone ADESSO, perche' dice quanto siamo sicuri; il
+            # corpo viene dalla cache. Un testo pre-generato non puo' sapere se
+            # l'etichetta e' stata letta bene, ne' quale bottiglia sia: per
+            # questo il corpo e' scritto sul vino generico e l'apertura no.
+            apertura = _apertura(f, self.lex, self.lingua)
+            log.debug("racconto da %s/%s in cache", ambito, ident)
+            return Racconto(testo=f"{apertura} {r['testo']}".strip(),
+                            origine="cache", livello=f.livello)
+        return None
+
+    @staticmethod
+    def _gradini(f: Fatti) -> list[tuple[str, int]]:
+        """La catena di ripiego, o il solo record d'origine se non c'e'."""
+        if f.ripiego:
+            return f.ripiego
+        return [f.origine] if f.origine else []
 
     def _dal_modello(self, f: Fatti) -> Racconto | None:
         """Genera e verifica. Un solo secondo tentativo, poi si rinuncia.

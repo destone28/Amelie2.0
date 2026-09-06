@@ -172,3 +172,58 @@ class TestElencaInLingua:
 
     def test_scarta_i_vuoti(self):
         assert elenca_in_lingua(["a", "", None, "b"]) == "a e b"
+
+
+class TestFrasi:
+    """L'impalcatura delle frasi, che senza controllo si traduce a meta'.
+
+    Il rischio non e' teorico: i vocabolari erano bilingui da sempre, ma i
+    periodi che tengono insieme le parole erano italiani cablati nel codice.
+    Con lingua="en" il dispositivo diceva parole inglesi dentro frasi italiane,
+    e nessun test se ne accorgeva.
+    """
+
+    def test_ogni_frase_esiste_in_ogni_lingua(self):
+        lex = carica()
+        mancanti = [
+            f"{gruppo}.{chiave} manca in {lingua}"
+            for gruppo, voci in lex.frasi.items()
+            for chiave, per_lingua in voci.items()
+            for lingua in lex.lingue
+            if not per_lingua.get(lingua)
+        ]
+        assert not mancanti, mancanti
+
+    def test_i_segnaposto_coincidono_fra_le_lingue(self):
+        """Un segnaposto in piu' o in meno e' una frase che esplode a runtime.
+
+        `str.format` solleva KeyError se il modello chiede un valore che chi
+        chiama non passa: una traduzione con «{vino}» al posto di «{cosa}»
+        farebbe fallire il racconto solo in quella lingua, e solo su quella
+        frase.
+        """
+        import re
+        lex = carica()
+        problemi = []
+        for gruppo, voci in lex.frasi.items():
+            for chiave, per_lingua in voci.items():
+                attesi = set(re.findall(r"\{(\w+)\}",
+                                        per_lingua.get(lex.predefinita, "")))
+                for lingua, modello in per_lingua.items():
+                    trovati = set(re.findall(r"\{(\w+)\}", modello))
+                    if trovati != attesi:
+                        problemi.append(
+                            f"{gruppo}.{chiave} [{lingua}]: {sorted(trovati)} "
+                            f"invece di {sorted(attesi)}")
+        assert not problemi, problemi
+
+    def test_una_frase_sconosciuta_non_ferma_il_dispositivo(self):
+        """Meglio una riga in meno che un'eccezione davanti a un tavolo."""
+        lex = carica()
+        assert lex.frase("apertura", "non_esiste") == ""
+        assert lex.frase("gruppo_inventato", "niente") == ""
+
+    def test_una_lingua_sconosciuta_ripiega_sulla_predefinita(self):
+        lex = carica()
+        assert lex.frase("apertura", "illeggibile", lingua="de") == \
+            lex.frase("apertura", "illeggibile", lingua=lex.predefinita)
