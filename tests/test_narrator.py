@@ -74,6 +74,45 @@ class TestVerifica:
         assert verifica("", barolo)[0]
 
 
+class TestColoreContraddetto:
+    """L'errore piu' visibile, e quello che un modello piccolo fa piu' spesso.
+
+    Sul serio, in pre-generazione, il modello ha scritto che la Falanghina -
+    vitigno a bacca BIANCA - e' «un vino rosso di campagna con tannicita'
+    bassa». Non e' un'imprecisione: e' falso, e un sommelier lo coglie subito.
+    """
+
+    @pytest.fixture
+    def bianco(self):
+        return Fatti(livello=Livello.VITIGNO, vitigni=["Falanghina"],
+                     colore_bacca="bianca")
+
+    @pytest.fixture
+    def rosso(self):
+        return Fatti(livello=Livello.VITIGNO, vitigni=["Nebbiolo"],
+                     colore_bacca="nera")
+
+    def test_scarta_rosso_su_un_bianco(self, bianco):
+        ok, inv = verifica("La Falanghina è un vino rosso di campagna.", bianco)
+        assert not ok and "colore" in inv[0]
+
+    def test_scarta_il_tannino_su_un_bianco(self, bianco):
+        assert not verifica("Ha una tannicità bassa e piacevole.", bianco)[0]
+
+    def test_accetta_bianco_su_un_bianco(self, bianco):
+        assert verifica("Dà bianchi freschi e floreali.", bianco)[0]
+
+    def test_scarta_paglierino_su_un_rosso(self, rosso):
+        assert not verifica("Un giallo paglierino luminoso.", rosso)[0]
+
+    def test_accetta_rubino_su_un_rosso(self, rosso):
+        assert verifica("Un rosso rubino di bella intensità.", rosso)[0]
+
+    def test_senza_colore_dichiarato_non_giudica(self):
+        f = Fatti(livello=Livello.DENOMINAZIONE, denominazione="Barolo")
+        assert verifica("Un vino rosso intenso.", f)[0]
+
+
 class TestTemplate:
     def test_il_livello_vino_e_affermativo(self, barolo):
         t = template(barolo)

@@ -124,7 +124,36 @@ def verifica(testo: str, fatti: Fatti) -> tuple[bool, list[str]]:
         if _senza_accenti(parola) not in ammesso:
             invenzioni.append(parola)
 
+    # Contraddizioni di colore. Sono l'errore che si nota di piu' e il piu'
+    # facile da intercettare: se i fatti dicono bianco e il testo dice rosso,
+    # e' falso e basta. Un modello piccolo ci casca spesso, perche' "vino" e
+    # "rosso" stanno vicini nella sua testa.
+    if contraddizione := _colore_sbagliato(testo, fatti):
+        invenzioni.append(contraddizione)
+
     return (not invenzioni), invenzioni
+
+
+_ROSSO = re.compile(r"\b(rosso|rossa|rubino|granato|tannico|tannicit[àa]|tannin)", re.I)
+_BIANCO = re.compile(r"\b(bianco|bianca|paglierino|dorat[oa]|verdolino)", re.I)
+
+
+def _colore_sbagliato(testo: str, fatti: Fatti) -> str | None:
+    """Il testo dice di un colore che i fatti smentiscono?"""
+    dichiarato = " ".join(filter(None, [
+        _senza_accenti(fatti.colore or ""),
+        _senza_accenti(fatti.colore_bacca or ""),
+    ]))
+    if not dichiarato:
+        return None
+    e_bianco = ("white" in dichiarato or "bianc" in dichiarato)
+    e_rosso = ("red" in dichiarato or "ner" in dichiarato or "ross" in dichiarato)
+
+    if e_bianco and not e_rosso and _ROSSO.search(testo):
+        return f"colore contraddetto ({_ROSSO.search(testo).group(1)}, ma è bianco)"
+    if e_rosso and not e_bianco and _BIANCO.search(testo):
+        return f"colore contraddetto ({_BIANCO.search(testo).group(1)}, ma è rosso)"
+    return None
 
 
 # ---------------------------------------------------------------- template

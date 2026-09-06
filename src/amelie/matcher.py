@@ -119,6 +119,9 @@ class Fatti:
     tipologia: str | None = None
 
     colore: str | None = None                  # chiave del lessico
+    # Colore della bacca del vitigno: "nera", "bianca", "grigia". Non e' lo
+    # stesso di `colore`, che e' il colore del VINO.
+    colore_bacca: str | None = None
     categoria: str | None = None               # chiave del lessico
     corpo: str | None = None
     acidita: str | None = None
@@ -196,6 +199,7 @@ class Fatti:
             ("Denominazione", self.denominazione),
             ("Tipologia", self.tipologia),
             ("Colore", t("tipo", self.colore) or t("colore", self.colore)),
+            ("Colore della bacca", self.colore_bacca),
             ("Categoria", t("categoria_ue", self.categoria)),
             ("Corpo", t("corpo", self.corpo, "narrativa")),
             ("Acidità", t("acidita", self.acidita, "narrativa")),
@@ -432,13 +436,22 @@ class Matcher:
         r = self.con.execute("SELECT * FROM vitigno WHERE id = ?", (gid,)).fetchone()
         if not r:
             return Fatti()
-        return Fatti(
+        f = Fatti(
             livello=Livello.VITIGNO,
             vitigni=[r["nome"]],
             note_vitigno=r["descrizione"],
             temperatura_c=r["temperatura_c"],
             abbinamenti=[a.strip() for a in (r["abbinamenti"] or "").split(";") if a.strip()],
         )
+        # Il colore della bacca DEVE esserci: senza, il modello ha scritto che
+        # la Falanghina - vitigno a bacca bianca - e' «un vino rosso» con
+        # «tannicita' bassa». Non e' un'imprecisione, e' un errore che un
+        # sommelier coglie all'istante.
+        f.colore_bacca = r["colore_bacca"]
+        if r["note_sensoriali"]:
+            f.note_sensoriali = [
+                x.strip() for x in r["note_sensoriali"].split(";") if x.strip()]
+        return f
 
     def _aggiungi_nota_vitigno(self, f: Fatti) -> None:
         """Aggancia la scheda scritta a mano del vitigno principale, se c'è.
