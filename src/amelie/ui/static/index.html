@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Amelie</title>
+<style>
+/* Il pannello e' 800x480 fisici ma viene pilotato a 1280x720, perche' alla sua
+   risoluzione nativa resta nero. Tutto quindi viene scalato di 0,625: un testo
+   da 32 px qui diventa 20 px reali, che a mezzo metro si legge. Sotto i 28 px
+   non si scende. */
+:root {
+  --fondo:      #17110f;
+  --fondo-alto: #241a16;
+  --oro:        #d9a441;
+  --oro-tenue:  #8a6b30;
+  --testo:      #f2e9df;
+  --testo-lieve:#a99a8c;
+  --rosso:      #7d2b24;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+  width:100%; height:100%; overflow:hidden;
+  background: radial-gradient(ellipse at 50% 120%, var(--fondo-alto) 0%, var(--fondo) 70%);
+  color: var(--testo);
+  font-family: "EB Garamond", Garamond, "Times New Roman", serif;
+  cursor: none;                 /* nessun puntatore: si tocca, non si clicca */
+  -webkit-user-select: none; user-select: none;
+  touch-action: manipulation;
+}
+#scena { position:relative; width:100vw; height:100vh; display:flex;
+         align-items:center; justify-content:center; }
+
+/* Ogni schermata sta sovrapposta alle altre e si scambia in dissolvenza:
+   niente salti, niente riflusso del testo. */
+.vista {
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; text-align:center;
+  padding: 44px 64px; gap: 22px;
+  opacity:0; visibility:hidden; transition: opacity .45s ease;
+}
+.vista.attiva { opacity:1; visibility:visible; }
+
+/* ── attesa ───────────────────────────────────────────────────────────────── */
+#attesa .marchio { font-size:64px; letter-spacing:.22em; color:var(--oro);
+                   font-weight:400; text-transform:uppercase; }
+#attesa .invito  { font-size:30px; color:var(--testo-lieve); font-style:italic; }
+#attesa .filo    { width:180px; height:1px; background:
+                   linear-gradient(90deg, transparent, var(--oro-tenue), transparent); }
+
+/* ── lavorazione ──────────────────────────────────────────────────────────── */
+.calice { width:70px; height:70px; border:2px solid var(--oro-tenue);
+          border-top-color:var(--oro); border-radius:50%;
+          animation: gira 1.4s linear infinite; }
+@keyframes gira { to { transform: rotate(360deg); } }
+#lavoro .frase { font-size:30px; color:var(--testo-lieve); font-style:italic; }
+
+/* ── racconto ─────────────────────────────────────────────────────────────── */
+#racconto { justify-content:flex-start; padding-top:52px; }
+#racconto .titolo   { font-size:44px; color:var(--oro); line-height:1.15;
+                      max-width:96%; }
+#racconto .sottotit { font-size:28px; color:var(--testo-lieve);
+                      letter-spacing:.06em; }
+#racconto .testo    { font-size:32px; line-height:1.5; max-width:94%;
+                      overflow-y:auto; flex:1; }
+/* Il cursore che segue il testo mentre arriva: dice che sta ancora scrivendo. */
+#racconto .testo.scrive::after {
+  content:"▍"; color:var(--oro); animation: lampeggia 1s steps(2) infinite;
+}
+@keyframes lampeggia { 50% { opacity:0; } }
+
+/* ── conferma ─────────────────────────────────────────────────────────────── */
+#conferma .domanda { font-size:32px; color:var(--testo-lieve); }
+#conferma .scelte  { display:flex; flex-direction:column; gap:14px; width:88%; }
+.scelta { font-size:30px; padding:18px 26px; border:1px solid var(--oro-tenue);
+          border-radius:10px; background:rgba(217,164,65,.06); color:var(--testo); }
+.scelta:active { background:rgba(217,164,65,.22); }
+
+/* ── avvisi ───────────────────────────────────────────────────────────────── */
+#avviso .simbolo { font-size:56px; color:var(--oro); }
+#avviso .frase   { font-size:34px; max-width:88%; line-height:1.4; }
+
+/* Segno discreto di stato tecnico: invisibile a un metro, utile a chi sa. */
+#spia { position:absolute; right:10px; bottom:8px; width:6px; height:6px;
+        border-radius:50%; background:var(--oro-tenue); opacity:.35; }
+#spia.rotto { background:var(--rosso); opacity:.9; }
+</style>
+</head>
+<body>
+<div id="scena">
+
+  <section id="attesa" class="vista attiva">
+    <div class="marchio">Amelie</div>
+    <div class="filo"></div>
+    <div class="invito">Appoggia una bottiglia</div>
+  </section>
+
+  <section id="lavoro" class="vista">
+    <div class="calice"></div>
+    <div class="frase" id="frase-lavoro">Sto leggendo l'etichetta…</div>
+  </section>
+
+  <section id="racconto" class="vista">
+    <div class="titolo"   id="r-titolo"></div>
+    <div class="sottotit" id="r-sottotitolo"></div>
+    <div class="testo"    id="r-testo"></div>
+  </section>
+
+  <section id="conferma" class="vista">
+    <div class="domanda">Quale di questi?</div>
+    <div class="scelte" id="c-scelte"></div>
+  </section>
+
+  <section id="avviso" class="vista">
+    <div class="simbolo" id="a-simbolo">↻</div>
+    <div class="frase"   id="a-frase"></div>
+  </section>
+
+  <div id="spia"></div>
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const viste = ["attesa", "lavoro", "racconto", "conferma", "avviso"];
+
+function mostra(nome) {
+  viste.forEach(v => $(v).classList.toggle("attiva", v === nome));
+}
+
+/* Il testo arriva un pezzo alla volta mentre il modello lo scrive: si accoda
+   invece di sostituire, così non lampeggia e non salta. */
+function scrivi(pezzo, finito) {
+  const t = $("r-testo");
+  t.textContent += pezzo;
+  t.classList.toggle("scrive", !finito);
+  t.scrollTop = t.scrollHeight;
+}
+
+const eventi = new EventSource("/eventi");
+
+eventi.onmessage = (e) => {
+  let m;
+  try { m = JSON.parse(e.data); } catch { return; }
+
+  switch (m.tipo) {
+    case "stato":
+      if (m.vista === "racconto") {
+        $("r-testo").textContent = "";
+        $("r-titolo").textContent = m.titolo || "";
+        $("r-sottotitolo").textContent = m.sottotitolo || "";
+      }
+      if (m.vista === "lavoro" && m.frase) $("frase-lavoro").textContent = m.frase;
+      if (m.vista === "avviso") {
+        $("a-frase").textContent = m.frase || "";
+        $("a-simbolo").textContent = m.simbolo || "↻";
+      }
+      mostra(m.vista);
+      break;
+
+    case "testo":
+      scrivi(m.pezzo || "", !!m.finito);
+      break;
+
+    case "candidati": {
+      const box = $("c-scelte");
+      box.innerHTML = "";
+      (m.voci || []).forEach((voce, i) => {
+        const b = document.createElement("div");
+        b.className = "scelta";
+        b.textContent = voce;
+        b.onclick = () => fetch("/scegli/" + i, { method: "POST" });
+        box.appendChild(b);
+      });
+      break;
+    }
+
+    case "salute":
+      $("spia").classList.toggle("rotto", !m.tutto_bene);
+      break;
+  }
+};
+
+/* Se il server cade, EventSource riprova da solo. Si segnala e basta: un
+   riavvio della pagina perderebbe il racconto in corso. */
+eventi.onerror = () => $("spia").classList.add("rotto");
+
+/* Tocco prolungato in basso a destra: pagina di stato tecnico, per il collaudo
+   in fiera senza tastiera. */
+let premuto = null;
+document.addEventListener("pointerdown", (e) => {
+  if (e.clientX > innerWidth - 90 && e.clientY > innerHeight - 90) {
+    premuto = setTimeout(() => { location.href = "/stato"; }, 1800);
+  }
+});
+document.addEventListener("pointerup", () => clearTimeout(premuto));
+</script>
+</body>
+</html>

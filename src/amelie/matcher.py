@@ -133,6 +133,11 @@ class Fatti:
 
     abbinamenti: list[str] = field(default_factory=list)
     note_vitigno: str | None = None
+    # I descrittori sensoriali tipici del vitigno. Vanno nei fatti perche'
+    # altrimenti il modello se li inventa: senza, sul Chianti scriveva "sentore
+    # di ciliegio e pepe nero" - plausibile, ma non verificato da noi. Dandogli
+    # quelli veri, cio' che scrive e' fondato E la verifica torna a mordere.
+    note_sensoriali: list[str] = field(default_factory=list)
     temperatura_c: str | None = None
 
     candidati: list[str] = field(default_factory=list)   # per la schermata di conferma
@@ -198,6 +203,8 @@ class Fatti:
             ("Gradazione", f"{self.abv}%" if self.abv else None),
             ("Vitigni", ", ".join(self.vitigni) if self.vitigni else None),
             ("Abbinamenti", abbinamenti),
+            ("Note sensoriali tipiche",
+             ", ".join(self.note_sensoriali) if self.note_sensoriali else None),
             ("Temperatura di servizio", f"{self.temperatura_c} gradi" if self.temperatura_c else None),
             ("Nota sul vitigno", self.note_vitigno),
         ):
@@ -442,13 +449,16 @@ class Matcher:
         if not f.vitigni or f.note_vitigno:
             return
         r = self.con.execute(
-            "SELECT descrizione, temperatura_c, abbinamenti FROM vitigno"
-            " WHERE nome_norm = ? AND descrizione IS NOT NULL",
+            "SELECT descrizione, temperatura_c, abbinamenti, note_sensoriali"
+            " FROM vitigno WHERE nome_norm = ? AND descrizione IS NOT NULL",
             (normalizza(f.vitigni[0]),),
         ).fetchone()
         if not r:
             return
         f.note_vitigno = r["descrizione"]
+        if r["note_sensoriali"] and not f.note_sensoriali:
+            f.note_sensoriali = [
+                x.strip() for x in r["note_sensoriali"].split(";") if x.strip()]
         f.temperatura_c = f.temperatura_c or r["temperatura_c"]
         if not f.abbinamenti:
             f.abbinamenti = [

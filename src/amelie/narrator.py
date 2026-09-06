@@ -107,6 +107,7 @@ def verifica(testo: str, fatti: Fatti) -> tuple[bool, list[str]]:
             fatti.regione or "",
             str(fatti.annata or ""),
             fatti.temperatura_c or "",
+            " ".join(fatti.note_sensoriali),
         ]))
     )
     invenzioni = []
