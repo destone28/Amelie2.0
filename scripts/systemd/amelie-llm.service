@@ -1,0 +1,28 @@
+[Unit]
+Description=Amelie - modello linguistico locale (llama.cpp)
+After=network.target
+
+[Service]
+Type=simple
+User=arduino
+WorkingDirectory=/home/arduino/amelie
+# --cache-reuse permette di riusare il prefisso gia' elaborato fra una richiesta
+# e l'altra. Su questa board e' la differenza fra usabile e inusabile: il
+# prefill gira a ~8 token/s, quindi le istruzioni fisse costerebbero venti
+# secondi a ogni bottiglia. Rilette una volta sola, costano zero.
+ExecStart=/home/arduino/amelie/llama.cpp/build/bin/llama-server \
+    --model /home/arduino/amelie/models/gemma-3-1b-it-Q4_K_M.gguf \
+    --host 127.0.0.1 --port 8080 \
+    --threads 4 --ctx-size 2048 \
+    --cache-reuse 256 \
+    --no-webui
+Restart=on-failure
+RestartSec=10
+# Il modello occupa ~800 MB: il tetto lascia respiro a OCR, voce e interfaccia
+# sui 3,6 GiB della board, e fa fallire il servizio invece di mandare tutto
+# in swap su eMMC, che sarebbe molto peggio.
+MemoryMax=1400M
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

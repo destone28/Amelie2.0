@@ -149,28 +149,56 @@ class Fatti:
     def vuoto(self) -> bool:
         return self.livello is Livello.NULLA
 
-    def blocco_fatti(self) -> str:
+    def blocco_fatti(self, lessico=None, lingua: str = "it") -> str:
         """I fatti in forma testuale, come vanno dati al modello.
+
+        I valori dei vocabolari controllati vanno TRADOTTI prima di arrivare al
+        modello. I dataset sono in inglese, e passandoli grezzi il modello
+        scriveva «un abbinamento con il beef e il blu»: prende le parole che
+        legge, e se legge "Beef" scrive "beef". Non e' un problema di prompt,
+        e' un problema di ingresso.
 
         Solo campi valorizzati, una riga ciascuno. I vitigni ammessi NON
         compaiono: il modello non deve nemmeno vederli, perché se li vede finisce
         per nominarli.
         """
+        if lessico is None:
+            from .lessico import carica
+            lessico = carica()
+
+        def t(vocabolario: str, valore: str | None, forma: str = "etichetta") -> str | None:
+            return lessico.traduci(vocabolario, valore, lingua=lingua, forma=forma) if valore else None
+
+        abbinamenti = (
+            ", ".join(lessico.traduci_molti("abbinamento", self.abbinamenti, lingua=lingua))
+            if self.abbinamenti else None
+        )
+        # X-Wines usa spesso la denominazione anche come "regione": ripeterla
+        # non aggiunge nulla e induce il modello a trattarla come un luogo
+        # diverso, inventando geografia.
+        regione = self.regione
+        if regione and self.denominazione and (
+            regione in self.denominazione or self.denominazione in regione
+            or (self.tipologia and regione in self.tipologia)):
+            regione = None
+
         righe = []
         for etichetta, valore in (
             ("Nome", self.nome),
             ("Produttore", self.cantina),
-            ("Regione", self.regione),
+            ("Regione", regione),
             ("Annata", self.annata),
             ("Denominazione", self.denominazione),
             ("Tipologia", self.tipologia),
-            ("Colore", self.colore),
-            ("Corpo", self.corpo),
-            ("Acidità", self.acidita),
+            ("Colore", t("tipo", self.colore) or t("colore", self.colore)),
+            ("Categoria", t("categoria_ue", self.categoria)),
+            ("Corpo", t("corpo", self.corpo, "narrativa")),
+            ("Acidità", t("acidita", self.acidita, "narrativa")),
+            ("Come nasce", t("elaborazione", self.elaborazione, "narrativa")),
             ("Gradazione", f"{self.abv}%" if self.abv else None),
             ("Vitigni", ", ".join(self.vitigni) if self.vitigni else None),
-            ("Abbinamenti", ", ".join(self.abbinamenti) if self.abbinamenti else None),
-            ("Temperatura di servizio", f"{self.temperatura_c} °C" if self.temperatura_c else None),
+            ("Abbinamenti", abbinamenti),
+            ("Temperatura di servizio", f"{self.temperatura_c} gradi" if self.temperatura_c else None),
             ("Nota sul vitigno", self.note_vitigno),
         ):
             if valore not in (None, "", []):
