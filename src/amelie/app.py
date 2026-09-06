@@ -149,7 +149,16 @@ class Amelie:
             self._esegui(e)
 
     def _mostra(self, stato: Stato) -> None:
-        m: dict[str, Any] = {"tipo": "stato", "vista": VISTA[stato]}
+        vista = VISTA[stato]
+        if stato is Stato.CONCLUSO and self._fatti.vuoto:
+            # Ci si arriva dopo aver rinunciato a leggere l'etichetta: la vista
+            # "racconto" mostrerebbe un titolo vuoto e nessun testo, cioe' uno
+            # schermo nero con una bottiglia ancora appoggiata sopra.
+            self._pubblica({"tipo": "stato", "vista": "avviso", "simbolo": "☐",
+                            "frase": "Non sono riuscito a leggere questa "
+                                     "etichetta. Può togliere la bottiglia."})
+            return
+        m: dict[str, Any] = {"tipo": "stato", "vista": vista}
         if stato is Stato.RACCONTO:
             f = self._fatti
             m["titolo"] = f.nome or f.tipologia or f.denominazione or (
@@ -188,16 +197,25 @@ class Amelie:
                     self.voce.zittisci()
             elif e is Effetto.MOSTRA_CANDIDATI:
                 self._pubblica({"tipo": "candidati", "voci": self._candidati})
-        except PonteNonDisponibile as ex:
-            log.warning("MCU non raggiungibile: %s", ex)
+        except Exception as ex:                             # noqa: BLE001
+            # Un effetto che fallisce non deve MAI fermare la macchina a stati:
+            # un errore dell'MCU deve costare un anello spento, non il
+            # dispositivo.
+            log.warning("effetto %s fallito: %s", e.value, ex)
 
     def _avvia(self, funzione) -> None:
         """Esegue in un thread. Uno alla volta: la pipeline è sequenziale."""
-        if self._lavoro and self._lavoro.is_alive():
-            # Ignorare e basta lascerebbe la macchina in uno stato che aspetta
-            # un evento che nessuno mandera' mai: succede togliendo e rimettendo
-            # la bottiglia mentre il dispositivo parla, e resta bloccata in
-            # SCANSIONE per sempre. Meglio dichiarare il guasto, che scade da
+        # Il passo successivo della pipeline viene avviato DAL thread di lavoro
+        # stesso: _scatta_e_leggi manda LETTURA_RIUSCITA, che innesca
+        # INTERROGA_DATABASE, che richiama _avvia mentre siamo ancora dentro
+        # quel thread. Confrontare con `is_alive()` senza escludere il chiamante
+        # significa trovarsi sempre occupati, e quindi non raccontare mai nulla.
+        occupato = (self._lavoro is not None
+                    and self._lavoro.is_alive()
+                    and self._lavoro is not threading.current_thread())
+        if occupato:
+            # Ignorare e basta lascerebbe la macchina ad aspettare un evento che
+            # nessuno mandera' mai. Meglio dichiarare il guasto, che scade da
             # solo e riporta in attesa.
             log.warning("lavoro già in corso, dichiaro guasto invece di %s",
                         funzione.__name__)
@@ -309,10 +327,18 @@ class Amelie:
             self.macchina.invia(Evento.RACCONTO_FINITO)
 
     def scegli(self, indice: int) -> None:
-        """L'ospite ha toccato uno dei candidati."""
-        if 0 <= indice < len(self._candidati):
-            self._righe = [self._candidati[indice]]
-            self._fatti = self.matcher.cerca(self._righe)
+        """L'ospite ha toccato uno dei candidati.
+
+        Si compone il record TOCCATO. Rifare la ricerca sul suo nome sarebbe
+        un secondo tiro di dadi: la stringa normalizzata di un candidato puo'
+        somigliare piu' a un altro record che a se stessa, e l'ospite si
+        vedrebbe raccontare un vino diverso da quello che ha scelto.
+        """
+        rif = self._fatti.riferimenti
+        if 0 <= indice < len(rif):
+            annata = self._fatti.annata
+            self._fatti = self.matcher.fatti_di(*rif[indice])
+            self._fatti.annata = annata     # l'annata viene dall'etichetta
         self.macchina.invia(Evento.CANDIDATO_SCELTO)
 
     def _genera(self, prompt: str) -> str:
@@ -333,22 +359,42 @@ class Amelie:
 
         while True:
             try:
-                mm = self.ponte.distanza_mm()
-            except PonteNonDisponibile:
-                mm = None
-            c_era = self.presenza.presente
-            ora = self.presenza.aggiorna(mm)
-            if ora != c_era:
-                if ora:
-                    self._tentativi = 0     # bottiglia nuova, si riparte da capo
-                self.macchina.invia(
-                    Evento.BOTTIGLIA_PRESENTE if ora else Evento.BOTTIGLIA_ASSENTE)
-
-            if self._scadenza and time.monotonic() >= self._scadenza:
-                self._scadenza = None
-                self.macchina.invia(Evento.SCADENZA)
-
+                await self._un_battito()
+            except Exception:                               # noqa: BLE001
+                # Il battito del dispositivo non puo' morire per nessun motivo:
+                # se muore, nessuna bottiglia viene piu' vista, per sempre.
+                log.exception("errore nel ciclo di sorveglianza")
             await asyncio.sleep(self.cfg.periodo_sensore_s)
+
+    async def _un_battito(self) -> None:
+        """Un giro solo: sensore, presenza, timer. Isolato per poterlo provare."""
+        try:
+            mm = self.ponte.distanza_mm()
+        except Exception:                               # noqa: BLE001
+            mm = None
+        c_era = self.presenza.presente
+        ora = self.presenza.aggiorna(mm)
+        if ora != c_era:
+            if ora:
+                self._tentativi = 0     # bottiglia nuova, si riparte da capo
+            self.macchina.invia(
+                Evento.BOTTIGLIA_PRESENTE if ora else Evento.BOTTIGLIA_ASSENTE)
+        elif ora and self.macchina.stato is Stato.ATTESA and self._tentativi < TENTATIVI_MAX:
+            # La bottiglia c'e' ma siamo tornati in attesa: succede dopo un
+            # guasto. Il fronte di salita non si ripresenta mai piu', e senza
+            # questo rilancio il dispositivo resterebbe fermo per sempre con una
+            # bottiglia davanti. Il contatore NON si azzera qui: se il guasto si
+            # ripete, dopo TENTATIVI_MAX si smette, invece di riaccendere il
+            # flash ogni quattro secondi tutta la sera su una board senza
+            # ventola. Si riparte solo togliendo e rimettendo la bottiglia.
+            self._tentativi += 1
+            log.info("bottiglia ancora presente in attesa, rilancio (%d/%d)",
+                     self._tentativi, TENTATIVI_MAX)
+            self.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
+
+        if self._scadenza and time.monotonic() >= self._scadenza:
+            self._scadenza = None
+            self.macchina.invia(Evento.SCADENZA)
 
     async def salute(self) -> None:
         while True:
@@ -356,7 +402,7 @@ class Amelie:
             await asyncio.sleep(20)
 
     def _tutto_bene(self) -> bool:
-        return self.ponte.disponibile and (self.camera is None or True)
+        return self.ponte.disponibile
 
 
 # --------------------------------------------------------------- server

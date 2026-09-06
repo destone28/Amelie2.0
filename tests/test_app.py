@@ -196,3 +196,108 @@ class TestDifettiTrovatiDallaVerifica:
         amelie._avvia(lambda: None)
         fermo.set()
         assert amelie.macchina.stato is Stato.GUASTO
+
+
+class TestCicloCompleto:
+    """Il ciclo vero, dalla bottiglia al racconto, con camera e OCR finti.
+
+    Questa classe esiste per un motivo preciso. Tutti gli altri test spingevano
+    la pipeline mandando gli eventi a mano DAL THREAD DEL TEST, e con quella
+    forma il dispositivo sembrava funzionare. Ma in esercizio ogni passo della
+    pipeline è avviato dal passo precedente, cioè DAL THREAD DI LAVORO: e lì
+    `_avvia` trovava vivo un thread che era sé stesso, si dichiarava occupato e
+    mandava tutto in GUASTO. Su ogni bottiglia, sempre. Il dispositivo non
+    raccontava nulla e nessun test se ne accorgeva.
+
+    Il collaudo che conta è quello che percorre il ciclo come lo percorre una
+    bottiglia vera: si mette la presenza, si aspetta, si guarda cosa dice.
+    """
+
+    ETICHETTA = ["MARCHESI DI BAROLO", "BAROLO", "CANNUBI", "2016",
+                 "DENOMINAZIONE DI ORIGINE CONTROLLATA E GARANTITA"]
+
+    @pytest.fixture
+    def amelie_con_etichetta(self):
+        """Amelie con camera e OCR finti che restituiscono righe VERE."""
+        import numpy as np
+
+        from amelie.capture import Scatto
+        from amelie.ocr import Lettura, Riga
+
+        class CameraFinta:
+            def scatta(self, **_):
+                return Scatto(immagine=np.zeros((8, 8, 3), dtype=np.uint8),
+                              nitidezza=420.0)
+
+        class LettoreFinto:
+            def __init__(self, righe): self.righe = righe
+            def leggi(self, _immagine):
+                return Lettura(righe=[Riga(testo=t, confidenza=0.95)
+                                      for t in self.righe], durata_s=0.1)
+
+        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                  senza_voce=True, senza_modello=True))
+        a.camera = CameraFinta()
+        a.lettore = LettoreFinto(self.ETICHETTA)
+        yield a
+        a.matcher.chiudi()
+        a.narratore.chiudi()
+
+    def _attendi(self, amelie, stati, secondi=20.0):
+        import time
+        scadenza = time.monotonic() + secondi
+        while time.monotonic() < scadenza:
+            if amelie.macchina.stato in stati:
+                return amelie.macchina.stato
+            # La scadenza dell'assestamento la fa scattare il ciclo di
+            # sorveglianza, che qui non gira: la si simula.
+            if amelie._scadenza and time.monotonic() >= amelie._scadenza:
+                amelie._scadenza = None
+                amelie.macchina.invia(Evento.SCADENZA)
+            time.sleep(0.02)
+        return amelie.macchina.stato
+
+    def test_una_bottiglia_leggibile_viene_raccontata(self, amelie_con_etichetta):
+        """Il test che mancava: nessun evento a mano dopo il primo."""
+        a = amelie_con_etichetta
+        a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
+        finale = self._attendi(a, {Stato.RACCONTO, Stato.CONCLUSO,
+                                   Stato.CONFERMA, Stato.GUASTO})
+        assert finale is not Stato.GUASTO, (
+            "il ciclo è finito in guasto su un'etichetta perfettamente leggibile")
+        assert finale in {Stato.RACCONTO, Stato.CONCLUSO, Stato.CONFERMA}
+
+    def test_il_racconto_nomina_il_vino_letto(self, amelie_con_etichetta):
+        a = amelie_con_etichetta
+        a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
+        self._attendi(a, {Stato.RACCONTO, Stato.CONCLUSO, Stato.CONFERMA,
+                          Stato.GUASTO})
+        assert not a._fatti.vuoto, "l'OCR ha letto ma il riconoscimento non ha dato nulla"
+        testo = " ".join(filter(None, [a._fatti.nome, a._fatti.tipologia,
+                                       a._fatti.denominazione])).lower()
+        assert "barolo" in testo, f"riconosciuto {testo!r} da un'etichetta di Barolo"
+
+    def test_l_annata_dell_etichetta_arriva_ai_fatti(self, amelie_con_etichetta):
+        a = amelie_con_etichetta
+        a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
+        self._attendi(a, {Stato.RACCONTO, Stato.CONCLUSO, Stato.CONFERMA,
+                          Stato.GUASTO})
+        assert a._fatti.annata == 2016
+
+    def test_un_etichetta_illeggibile_chiede_di_girarla(self, amelie_con_etichetta):
+        """L'altro capo: nessuna riga letta non deve diventare un guasto."""
+        a = amelie_con_etichetta
+        a.lettore.righe = []
+        a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
+        finale = self._attendi(a, {Stato.RIPOSIZIONA, Stato.CONCLUSO,
+                                   Stato.GUASTO})
+        assert finale is not Stato.GUASTO
+
+    def test_righe_senza_riscontro_non_finiscono_in_guasto(self, amelie_con_etichetta):
+        """L'OCR legge, ma nel database non c'è niente: si chiede di girarla."""
+        a = amelie_con_etichetta
+        a.lettore.righe = ["ZZZQXW", "KJHGFD"]
+        a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
+        finale = self._attendi(a, {Stato.RIPOSIZIONA, Stato.RACCONTO,
+                                   Stato.CONCLUSO, Stato.GUASTO})
+        assert finale is not Stato.GUASTO

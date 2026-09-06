@@ -1,7 +1,12 @@
 [Unit]
 Description=Amelie - modalita' video e schermo sempre sveglio
 After=lightdm.service
-Requires=lightdm.service
+# Wants, non Requires: con Requires un riavvio di lightdm - che questo stesso
+# servizio puo' chiedere per sbloccare il CRTC - si porterebbe dietro anche noi,
+# e nessuno ci farebbe piu' ripartire.
+Wants=lightdm.service
+StartLimitIntervalSec=600
+StartLimitBurst=10
 
 [Service]
 Type=oneshot
@@ -11,6 +16,13 @@ ExecStartPre=/bin/sleep 5
 ExecStart=/usr/local/bin/amelie-display.sh
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/arduino/.Xauthority
+# Lo script aspetta gia' un minuto che l'uscita DisplayPort compaia. Questo e'
+# il secondo strato: se fallisce lo stesso - X non ancora in piedi, schermo
+# acceso dopo la board - si riprova, invece di lasciare il dispositivo cieco
+# fino al prossimo riavvio. Senza, un avvio andato storto restava storto: e'
+# successo, e con lui non e' partito nemmeno il chiosco che ne dipende.
+Restart=on-failure
+RestartSec=10
 
 [Install]
 WantedBy=graphical.target

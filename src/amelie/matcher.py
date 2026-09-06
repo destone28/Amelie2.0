@@ -51,11 +51,19 @@ PERCORSO_DB = Path(__file__).resolve().parents[2] / "data" / "amelie.db"
 SOGLIA_CERTA = 88
 # Sotto SOGLIA_CERTA ma sopra questa, si mostrano i candidati e si chiede conferma.
 SOGLIA_DUBBIA = 75
+# Di quanto il primo classificato deve staccare un vino di un ALTRO produttore
+# per potersi dire certo. Sotto questo margine non si sceglie: si chiede.
+MARGINE_PRODUTTORE = 3.0
+# Fra quanti dei primi cercare quel rivale.
+RIVALI = 6
+
 # Quanti candidati chiedere a FTS5 prima di riordinarli col fuzzy.
 CANDIDATI = 200
-# Su quanti dei migliori rifare il calcolo della sicurezza, che costa una query
-# in piu' ciascuno. Oltre la ventina non cambia mai l'esito.
-VERIFICATI = 25
+# Su quanti dei migliori rifare il calcolo della sicurezza: su TUTTI. Vedi il
+# commento in _candidati — una verifica parziale e' peggio di nessuna, perche'
+# chi resta fuori conserva il punteggio gonfiato e scavalca chi e' stato
+# esaminato. Le norme si leggono in una query sola, quindi non costa nulla.
+VERIFICATI = CANDIDATI
 
 # Tetto alla sicurezza in funzione di quante parole utili ha restituito l'OCR.
 # Con una parola sola non si puo' essere certi di NULLA: "Rosso" combacia con
@@ -144,7 +152,14 @@ class Fatti:
     note_sensoriali: list[str] = field(default_factory=list)
     temperatura_c: str | None = None
 
-    candidati: list[str] = field(default_factory=list)   # per la schermata di conferma
+    # Per la schermata di conferma: `candidati` sono le righe LEGGIBILI che
+    # l'ospite vede, `riferimenti` i record a cui corrispondono, nello stesso
+    # ordine. Servono entrambi: il testo dell'indice di ricerca e' normalizzato
+    # (minuscolo, senza punteggiatura) e a un tavolo non si mostra
+    # "barolo cannubi marchesi di barolo"; e ricercare quel testo per risalire
+    # al record puo' riportare a un record DIVERSO da quello toccato.
+    candidati: list[str] = field(default_factory=list)
+    riferimenti: list[tuple[str, int]] = field(default_factory=list)
 
     @property
     def certo(self) -> bool:
@@ -267,6 +282,8 @@ class Matcher:
         migliore = candidati[0]
         fatti = self._componi(migliore)
         fatti.sicurezza = migliore.somiglianza
+        if self._c_e_un_altro_produttore(candidati):
+            fatti.sicurezza = min(fatti.sicurezza, SOGLIA_CERTA - 0.5)
         fatti.annata = annata
         # Per la schermata di conferma servono alternative DIVERSE fra loro:
         # tre righe che dicono quasi la stessa cosa non aiutano a scegliere.
@@ -274,10 +291,78 @@ class Matcher:
         for c in candidati[1:]:
             if len(fatti.candidati) >= 3:
                 break
-            if c.testo not in visti:
-                visti.add(c.testo)
-                fatti.candidati.append(c.testo)
+            if c.testo in visti:
+                continue
+            visti.add(c.testo)
+            fatti.candidati.append(self.etichetta(c.ambito, c.ambito_id)
+                                   or c.testo)
+            fatti.riferimenti.append((c.ambito, c.ambito_id))
         return fatti
+
+    def _c_e_un_altro_produttore(self, candidati: list[Candidato]) -> bool:
+        """C'e' un ALTRO produttore quasi altrettanto plausibile?
+
+        La sicurezza non e' una proprieta' della stringa vincente: e' una
+        proprieta' dell'affermazione che si sta per fare a un tavolo. Su
+        "Monte Antico ... Sangiovese, Merlot" il primo classificato era il
+        Sangiovese-Merlot di **Monte Giove** con 90, e a 2.4 punti di distanza
+        c'era il vino di **Monte Antico**, cioe' la risposta giusta. Con due
+        produttori cosi' vicini il dispositivo non sta riconoscendo: sta
+        tirando a indovinare quale nome stampare. Allora non si dichiara certo
+        e mostra la schermata di conferma, dove una persona sceglie in un
+        istante quello che l'OCR non sa distinguere.
+
+        Il secondo classificato quasi sempre e' invece lo stesso vino visto da
+        un altro record - un'altra annata, la sua tipologia - e quello non
+        toglie nulla: per questo si guarda la CANTINA, non il punteggio.
+        """
+        primo = candidati[0]
+        if primo.ambito != "vino":
+            return False
+        norme = self._norme_vino([c.ambito_id for c in candidati[:RIVALI]
+                                  if c.ambito == "vino"])
+        cantina_primo = norme.get(primo.ambito_id, ("", ""))[1]
+        if not cantina_primo:
+            return False
+        for c in candidati[1:RIVALI]:
+            if primo.somiglianza - c.somiglianza >= MARGINE_PRODUTTORE:
+                break
+            if c.ambito != "vino":
+                continue
+            altra = norme.get(c.ambito_id, ("", ""))[1]
+            if altra and altra != cantina_primo:
+                log.info("due produttori a pari evidenza (%r / %r): chiedo",
+                         cantina_primo, altra)
+                return True
+        return False
+
+    def fatti_di(self, ambito: str, ambito_id: int) -> Fatti:
+        """I fatti di un record preciso, senza ripassare dalla ricerca.
+
+        È quello che serve quando l'ospite tocca un candidato: ha scelto UN
+        record, e va composto quello, non il piu' somigliante al suo nome.
+        """
+        f = self._componi(Candidato(ambito=ambito, ambito_id=ambito_id,
+                                    testo="", somiglianza=0.0, peso=0))
+        # L'ha scelto una persona guardando la bottiglia: e' la conferma piu'
+        # forte che il dispositivo possa ricevere.
+        f.sicurezza = 100.0
+        return f
+
+    def etichetta(self, ambito: str, ambito_id: int) -> str:
+        """Come si scrive un record su uno schermo, per farlo scegliere."""
+        f = self._componi(Candidato(ambito=ambito, ambito_id=ambito_id,
+                                    testo="", somiglianza=0.0, peso=0))
+        if f.livello is Livello.VINO and f.nome:
+            return f"{f.nome} — {f.cantina}" if f.cantina else f.nome
+        if f.livello is Livello.TIPOLOGIA and f.tipologia:
+            return f.tipologia
+        if f.livello is Livello.DENOMINAZIONE and f.denominazione:
+            tipo = f.tipo_denominazione or ""
+            return f"{f.denominazione} {tipo}".strip()
+        if f.livello is Livello.VITIGNO and f.vitigni:
+            return f.vitigni[0]
+        return ""
 
     def _candidati(self, token: list[str], testo_norm: str) -> list[Candidato]:
         from rapidfuzz import fuzz
@@ -324,13 +409,64 @@ class Matcher:
             if c.testo == testo_norm:
                 c.esatto = True
                 c.somiglianza = 100.0     # esatto: nessuna scalatura per specificita'
-        for c in grezzi[:VERIFICATI]:
+        # Su TUTTI, non sui primi: la verifica ABBASSA i punteggi, e chi non
+        # viene verificato conserva quello gonfiato. Fermarsi ai primi 25
+        # significava che il 26esimo, mai verificato, poteva scavalcare tutti
+        # dopo il riordino e presentarsi come "certo" senza aver mai superato
+        # l'esame. Il costo e' una query sola e 200 confronti: nulla, accanto
+        # ai secondi dell'OCR.
+        norme = self._norme_vino([c.ambito_id for c in grezzi if c.ambito == "vino"])
+        for c in grezzi:
             if not c.esatto:
-                c.somiglianza = self._sicurezza_verificata(c, testo_norm)
+                c.somiglianza = self._sicurezza_verificata(c, testo_norm, norme)
         grezzi.sort(key=lambda c: c.punteggio, reverse=True)
         return grezzi
 
-    def _sicurezza_verificata(self, c: Candidato, testo_norm: str) -> float:
+    @staticmethod
+    def _copertura(record: str, parole_ocr: list[str]) -> float:
+        """Quanto del record si ritrova nell'etichetta, parola per parola.
+
+        Serve perche' token_set_ratio e' tutto-o-niente sui token: da' 100 se
+        OGNI parola del record compare identica, e crolla appena una ha un
+        refuso. Su "TINUTA ROCCA BAROLO BUSSIA" letto da una bottiglia di
+        Tenuta Rocca, il record giusto "tenuta rocca barolo bussia" prendeva
+        58.8 per quella e sola nel nome della cantina, mentre il record povero
+        "rocca rocca" - un altro produttore - prendeva 100 perche' la sua unica
+        parola c'era esatta. Il piu' informativo perdeva contro il piu' vago.
+
+        Qui ogni parola del record cerca il suo miglior riscontro fra quelle
+        lette, e il punteggio e' la media: un refuso costa una parola, non
+        tutto il record.
+        """
+        from rapidfuzz import fuzz
+
+        parole = record.split()
+        if not parole or not parole_ocr:
+            return fuzz.token_set_ratio(" ".join(parole_ocr), record)
+        # Ogni parola letta puo' confermarne UNA sola del record. Senza questo,
+        # "Ca'Stella" si accontentava della "Stella Polare" stampata sulla
+        # retroetichetta di un Burlotto e si dichiarava certa.
+        libere = list(parole_ocr)
+        totale = 0.0
+        for p in sorted(parole, key=len, reverse=True):
+            if not libere:
+                break
+            i = max(range(len(libere)), key=lambda k: fuzz.ratio(p, libere[k]))
+            totale += fuzz.ratio(p, libere.pop(i))
+        return totale / len(parole)
+
+    def _norme_vino(self, ids: list[int]) -> dict[int, tuple[str, str]]:
+        """nome_norm e cantina_norm di tutti i vini candidati, in una query."""
+        if not ids:
+            return {}
+        with self._db:
+            righe = self.con.execute(
+                "SELECT id, nome_norm, COALESCE(cantina_norm,'') FROM vino"
+                f" WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()
+        return {r[0]: (r[1] or "", r[2]) for r in righe}
+
+    def _sicurezza_verificata(self, c: Candidato, testo_norm: str,
+                              norme: dict[int, tuple[str, str]] | None = None) -> float:
         """Ricalcola la sicurezza in base a quanto pesa l'affermazione.
 
         Per un vino commerciale servono DUE conferme indipendenti, cantina e
@@ -340,19 +476,26 @@ class Matcher:
         from rapidfuzz import fuzz
 
         if c.ambito == "vino":
-            r = self.con.execute(
-                "SELECT nome_norm, COALESCE(cantina_norm,'') FROM vino WHERE id = ?",
-                (c.ambito_id,)).fetchone()
-            if not r:
+            if norme is None:
+                norme = self._norme_vino([c.ambito_id])
+            if c.ambito_id not in norme:
                 return 0.0
-            nome, cantina = r[0], r[1]
-            s_nome = fuzz.token_set_ratio(testo_norm, nome) if nome else 0
+            nome, cantina = norme[c.ambito_id]
+            parole_ocr = testo_norm.split()
+            s_nome = self._copertura(nome, parole_ocr) if nome else 0
             if not cantina:
                 return s_nome * 0.8      # senza produttore non si e' mai certi
-            s_cantina = fuzz.token_set_ratio(testo_norm, cantina)
+            s_cantina = self._copertura(cantina, parole_ocr)
             # La media pesata premia chi ha entrambe le conferme; il tetto sul
             # minimo impedisce che una sola, fortissima, basti da sola.
-            return min(0.6 * s_cantina + 0.4 * s_nome, s_cantina * 1.15, s_nome * 1.6)
+            punteggio = min(0.6 * s_cantina + 0.4 * s_nome,
+                            s_cantina * 1.15, s_nome * 1.6)
+            # E poi si scala su quanto il record SPIEGA dell'etichetta. Con la
+            # copertura per parole, un record di una parola sola prende 100
+            # ancora piu' facilmente: e' proprio quello che non deve bastare a
+            # dire "questo e' il vino tale del produttore talaltro".
+            parole = len(set(nome.split()) | set(cantina.split()))
+            return punteggio * min(1.0, 0.55 + 0.15 * parole)
 
         # Per gli altri livelli l'affermazione e' piu' debole, ma resta il
         # problema delle voci corte: una denominazione di una parola sola non

@@ -121,15 +121,46 @@ class TestTemplate:
 
     def test_il_livello_tipologia_dichiara_l_incertezza(self):
         f = Fatti(livello=Livello.TIPOLOGIA, tipologia="Barolo Riserva",
-                  denominazione="Barolo")
+                  denominazione="Barolo", sicurezza=80.0)
         t = template(f)
         assert "non riesco a leggere" in t.lower()
         assert "Barolo Riserva" in t
 
     def test_il_livello_vitigno_non_attribuisce_al_produttore(self):
-        f = Fatti(livello=Livello.VITIGNO, vitigni=["Nebbiolo"])
+        f = Fatti(livello=Livello.VITIGNO, vitigni=["Nebbiolo"], sicurezza=80.0)
         t = template(f)
         assert "produttore non sono sicuro" in t.lower()
+
+    def test_un_vino_certo_si_annuncia_come_certo(self):
+        f = Fatti(livello=Livello.VINO, nome="Barolo Cannubi",
+                  cantina="Marchesi di Barolo", annata=2016, sicurezza=95.0)
+        assert template(f).startswith("Questo è il")
+
+    def test_un_vino_dubbio_non_si_annuncia_come_certo(self):
+        """Sicurezza 80: il record e' completo, la somiglianza no."""
+        f = Fatti(livello=Livello.VINO, nome="Barolo Cannubi",
+                  cantina="Marchesi di Barolo", annata=2016, sicurezza=80.0)
+        t = template(f)
+        assert not t.startswith("Questo è il")
+        assert "Direi che è il" in t
+        assert "Barolo Cannubi" in t
+
+    def test_una_somiglianza_bassa_si_dichiara_tale(self):
+        """Il difetto piu' insidioso: un record perfetto trovato male.
+
+        MATCH_ASSENTE porta al racconto anche sotto la soglia dubbia. Se
+        l'apertura guardasse solo il livello, il dispositivo direbbe al tavolo
+        «Questo è il Barolo di Marchesi di Barolo» con il 60% di somiglianza.
+        """
+        f = Fatti(livello=Livello.VINO, nome="Barolo Cannubi",
+                  cantina="Marchesi di Barolo", sicurezza=60.0)
+        t = template(f)
+        assert "non è nitida" in t
+        assert "potrebbe essere" in t.lower()
+
+    def test_anche_i_livelli_deboli_si_smorzano_sotto_la_soglia(self):
+        f = Fatti(livello=Livello.VITIGNO, vitigni=["Nebbiolo"], sicurezza=50.0)
+        assert "non è nitida" in template(f)
 
     def test_il_template_supera_sempre_la_verifica(self, barolo):
         """La rete di sicurezza non puo' essere quella che inventa."""

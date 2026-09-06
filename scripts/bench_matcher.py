@@ -31,6 +31,11 @@ def main() -> None:
     livelli = collections.Counter()
     fasce = collections.Counter()
     giusti = sbagliati = 0
+    # La misura che conta davvero: una figuraccia dichiarata CERTA viene
+    # raccontata al tavolo come un fatto. Una figuraccia DUBBIA passa dalla
+    # schermata di conferma, dove una persona la corregge. Sono due errori di
+    # gravita' incomparabile e vanno contati separati.
+    sbagliati_certi = 0
     esempi_sbagliati = []
 
     for e in esiti:
@@ -60,6 +65,7 @@ def main() -> None:
             giusti += 1
         elif f.livello is not Livello.NULLA:
             sbagliati += 1
+            sbagliati_certi += f.certo
             if len(esempi_sbagliati) < 6:
                 esempi_sbagliati.append(
                     (e.get("cantina"), e.get("vino"), f.livello.value,
@@ -70,6 +76,8 @@ def main() -> None:
     print(f"{'='*66}\nRICONOSCIMENTO su {n} etichette (testo OCR reale)\n{'='*66}")
     print(f"  coerente con l'etichetta    {giusti:4}/{n}  {100*giusti/n:5.1f}%")
     print(f"  INCOERENTE (figuraccia)     {sbagliati:4}/{n}  {100*sbagliati/n:5.1f}%")
+    print(f"    di cui DICHIARATE CERTE   {sbagliati_certi:4}/{n}  {100*sbagliati_certi/n:5.1f}%"
+          "   <- raccontate senza chiedere")
     print("\n  dove si ferma la cascata:")
     for liv in ("vino", "tipologia", "denominazione", "vitigno", "nulla", "nessun testo"):
         if livelli[liv]:

@@ -140,6 +140,10 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
     # Nessun match non è un fallimento: si racconta la denominazione, o il
     # vitigno, o si chiede di girare l'etichetta. Decide il narratore.
     (Stato.RICONOSCIMENTO, Evento.MATCH_ASSENTE): Stato.RACCONTO,
+    # Il riconoscimento puo' concludere che non c'e' NULLA da dire: senza questa
+    # transizione l'evento cadeva nel vuoto e la macchina restava a girare fino
+    # allo scadere del tetto, per poi dichiarare guasto.
+    (Stato.RICONOSCIMENTO, Evento.LETTURA_FALLITA): Stato.RIPOSIZIONA,
 
     (Stato.CONFERMA, Evento.CANDIDATO_SCELTO): Stato.RACCONTO,
     (Stato.CONFERMA, Evento.SCADENZA): Stato.RACCONTO,

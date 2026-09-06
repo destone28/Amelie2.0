@@ -159,3 +159,122 @@ class TestCandidati:
     def test_le_alternative_sono_diverse_fra_loro(self, m):
         f = m.cerca(["Barolo"])
         assert len(f.candidati) == len(set(f.candidati))
+
+    def test_le_alternative_sono_leggibili_da_una_persona(self, m):
+        """Sullo schermo di un ristorante non si mostra l'indice di ricerca.
+
+        Le voci dell'indice sono normalizzate - minuscole, senza punteggiatura -
+        e mostrarle tali e quali significava proporre all'ospite di scegliere
+        fra "barolo cannubi marchesi di barolo" e "barolo bussia tenuta rocca".
+        """
+        f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI"])
+        for voce in f.candidati:
+            assert voce != voce.lower() or not voce.isascii(), \
+                f"{voce!r} sembra il testo normalizzato dell'indice"
+
+    def test_ogni_alternativa_sa_a_quale_record_corrisponde(self, m):
+        f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI"])
+        assert len(f.riferimenti) == len(f.candidati)
+
+    def test_scegliere_un_alternativa_da_proprio_quel_record(self, m):
+        """Ricercare il NOME del candidato poteva riportare a un altro vino."""
+        f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI"])
+        if not f.riferimenti:
+            pytest.skip("nessuna alternativa da questa etichetta")
+        scelto = m.fatti_di(*f.riferimenti[0])
+        assert not scelto.vuoto
+        assert scelto.sicurezza == 100.0, "l'ha scelto una persona: e' certo"
+        atteso = f.candidati[0].split(" — ")[0]
+        trovato = " ".join(filter(None, [scelto.nome, scelto.tipologia,
+                                         scelto.denominazione]))
+        assert atteso in trovato or trovato in atteso, \
+            f"toccato {atteso!r}, composto {trovato!r}"
+
+
+class TestFigureBrutte:
+    """I casi veri che hanno prodotto un'affermazione sbagliata a schermo.
+
+    Ognuno viene da un'etichetta fotografata davvero, e ognuno e' costato una
+    modifica al calcolo della sicurezza. Stanno qui perche' non tornino.
+    """
+
+    def test_un_refuso_non_deve_far_perdere_il_record_giusto(self, m):
+        """«TINUTA ROCCA BAROLO BUSSIA»: una lettera sbagliata su «Tenuta».
+
+        token_set_ratio e' tutto-o-niente sui token: bastava quella «i» per far
+        crollare «tenuta rocca barolo bussia» a 58.8, mentre un altro
+        produttore chiamato semplicemente «Rocca» prendeva 100 con la sua unica
+        parola. Vinceva il record che spiegava UNA parola su sette.
+        """
+        f = m.cerca(["TINUTA", "ROCCA", "BAROLO", "BUSSIA", "2010",
+                     "DENOMINAZIONE DI ORIGINE CONTROLLATA E GARANTITA"])
+        nome = (f.nome or "").lower()
+        cantina = (f.cantina or "").lower()
+        assert "bussia" in nome or "bussia" in f"{nome} {cantina}", \
+            f"riconosciuto {cantina!r} / {nome!r}"
+
+    def test_due_produttori_vicini_non_si_dichiarano_certi(self, m):
+        """«Monte Antico» contro «Monte Giove»: 90 contro 87.6.
+
+        Il primo classificato era il produttore SBAGLIATO, e quello giusto
+        stava 2.4 punti sotto. Con due nomi cosi' vicini il dispositivo non
+        riconosce: sceglie a caso. Deve chiedere.
+        """
+        f = m.cerca(["Monte", "Antico", "Toscana", "Indicacsione Gecgafica Tipica",
+                     "Sangiovese, Merlot", "and Cabernet Saucignon", "Red Wine"])
+        if f.cantina and "antico" not in f.cantina.lower():
+            assert not f.certo, (
+                f"dichiarato certo il produttore {f.cantina!r} mentre "
+                f"l'etichetta dice «Monte Antico»")
+
+    def test_i_punti_fra_le_parole_non_le_incollano(self, m):
+        """«COMM.G.B.BURLOTTO»: l'OCR legge i punti, non gli spazi.
+
+        Togliendo ogni punto quella riga diventava l'unico token
+        «commgbburlotto», mentre lo stesso produttore in archivio - scritto
+        «Comm. G.B. Burlotto», con gli spazi - era «comm gb burlotto». Lo
+        stesso nome in due forme diverse: il suo Barolo Vigneto Cannubi era
+        nel database e non veniva trovato. Vinceva invece «Ca'Stella», che si
+        accontentava della «Stella Polare» stampata sulla retroetichetta, e si
+        dichiarava CERTA con 92.
+        """
+        f = m.cerca(["Barole", "CANNUBI", "COMM.G.B.BURLOTTO",
+                     "Imbottigliato da Burlotto Marina", "VERDUNO", "ITALIA",
+                     "unici provveditori della Real Casa",
+                     "spedizione Duca degli Abruzzi al Polo Nord",
+                     "nel 1899 con la Stella Polare"])
+        assert "burlotto" in (f.cantina or "").lower(), \
+            f"riconosciuto il produttore {f.cantina!r}"
+
+    def test_una_parola_della_retroetichetta_non_conferma_un_produttore(self, m):
+        """L'altro capo dello stesso caso, isolato.
+
+        Senza le righe che nominano Burlotto, «stella» resta l'unico appiglio:
+        una parola sola, presa da un testo di retro, non puo' bastare a
+        dichiarare certo un produttore.
+        """
+        f = m.cerca(["Barole", "CANNUBI", "VERDUNO", "ITALIA",
+                     "unici provveditori della Real Casa",
+                     "spedizione Duca degli Abruzzi al Polo Nord",
+                     "nel 1899 con la Stella Polare"])
+        cantina = (f.cantina or "").lower()
+        assert not (f.certo and "stella" in cantina), (
+            f"dichiarato certo {f.cantina!r} ({f.sicurezza:.0f}) su una parola "
+            "di retroetichetta")
+
+    def test_un_vino_di_una_parola_non_basta_a_se_stesso(self, m):
+        """Un record «Rocca»/«Rocca» spiegava una parola e diceva 100."""
+        f = m.cerca(["ROCCA"])
+        assert not f.certo, "una parola sola non puo' identificare un produttore"
+
+
+class TestVerificaCompleta:
+    def test_si_verificano_tutti_i_candidati_non_solo_i_primi(self):
+        """Chi resta fuori dalla verifica conserva il punteggio gonfiato.
+
+        La verifica ABBASSA i punteggi. Fermarsi ai primi 25 su 200 voleva dire
+        che il 26esimo, mai esaminato, poteva scavalcare tutti dopo il riordino
+        e presentarsi come certo senza aver mai superato l'esame.
+        """
+        from amelie.matcher import CANDIDATI, VERIFICATI
+        assert VERIFICATI >= CANDIDATI

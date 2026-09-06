@@ -60,9 +60,7 @@ def normalizza(s: str, *, collassa_confusioni: bool = True) -> str:
     'chianti 2019'
     """
     s = spoglia_accenti(s).lower()
-    # I punti degli acronimi vanno tolti, non trasformati in spazi, altrimenti
-    # "D.O.C.G." si sbriciola in quattro token da una lettera.
-    s = s.replace(".", "")
+    s = _sciogli_punti(s)
     parti = [p for p in _NON_ALFANUM.split(s) if p]
     if collassa_confusioni:
         # Un token fatto di sole cifre è quasi sempre un'annata o una
@@ -73,6 +71,56 @@ def normalizza(s: str, *, collassa_confusioni: bool = True) -> str:
             for p in parti
         ]
     return " ".join(parti)
+
+
+def _sciogli_punti(s: str) -> str:
+    """Toglie i punti dagli acronimi, ma non incolla parole diverse.
+
+    Togliere ogni punto sbriciolava «D.O.C.G.» in quattro token da una lettera,
+    quindi si toglievano tutti. Ma allora «COMM.G.B.BURLOTTO», che l'OCR legge
+    senza spazi, diventava l'unico token «commgbburlotto», mentre lo stesso
+    produttore nel database - scritto «Comm. G.B. Burlotto», con gli spazi -
+    era «comm gb burlotto». Lo stesso nome, due forme diverse, nessun riscontro:
+    il Barolo Vigneto Cannubi di Burlotto era in archivio e non veniva trovato.
+
+    La regola: il punto incolla fra sigle di una lettera e davanti a un
+    troncamento breve - «F.lli» sta per Fratelli, «S.to» per Santo, e vanno
+    tenuti interi - mentre separa davanti a una parola vera.
+
+    >>> _sciogli_punti("d.o.c.g.")
+    'docg'
+    >>> _sciogli_punti("comm.g.b.burlotto")
+    'comm gb burlotto'
+    >>> _sciogli_punti("f.lli vincenzi")
+    'flli vincenzi'
+    >>> _sciogli_punti("s.to ippolito")
+    'sto ippolito'
+    >>> _sciogli_punti("13.5")
+    '135'
+    """
+    def _unisci(m: re.Match) -> str:
+        pezzi = [p for p in m.group(0).split(".") if p]
+        # Il punto fra cifre e' un separatore decimale, non di parola: «13.5»
+        # e' il grado alcolico, e spezzarlo in «13 5» inventa due numeri.
+        if all(p.isdigit() for p in pezzi):
+            return "".join(pezzi)
+        fuori, sigla = [], []
+        for p in pezzi:
+            # Una lettera sola, o un troncamento che segue una lettera sola:
+            # fanno parte della stessa abbreviazione.
+            if len(p) == 1 or (sigla and len(p) <= 3):
+                sigla.append(p)
+                if len(p) > 1:
+                    fuori.append("".join(sigla)); sigla = []
+                continue
+            if sigla:
+                fuori.append("".join(sigla)); sigla = []
+            fuori.append(p)
+        if sigla:
+            fuori.append("".join(sigla))
+        return " ".join(fuori)
+
+    return re.sub(r"[0-9a-z]+(?:\.[0-9a-z]+)*\.?", _unisci, s)
 
 
 def token(s: str, *, minimo: int = 3) -> list[str]:

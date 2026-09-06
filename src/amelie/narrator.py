@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 from .lessico import Lessico, carica, elenca_in_lingua
-from .matcher import Fatti, Livello
+from .matcher import SOGLIA_DUBBIA, Fatti, Livello
 
 log = logging.getLogger(__name__)
 
@@ -160,7 +160,15 @@ def _colore_sbagliato(testo: str, fatti: Fatti) -> str | None:
 # ---------------------------------------------------------------- template
 
 def _apertura(f: Fatti, lex: Lessico, lingua: str) -> str:
-    """La prima frase dice CHE COSA si ha davanti, con l'onestà del livello."""
+    """La prima frase dice CHE COSA si ha davanti, con l'onestà del livello.
+
+    E con l'onestà della SICUREZZA. Il livello dice quanto è specifico il record
+    trovato; la sicurezza dice quanto somiglia a ciò che c'era sull'etichetta.
+    Sono cose diverse: si può avere un record di livello VINO — nome, cantina,
+    annata, tutto — trovato con una somiglianza del 60%. Annunciarlo come
+    «Questo è il Barolo di Marchesi di Barolo» sarebbe una bugia detta bene.
+    Sotto la soglia della certezza si dice al tavolo che è una supposizione.
+    """
     colore = lex.traduci("tipo", f.colore, lingua=lingua) if f.colore else None
     if f.livello is Livello.VINO and f.nome:
         pezzi = [f"«{f.nome}»"]
@@ -168,8 +176,16 @@ def _apertura(f: Fatti, lex: Lessico, lingua: str) -> str:
             pezzi.append(f"di {f.cantina}")
         if f.annata:
             pezzi.append(f"annata {f.annata}")
-        return "Questo è il " + " ".join(pezzi) + "."
+        cosa = " ".join(pezzi)
+        if f.certo:
+            return "Questo è il " + cosa + "."
+        if f.dubbio:
+            return "Direi che è il " + cosa + "."
+        return "L'etichetta non è nitida: potrebbe essere il " + cosa + "."
     if f.livello is Livello.TIPOLOGIA and f.tipologia:
+        if f.sicurezza < SOGLIA_DUBBIA:
+            return (f"L'etichetta non è nitida. Potrebbe essere "
+                    f"un {f.tipologia}.")
         return (f"Non riesco a leggere l'etichetta con certezza, "
                 f"ma questo è un {f.tipologia}.")
     if f.livello is Livello.DENOMINAZIONE and f.denominazione:
@@ -177,6 +193,8 @@ def _apertura(f: Fatti, lex: Lessico, lingua: str) -> str:
         return (f"L'etichetta non è nitida, ma riconosco la denominazione: "
                 f"{f.denominazione}, {etichetta}.")
     if f.livello is Livello.VITIGNO and f.vitigni:
+        if f.sicurezza < SOGLIA_DUBBIA:
+            return f"L'etichetta non è nitida. Mi pare un {f.vitigni[0]}."
         return (f"Del produttore non sono sicuro, ma il vitigno sì: "
                 f"{f.vitigni[0]}.")
     return "Non riesco a leggere questa etichetta."
