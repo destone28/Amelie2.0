@@ -28,11 +28,17 @@ passo() { echo; echo "${G}==>${N} $*"; }
 
 passo "1/8  Pacchetti di sistema"
 sudo apt-get update -qq
+# fonts-ebgaramond: l'interfaccia lo DICHIARA, e finche' non era installato il
+# testo usciva col serif generico della distribuzione. Non e' la stessa cosa: un
+# Garamond ha l'occhio medio molto piu' piccolo di un Noto Serif, quindi a
+# parita' di corpo il testo cambia di misura apparente e di dove va a capo, e
+# tutte le misure su cui e' disegnata questa interfaccia saltano.
 sudo apt-get install -y -qq \
     python3-venv python3-pip python3-dev build-essential cmake git curl \
     v4l-utils alsa-utils \
     chromium unclutter x11-xserver-utils \
-    libcurl4-openssl-dev
+    libcurl4-openssl-dev \
+    fonts-ebgaramond
 
 passo "2/8  Correzione della corsa all'avvio dell'audio"
 # Mitigazione proposta upstream da Loic Poulain (Linaro) per la UNO Q:

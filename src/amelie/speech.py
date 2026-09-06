@@ -28,12 +28,14 @@ agisce su ciò che il motore legge davvero.
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import logging
 import re
 import shutil
 import subprocess
 import threading
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Iterable, Iterator
@@ -41,6 +43,32 @@ from typing import Iterable, Iterator
 log = logging.getLogger(__name__)
 
 VOCE_PREDEFINITA = "it_IT-serena-medium"
+
+# Il PCM e' lineare: un secondo di parlato sono sempre gli stessi byte. E' cio'
+# che rende possibile un player vero - saltare avanti di cinque secondi e'
+# aritmetica su un offset, non una ricerca dentro un formato compresso.
+def byte_al_secondo(frequenza: int = 22050) -> int:
+    return frequenza * 2          # 16 bit, un canale
+
+
+# Quanto si scrive ad aplay per volta. Cento millisecondi: abbastanza piccolo
+# perche' una pausa si senta subito, abbastanza grande da non costare nulla.
+PEZZO_S = 0.1
+# Il buffer che si lascia ad ALSA. Piu' e' grande, piu' il suono sopravvive a un
+# picco di carico - e questa board ha quattro core contesi da OCR e sintesi - ma
+# piu' la posizione dichiarata corre avanti a quella che l'orecchio sente. Due
+# decimi sono il compromesso: impercettibile, e regge l'OCR in parallelo.
+BUFFER_ALSA_US = 200_000
+# Di quanto si sta AVANTI rispetto a cio' che l'orecchio sente. Senza un freno
+# non lo si decide: si scrive finche' qualcuno accetta, e fra la pipe del
+# sistema (64 KB, cioe' un secondo e mezzo di parlato) e il buffer ALSA la
+# posizione dichiarata scappa avanti di quasi due secondi. Misurato: dopo una
+# ripresa la posizione avanzava di quattro secondi in due. Con un cursore a
+# schermo e un pulsante di pausa quel disallineamento si vede e si sente, per
+# questo si scrive a passo d'orologio tenendo solo questo vantaggio - grande
+# abbastanza da sopravvivere a un OCR che parte, piccolo abbastanza da non
+# accorgersene.
+VANTAGGIO_S = 0.35
 
 # Una voce per lingua. La scelta e' di LICENZA prima che di gusto: vedi la nota
 # in testa al modulo per l'italiano, e docs/ATTRIBUZIONI.md per l'inglese.
@@ -237,15 +265,25 @@ class Voce:
             tmp.replace(percorso)
         return pcm
 
-    def _aplay(self) -> subprocess.Popen:
+    def apri_uscita(self) -> subprocess.Popen:
+        """Un aplay pronto a ricevere PCM grezzo sullo standard input.
+
+        Il buffer ALSA e' tenuto corto di proposito: e' la distanza fra cio' che
+        il dispositivo dice di star riproducendo e cio' che l'orecchio sente, e
+        quando c'e' un pulsante di pausa quella distanza si nota.
+        """
         if not shutil.which("aplay"):
             raise VoceNonDisponibile("aplay non è installato (pacchetto alsa-utils)")
         return subprocess.Popen(
             ["aplay", "-D", self.imp.device_alsa, "-t", "raw", "-f", "S16_LE",
-             "-r", str(self.imp.frequenza), "-c", "1", "-q", "-"],
+             "-r", str(self.imp.frequenza), "-c", "1", "-q",
+             "--buffer-time", str(BUFFER_ALSA_US), "-"],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
+
+    # Il nome vecchio, per chi lo usava.
+    _aplay = apri_uscita
 
     def parla(self, frasi: Iterable[str]) -> None:
         """Riproduce un flusso di frasi, cominciando dalla prima.
@@ -253,7 +291,7 @@ class Voce:
         `aplay` resta aperto per tutta la durata: riaprirlo a ogni frase
         introdurrebbe un buco di silenzio e uno schiocco fra una e l'altra.
         """
-        proc = self._aplay()
+        proc = self.apri_uscita()
         try:
             for frase in frasi:
                 pcm = self.sintetizza(frase)
@@ -333,3 +371,267 @@ FRASI_FISSE = (
     "Non riesco a leggere questa etichetta. Prova a girarla verso di me.",
     "Fammi guardare meglio.",
 )
+
+
+# --------------------------------------------------------------- riproduzione
+
+
+class Riproduttore:
+    """Un racconto che si puo' governare: pausa, salto, ricomincia da capo.
+
+    Il problema che risolve non e' far uscire il suono - per quello bastava
+    `Voce.parla` - ma sapere SEMPRE a che punto si e'. Prima il testo a schermo
+    avanzava a stima, con un `sleep` proporzionale alla lunghezza della frase,
+    mentre la voce andava per conto suo: finche' si va dritti la finzione
+    regge, ma al primo tocco di pausa le due cose divergono e non si
+    riallineano piu'.
+
+    Qui c'e' una sola verita', la POSIZIONE in byte dentro il buffer, e tutto
+    si ricava da quella: i secondi trascorsi, la frase da evidenziare, dove
+    ripartire dopo una pausa.
+
+    La sintesi corre avanti in un thread suo, perche' la prima frase deve
+    poter suonare dopo due secondi come prima, senza aspettare tutto il testo.
+    Su questa board la sintesi va a circa il doppio del tempo reale (RTF 0,54),
+    quindi dopo la prima frase resta comodamente in vantaggio sulla lettura.
+    """
+
+    def __init__(self, voce: "Voce", frasi: list[str], *,
+                 su_avanzamento=None, passo_s: float = 5.0) -> None:
+        self.voce = voce
+        self.frasi = [f for f in frasi if f and f.strip()]
+        self.su_avanzamento = su_avanzamento
+        self.passo_s = passo_s
+
+        self._bps = byte_al_secondo(voce.imp.frequenza)
+        self._pcm = bytearray()
+        # Offset in byte a cui comincia ogni frase: e' quello che permette di
+        # dire QUALE frase si sta ascoltando, invece di indovinarlo.
+        self._inizi: list[int] = []
+        self._posizione = 0
+        self._in_pausa = False
+        self._completo = False
+        self._errore: Exception | None = None
+
+        self._proc: subprocess.Popen | None = None
+        # (istante di partenza, posizione a quell'istante): serve a scrivere a
+        # passo d'orologio invece che a riempire i buffer.
+        self._orologio: tuple[float, int] | None = None
+        self._stato = threading.Lock()
+        self._sveglia = threading.Condition(self._stato)
+        self._fermo = threading.Event()
+        self._finito = threading.Event()
+        self._thread: list[threading.Thread] = []
+
+    # ------------------------------------------------------------ lettura
+
+    @property
+    def posizione_s(self) -> float:
+        return self._posizione / self._bps
+
+    @property
+    def durata_s(self) -> float:
+        """Quanto c'e' GIA' sintetizzato. Cresce mentre si ascolta."""
+        return len(self._pcm) / self._bps
+
+    @property
+    def in_pausa(self) -> bool:
+        return self._in_pausa
+
+    @property
+    def completo(self) -> bool:
+        return self._completo
+
+    @property
+    def indice_frase(self) -> int:
+        """L'ultima frase cominciata prima della posizione attuale."""
+        i = bisect.bisect_right(self._inizi, self._posizione) - 1
+        return max(0, i)
+
+    def istantanea(self) -> dict:
+        return {"posizione": round(self.posizione_s, 2),
+                "durata": round(self.durata_s, 2),
+                "frase": self.indice_frase,
+                "in_pausa": self._in_pausa,
+                "completo": self._completo}
+
+    # ------------------------------------------------------------ comandi
+
+    def avvia(self) -> None:
+        for bersaglio in (self._sintetizza_tutto, self._suona):
+            t = threading.Thread(target=bersaglio, daemon=True)
+            t.start()
+            self._thread.append(t)
+
+    def pausa(self) -> None:
+        with self._sveglia:
+            if self._in_pausa:
+                return
+            self._in_pausa = True
+            # Si torna indietro di quanto ALSA teneva ancora in pancia: quei
+            # decimi di secondo erano gia' stati "scritti" ma non ancora
+            # sentiti, e riprendere piu' avanti taglierebbe una parola.
+            self._posizione = max(0, self._posizione
+                                  - int(self._bps * VANTAGGIO_S))
+            self._chiudi_aplay()
+            self._sveglia.notify_all()
+        self._avvisa()
+
+    def riprendi(self) -> None:
+        with self._sveglia:
+            if not self._in_pausa:
+                return
+            self._in_pausa = False
+            self._sveglia.notify_all()
+        self._avvisa()
+
+    def alterna(self) -> bool:
+        """Il tocco sul pulsante centrale. Restituisce True se ora e' in pausa."""
+        if self._in_pausa:
+            self.riprendi()
+        else:
+            self.pausa()
+        return self._in_pausa
+
+    def salta(self, secondi: float) -> None:
+        """Avanti o indietro. Il limite in avanti e' cio' che e' gia' sintetizzato.
+
+        Non e' un difetto ma un fatto: non si puo' saltare dentro un audio che
+        non esiste ancora. Con la sintesi al doppio del tempo reale il caso si
+        presenta solo nei primissimi secondi.
+        """
+        with self._sveglia:
+            nuovo = self._posizione + int(secondi * self._bps)
+            self._posizione = max(0, min(nuovo, len(self._pcm)))
+            self._chiudi_aplay()          # si butta cio' che ALSA aveva in coda
+            self._sveglia.notify_all()
+        self._avvisa()
+
+    def ricomincia(self) -> None:
+        with self._sveglia:
+            self._posizione = 0
+            self._in_pausa = False
+            self._chiudi_aplay()
+            self._sveglia.notify_all()
+        self._avvisa()
+
+    def ferma(self) -> None:
+        """Basta, e subito: la bottiglia e' stata tolta dal tavolo."""
+        self._fermo.set()
+        with self._sveglia:
+            self._chiudi_aplay()
+            self._sveglia.notify_all()
+
+    def attendi(self, timeout: float | None = None) -> bool:
+        """True se il racconto e' arrivato in fondo, False se l'hanno fermato."""
+        self._finito.wait(timeout)
+        return self._finito.is_set() and not self._fermo.is_set()
+
+    # ------------------------------------------------------------ interni
+
+    def _avvisa(self) -> None:
+        if self.su_avanzamento is None:
+            return
+        try:
+            self.su_avanzamento(self.istantanea())
+        except Exception:                                   # noqa: BLE001
+            log.exception("errore nell'avviso di avanzamento")
+
+    def _chiudi_aplay(self) -> None:
+        """Va chiamata col lucchetto in mano."""
+        proc, self._proc = self._proc, None
+        self._orologio = None
+        if proc is None:
+            return
+        try:
+            # Prima si stacca lo stdin, poi si uccide: chiudendo solo il
+            # processo, il buffer di Python resta da svuotare e all'uscita
+            # dell'interprete salta fuori un BrokenPipeError che non significa
+            # niente ma sporca i registri.
+            proc.stdin.close()
+        except Exception:                                   # noqa: BLE001
+            pass
+        try:
+            proc.kill()                # non terminate: si vuole silenzio ORA
+            proc.wait(timeout=2)
+        except Exception:                                   # noqa: BLE001
+            pass
+
+    def _sintetizza_tutto(self) -> None:
+        try:
+            for frase in self.frasi:
+                if self._fermo.is_set():
+                    return
+                pcm = self.voce.sintetizza(frase)
+                with self._sveglia:
+                    self._inizi.append(len(self._pcm))
+                    self._pcm.extend(pcm)
+                    self._sveglia.notify_all()
+        except Exception as e:                              # noqa: BLE001
+            log.warning("sintesi interrotta: %s", e)
+            self._errore = e
+        finally:
+            with self._sveglia:
+                self._completo = True
+                self._sveglia.notify_all()
+
+    def _suona(self) -> None:
+        pezzo = int(PEZZO_S * self._bps)
+        try:
+            while not self._fermo.is_set():
+                with self._sveglia:
+                    # Si aspetta di avere qualcosa da suonare e il permesso di
+                    # farlo. Il timeout tiene vivo l'avviso di avanzamento anche
+                    # mentre si e' in pausa.
+                    while (not self._fermo.is_set()
+                           and (self._in_pausa
+                                or self._posizione >= len(self._pcm))):
+                        if (not self._in_pausa and self._completo
+                                and self._posizione >= len(self._pcm)):
+                            return                     # arrivati in fondo
+                        self._sveglia.wait(0.25)
+                    if self._fermo.is_set():
+                        return
+                    if self._proc is None:
+                        self._proc = self.voce.apri_uscita()
+                    if self._orologio is None:
+                        self._orologio = (time.monotonic(), self._posizione)
+                    proc = self._proc
+                    partenza, base = self._orologio
+                    inizio = self._posizione
+                    dati = bytes(self._pcm[inizio:inizio + pezzo])
+
+                if not dati:
+                    continue
+
+                # Il passo d'orologio: si scrive quando il tempo reale ha quasi
+                # raggiunto il punto in cui si e' arrivati, mai prima.
+                atteso = partenza + (inizio - base) / self._bps - VANTAGGIO_S
+                ritardo = atteso - time.monotonic()
+                if ritardo > 0:
+                    if self._fermo.wait(ritardo):
+                        return
+                    with self._sveglia:
+                        # Nel frattempo qualcuno puo' aver toccato pausa o
+                        # salto: se e' successo, il pezzo in mano non vale piu'.
+                        if (self._proc is not proc or self._posizione != inizio
+                                or self._in_pausa):
+                            continue
+
+                try:
+                    proc.stdin.write(dati)
+                    proc.stdin.flush()
+                except (BrokenPipeError, ValueError, OSError):
+                    # aplay e' stato chiuso sotto di noi: e' una pausa o un
+                    # salto, non un guasto. Si riparte dalla nuova posizione.
+                    continue
+                with self._sveglia:
+                    # Solo se nel frattempo nessuno ha spostato la testina.
+                    if self._proc is proc and self._posizione == inizio:
+                        self._posizione = inizio + len(dati)
+                self._avvisa()
+        finally:
+            with self._sveglia:
+                self._chiudi_aplay()
+            self._finito.set()
+            self._avvisa()

@@ -2,113 +2,445 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
 <title>Amelie</title>
 <style>
-/* Il pannello e' 800x480 fisici ma viene pilotato a 1280x720, perche' alla sua
-   risoluzione nativa resta nero. Tutto quindi viene scalato di 0,625: un testo
-   da 32 px qui diventa 20 px reali, che a mezzo metro si legge. Sotto i 28 px
-   non si scende. */
+/* ===========================================================================
+   MISURE — tutto quello che segue nasce da questi numeri, non dal gusto.
+
+   Il pannello è 800x480 FISICI, 5 pollici di diagonale, ma viene pilotato a
+   1280x720 perché alla sua risoluzione nativa resta nero. Quindi:
+
+     · ogni misura scritta qui viene ridotta di 0,625 sul vetro
+     · 5" su 800x480 fa 108,9 x 65,3 mm, cioè 7,35 pixel fisici per millimetro
+     · un bersaglio tattile onesto è 9 mm  ->  66 px fisici  ->  106 px QUI
+     · il testo si legge a mezzo metro: 3,5-4 mm  ->  26-29 fisici  ->  42-47 QUI
+
+   È per questo che i numeri sotto sembrano enormi. Non lo sono: sul vetro un
+   pulsante da 108 px è un quadrato di nove millimetri, che è il minimo perché
+   un dito lo centri al primo colpo senza guardare.
+   =========================================================================== */
+
 :root {
-  --fondo:      #17110f;
-  --fondo-alto: #241a16;
-  --oro:        #d9a441;
-  --oro-tenue:  #8a6b30;
-  --testo:      #f2e9df;
-  --testo-lieve:#a99a8c;
-  --rosso:      #7d2b24;
+  /* --- Brand. Bordeaux, oro, avorio, carbone: i colori del marchio. ------- */
+  --bordeaux-scuro:  #3D1512;   /* il fondo di tutto */
+  --bordeaux:        #5A211C;   /* il bordo del marchio, le superfici */
+  --bordeaux-chiaro: #7D2B24;   /* stati, bordi accesi */
+  --oro-scuro:       #8A6B30;   /* filetti, cose spente */
+  --oro:             #C8860D;   /* l'oro del marchio */
+  --oro-chiaro:      #E3B457;   /* testo d'accento, ciò che si tocca */
+  --avorio:          #F4EDE3;   /* il testo principale */
+  --avorio-tenue:    #B9A99A;   /* il testo secondario */
+  --avorio-fioco:    #8C7F74;   /* cio' che c'e' ma non chiama: 4,6:1, AA */
+  --carbone:         #14100F;   /* nero caldo, mai #000 */
+
+  /* I toni degli avvisi, gli stessi che l'anello di luce accende (bridge.py):
+     se il LED e' rosso, il simbolo a schermo non puo' essere dello stesso oro
+     dell'invito. Prima lo erano tutti, e un guasto aveva l'aria di un invito. */
+  --invito-luce:  #FF9628;      /* AMBRA — si chiede qualcosa */
+  --errore-luce:  #EE5F4F;      /* ROSSO — qualcosa non ha funzionato */
+  --neutro-luce:  #B9A99A;
+  /* Il vino nel calice. Non e' --bordeaux-chiaro: su questo fondo darebbe
+     1,71:1, cioe' un liquido che non si vede salire. Questo sta a 3,1:1, che
+     per una forma piena e' abbastanza. */
+  --vino:         #A63A2C;
+
+  /* Il fondo è una tavola in penombra: più chiaro al centro, dove sta la
+     bottiglia, più scuro ai bordi. */
+  --fondo: radial-gradient(ellipse at 50% 118%,
+             #2E100D 0%, var(--bordeaux-scuro) 46%, var(--carbone) 100%);
+
+  /* --- Ritmo. Un solo passo, i suoi multipli. ---------------------------- */
+  --passo: 12px;
+  --raggio: 18px;
+  --raggio-grande: 30px;
+
+  /* --- Bersagli tattili. Vedi il conto in testa al file. ------------------ */
+  --tocco: 108px;          /*  9,2 mm sul vetro */
+  --tocco-grande: 140px;   /* 11,9 mm — il pulsante che si cerca senza guardare */
+
+  /* --- Tipografia, in px CSS (fra parentesi i millimetri sul vetro). ------ */
+  --t-marchio:  132px;     /* 11,2 mm */
+  --t-titolo:    64px;     /*  5,4 mm */
+  --t-sottotit:  34px;     /*  2,9 mm */
+  --t-corpo:     42px;     /*  3,6 mm — il racconto */
+  --t-invito:    40px;     /*  3,4 mm */
+  --t-scelta:    38px;     /*  3,2 mm */
+  --t-minuto:    26px;     /*  2,2 mm — solo cose di servizio */
+
+  --curva: cubic-bezier(.22,.61,.36,1);
 }
-* { margin:0; padding:0; box-sizing:border-box; }
-html, body {
-  width:100%; height:100%; overflow:hidden;
-  background: radial-gradient(ellipse at 50% 120%, var(--fondo-alto) 0%, var(--fondo) 70%);
-  color: var(--testo);
-  font-family: "EB Garamond", Garamond, "Times New Roman", serif;
-  cursor: none;                 /* nessun puntatore: si tocca, non si clicca */
+
+/* ===========================================================================
+   TOCCO — un chiosco non è una pagina web. Tutto ciò che un browser fa di
+   utile a un mouse, qui è un difetto: il cursore che compare, il testo che si
+   seleziona, il lampo azzurro sul tocco, il menu contestuale dopo un secondo
+   di pressione, il doppio tocco che ingrandisce, la pagina che rimbalza.
+   =========================================================================== */
+*, *::before, *::after {
+  margin: 0; padding: 0; box-sizing: border-box;
+  cursor: none;                        /* anche sui pulsanti, che di norma no */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
   -webkit-user-select: none; user-select: none;
-  touch-action: manipulation;
+  -webkit-user-drag: none;
+  /* Il contorno di messa a fuoco disegnava un riquadro attorno all'ultima
+     cosa toccata e ci restava: qui non c'e' tastiera, e quel riquadro non
+     significa niente per nessuno. */
+  -webkit-appearance: none; appearance: none;
 }
-#scena { position:relative; width:100vw; height:100vh; display:flex;
-         align-items:center; justify-content:center; }
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;           /* niente rimbalzo, niente ricarica */
+  touch-action: manipulation;          /* niente ingrandimento al doppio tocco */
+  background: var(--fondo);
+  color: var(--avorio);
+  font-family: "EB Garamond", Garamond, "Times New Roman", serif;
+  font-size: var(--t-corpo);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+svg { display: block; }
+/* Il contorno di messa a fuoco va tolto QUI e non nel selettore universale:
+   la regola dell'agente utente e' `:focus-visible { outline: auto }`, che ha
+   specificita' maggiore di `*` e vinceva. Si vedeva come un riquadro d'oro
+   attorno all'ultima cosa toccata, che ci restava. Qui non c'e' tastiera: non
+   esiste un "elemento in evidenza" da mostrare a nessuno. */
+:focus, :focus-visible, :focus-within { outline: none !important; }
 
-/* Ogni schermata sta sovrapposta alle altre e si scambia in dissolvenza:
-   niente salti, niente riflusso del testo. */
+/* Il disegno e' scritto per 1280x720 e ci resta: la scena e' un rettangolo di
+   quella misura, scalato per stare nel pannello qualunque risoluzione gli
+   venga data. Senza, a 800x480 l'intestazione e i comandi si prendevano tutti
+   i 480 px e al racconto ne restavano DODICI: due decimi di riga. Non un
+   difetto di stile - il dispositivo spariva.
+   Si scala sul minore dei due rapporti perche' 800x480 e' 5:3 e 1280x720 e'
+   16:9: scalando sulla sola larghezza il fondo del racconto finirebbe fuori. */
+#scena {
+  position: absolute; left: 50%; top: 50%;
+  width: 1280px; height: 720px; margin: -360px 0 0 -640px;
+  /* Il fattore lo calcola il JavaScript e lo scrive in --scala. In CSS non si
+     puo': `min(100vw / 1280, 100vh / 720)` sembra giusto ma una divisione fra
+     lunghezze resta una lunghezza, e `scale()` vuole un numero puro - la regola
+     veniva scartata in silenzio e la scena restava fuori centro. */
+  transform: scale(var(--scala, 1));
+  transform-origin: center center;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Le viste stanno una sopra l'altra e si scambiano in dissolvenza: niente
+   salti di layout, niente testo che si riflette mentre lo si legge. */
 .vista {
-  position:absolute; inset:0; display:flex; flex-direction:column;
-  align-items:center; justify-content:center; text-align:center;
-  padding: 44px 64px; gap: 22px;
-  opacity:0; visibility:hidden; transition: opacity .45s ease;
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+  padding: calc(var(--passo) * 3) calc(var(--passo) * 5);
+  gap: calc(var(--passo) * 2);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  /* La visibilita' cambia a dissolvenza FINITA in uscita e subito in entrata.
+     Prima era interpolata: per quattro decimi di secondo dopo una scelta i
+     pulsanti del racconto restavano coperti da pulsanti di scelta invisibili e
+     ancora vivi. `pointer-events` non si anima, quindi non esiste piu' nessuna
+     finestra in cui due viste sono toccabili insieme. */
+  transition: opacity .4s var(--curva), visibility 0s linear .4s;
 }
-.vista.attiva { opacity:1; visibility:visible; }
-
-/* ── attesa ───────────────────────────────────────────────────────────────── */
-#attesa .marchio { font-size:64px; letter-spacing:.22em; color:var(--oro);
-                   font-weight:400; text-transform:uppercase; }
-#attesa .invito  { font-size:30px; color:var(--testo-lieve); font-style:italic; }
-#attesa .filo    { width:180px; height:1px; background:
-                   linear-gradient(90deg, transparent, var(--oro-tenue), transparent); }
-
-/* ── lavorazione ──────────────────────────────────────────────────────────── */
-.calice { width:70px; height:70px; border:2px solid var(--oro-tenue);
-          border-top-color:var(--oro); border-radius:50%;
-          animation: gira 1.4s linear infinite; }
-@keyframes gira { to { transform: rotate(360deg); } }
-#lavoro .frase { font-size:30px; color:var(--testo-lieve); font-style:italic; }
-
-/* ── racconto ─────────────────────────────────────────────────────────────── */
-#racconto { justify-content:flex-start; padding-top:52px; }
-#racconto .titolo   { font-size:44px; color:var(--oro); line-height:1.15;
-                      max-width:96%; }
-#racconto .sottotit { font-size:28px; color:var(--testo-lieve);
-                      letter-spacing:.06em; }
-#racconto .testo    { font-size:32px; line-height:1.5; max-width:94%;
-                      overflow-y:auto; flex:1; }
-/* Il cursore che segue il testo mentre arriva: dice che sta ancora scrivendo. */
-#racconto .testo.scrive::after {
-  content:"▍"; color:var(--oro); animation: lampeggia 1s steps(2) infinite;
+.vista.attiva {
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transition: opacity .4s var(--curva), visibility 0s;
 }
-@keyframes lampeggia { 50% { opacity:0; } }
 
-/* ── conferma ─────────────────────────────────────────────────────────────── */
-#conferma .domanda { font-size:32px; color:var(--testo-lieve); }
-#conferma .scelte  { display:flex; flex-direction:column; gap:14px; width:88%; }
-.scelta { font-size:30px; padding:18px 26px; border:1px solid var(--oro-tenue);
-          border-radius:10px; background:rgba(217,164,65,.06); color:var(--testo); }
-.scelta:active { background:rgba(217,164,65,.22); }
+/* ===========================================================================
+   MARCHIO — la semplificazione del logo.
 
-/* ── avvisi ───────────────────────────────────────────────────────────────── */
-#avviso .simbolo { font-size:56px; color:var(--oro); }
-#avviso .frase   { font-size:34px; max-width:88%; line-height:1.4; }
+   Dell'originale restano le due cose che valgono: i QUATTRO MIRINI agli
+   angoli e la A. La sagoma animale è stata tolta perché sotto il centimetro
+   diventa una macchia, e perché i mirini dicono già quello che il dispositivo
+   fa — inquadrare un'etichetta e leggerla. La A è costruita con tre tratti
+   invece che con un contorno pieno: resta nitida a ogni misura e non dipende
+   da nessun font installato.
+   =========================================================================== */
+.marchio { width: var(--t-marchio); height: var(--t-marchio); }
+.marchio .mirino {
+  fill: none; stroke: var(--oro); stroke-width: 6;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.marchio .lettera {
+  fill: none; stroke: var(--avorio); stroke-width: 7.5;
+  stroke-linecap: butt; stroke-linejoin: miter;
+}
 
-/* Segno discreto di stato tecnico: invisibile a un metro, utile a chi sa. */
-#spia { position:absolute; right:10px; bottom:8px; width:6px; height:6px;
-        border-radius:50%; background:var(--oro-tenue); opacity:.35; }
-#spia.rotto { background:var(--rosso); opacity:.9; }
+.nome {
+  font-size: var(--t-titolo); letter-spacing: .22em;
+  color: var(--oro-chiaro); text-transform: uppercase;
+  margin-top: calc(var(--passo) * 1.5);
+}
+.filo {
+  width: 220px; height: 2px; border: 0;
+  background: linear-gradient(90deg, transparent, var(--oro-scuro), transparent);
+}
+.invito { font-size: var(--t-invito); color: var(--avorio-tenue); }
 
-/* La lingua. Sta in alto a sinistra, dove non copre ne' il titolo ne' il testo,
-   ed e' sempre raggiungibile: un ospite puo' volerla cambiare a meta' racconto,
-   e con i fatti gia' in mano il dispositivo rifa' la storia senza chiedere di
-   rimettere la bottiglia.
+/* ===========================================================================
+   CALICE — il segnale che il dispositivo sta lavorando.
 
-   Il bersaglio e' 64x44 nello spazio scalato, cioe' 40x28 fisici: e' il minimo
-   che un dito centra al primo colpo su un pannello da cinque pollici. Il testo
-   e' piccolo di proposito - la lingua non e' la scena, la bottiglia lo e' - ma
-   il bersaglio no. */
-#lingue { position:absolute; left:0; top:0; display:flex; z-index:5; padding:6px; }
+   Deve reggere sia sei decimi di secondo (l'assestamento) sia venticinque
+   (la scansione con l'OCR), senza diventare irritante: per questo il ciclo è
+   lento e non ha rimbalzi. Si muove SOLO per trasformazione e opacità, che
+   sono le due cose che Chromium sposta sul compositor: l'animazione non tocca
+   il layout e non contende i quattro core all'OCR, che qui è il padrone.
+   =========================================================================== */
+.calice { width: 254px; height: 314px; }
+.calice .vetro {
+  fill: none; stroke: var(--oro); stroke-width: 3;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.calice .vino { fill: var(--vino); }
+.calice .pelo { fill: var(--oro-chiaro); opacity: .7; }
+.calice .livello {
+  animation: versa 4.2s var(--curva) infinite;
+  will-change: transform;
+}
+@keyframes versa {
+  0%   { transform: translateY(46px); }   /* vuoto: il livello e' sotto la coppa */
+  /* Un terzo scarso di coppa: e' la misura in cui si versa un rosso, e riempirlo
+     fino all'orlo faceva sembrare il calice un bicchiere da osteria. */
+  44%  { transform: translateY(19px); }
+  60%  { transform: translateY(19px); }
+  100% { transform: translateY(46px); }
+}
+/* Il pelo del vino ondeggia appena: senza, il livello sembra un cursore che
+   sale, non un liquido. */
+.calice .pelo { animation: respira 2.6s ease-in-out infinite; will-change: transform; }
+@keyframes respira {
+  0%, 100% { transform: translateY(0)   scaleY(1);    }
+  50%      { transform: translateY(-1px) scaleY(.82); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .calice .livello, .calice .pelo { animation: none; }
+  .calice .livello { transform: translateY(24px); }
+}
+.frase { font-size: var(--t-invito); color: var(--avorio-tenue); }
+
+/* ===========================================================================
+   RACCONTO
+   =========================================================================== */
+#racconto {
+  /* Niente `position: relative` qui: sovrascriverebbe l'`absolute` di .vista,
+     e il racconto tornerebbe a farsi dare l'altezza dal contenuto invece che
+     dallo schermo. E' successo: il testo si era ridotto a una riga. */
+  justify-content: flex-start; gap: 0;
+  padding-top: calc(var(--passo) * 2); padding-bottom: 0;
+}
+/* I comandi galleggiano sopra la coda del testo invece di rubargli centocinquanta
+   pixel: la sfumatura in fondo al racconto li stacca gia' da sola. Cosi' il
+   racconto passa da quattro righe a sette e mezza. */
+#racconto .comandi {
+  position: absolute; left: 0; right: 0; bottom: calc(var(--passo) * 2.8);
+  justify-content: center; padding-bottom: 0;
+}
+#racconto .progresso {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--passo) * 1.6);
+}
+#racconto .testo { padding-bottom: 176px; }
+/* Il titolo lascia il posto alle linguette della lingua: senza, un nome lungo
+   ci finisce sotto - e sono 1.751 nomi su 19.358 a superare la riga. */
+.intestazione { flex: 0 0 auto; padding: 0 268px; width: 100%; }
+.titolo {
+  font-size: var(--t-titolo); color: var(--oro-chiaro); line-height: 1.15;
+  /* Un nome lungo non deve spingere il racconto fuori dallo schermo. */
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.sottotit {
+  font-size: var(--t-sottotit); color: var(--avorio-tenue);
+  letter-spacing: .05em; margin-top: calc(var(--passo) * .5);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+
+/* Il testo scorre da solo dietro alla frase in ascolto. La barra di
+   scorrimento è nascosta: qui non si trascina niente col dito, si ascolta. */
+.testo {
+  flex: 1 1 auto; width: 100%;
+  margin: calc(var(--passo) * 1.5) 0;
+  overflow-y: auto; scrollbar-width: none;
+  text-align: left; padding: 0 calc(var(--passo) * 2);
+  /* Una riga di sessanta caratteri stanca l'occhio, e a mezzo metro il ritorno
+     a capo si sbaglia. Sotto i cinquanta si legge senza perdere il segno. */
+  max-width: 1000px;
+  /* Il dito non lo trascina: c'e' il pulsante indietro. Chi tornasse a rileggere
+     verrebbe strappato via dalla frase parlata al primo evento successivo, con
+     un'animazione morbida che gli litiga contro. */
+  touch-action: none;
+}
+/* La sfumatura in testa e in coda dice che il testo continua oltre il bordo.
+   Sta sul testo, come maschera, e NON come due strisce di gradiente sopra la
+   vista: il fondo è radiale, non una tinta piatta, e due rettangoli di colore
+   fisso ci si vedevano sopra come bande. Il costo di ri-generare il livello
+   c'è, ma si paga a ogni FRASE - una volta ogni pochi secondi - non a ogni
+   fotogramma. */
+.testo {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 34px,
+                              #000 calc(100% - 210px), transparent calc(100% - 176px));
+}
+.testo::-webkit-scrollbar { display: none; }
+.testo .frase {
+  font-size: var(--t-corpo); color: var(--avorio-tenue);
+  transition: color .35s var(--curva);
+}
+/* La frase in ascolto si accende. È l'unico legame fra ciò che si sente e ciò
+   che si legge, e adesso è ancorato alla POSIZIONE nell'audio, non a una
+   stima: con un pulsante di pausa una stima divergerebbe al primo tocco. */
+.testo .frase.viva { color: var(--avorio); }
+
+/* --- I comandi. Solo questi reagiscono: il resto dello schermo è inerte. --- */
+.comandi {
+  flex: 0 0 auto; display: flex; align-items: center;
+  gap: calc(var(--passo) * 2); padding-bottom: var(--passo);
+}
+.cmd {
+  width: var(--tocco); height: var(--tocco);
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 2px solid var(--oro-scuro);
+  border-radius: 50%; color: var(--oro-chiaro);
+  font: inherit;
+  transition: transform .12s var(--curva), background-color .2s, border-color .2s;
+}
+.cmd svg { width: 46%; height: 46%; fill: currentColor; }
+.cmd.grande {
+  width: var(--tocco-grande); height: var(--tocco-grande);
+  border-color: var(--oro); border-width: 3px;
+}
+.cmd.grande svg { width: 42%; height: 42%; }
+/* Il ritorno al tocco è immediato e piccolo: su un tavolo serve la conferma
+   che il dito è arrivato, non un effetto. */
+.cmd.premuto {
+  transform: scale(.93);
+  background: rgba(200,134,13,.16);
+  border-color: var(--oro-chiaro);
+}
+.cmd[disabled] { opacity: .28; }
+
+/* La barra di avanzamento si muove per scaleX, non per width: la larghezza
+   costa un ricalcolo di layout a ogni fotogramma, la trasformazione no. */
+.progresso {
+  flex: 0 0 auto; width: 62%; height: 4px; border-radius: 2px;
+  background: rgba(138,107,48,.32); overflow: hidden;
+}
+.progresso .riempito {
+  width: 100%; height: 100%; background: var(--oro);
+  transform: scaleX(0); transform-origin: left center;
+  transition: transform .25s linear; will-change: transform;
+}
+
+/* ===========================================================================
+   CONFERMA — quando il riconoscimento è dubbio si chiede, non si indovina.
+   =========================================================================== */
+.domanda { font-size: var(--t-invito); color: var(--avorio-tenue); }
+.scelte {
+  display: flex; flex-direction: column;
+  /* Trenta pixel, cioe' due millimetri e mezzo sul vetro. Con dodici erano un
+     decimo di dito, e toccare la riga sbagliata non si annulla: non esiste una
+     transizione che riporti alla schermata di conferma. */
+  gap: calc(var(--passo) * 2.5);
+  width: 100%; max-width: 940px;
+}
+/* Legata al suo contenitore, cosi' non colpisce piu' niente fuori di qui: era
+   gia' successo con la linguetta della lingua, che ne ereditava fondo e bordo. */
+#c-scelte .scelta {
+  min-height: var(--tocco);
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 calc(var(--passo) * 2);
+  font-size: var(--t-scelta); color: var(--avorio);
+  background: rgba(90,33,28,.55);
+  border: 2px solid var(--oro-scuro); border-radius: var(--raggio);
+  transition: transform .12s var(--curva), background-color .2s;
+}
+#c-scelte .scelta.premuto {
+  transform: scale(.985);
+  background: rgba(200,134,13,.2); border-color: var(--oro-chiaro);
+}
+
+/* ===========================================================================
+   AVVISO
+   =========================================================================== */
+.simbolo { font-size: 110px; color: var(--invito-luce); line-height: 1; }
+#avviso.errore .simbolo { color: var(--errore-luce); }
+#avviso.neutro .simbolo { color: var(--neutro-luce); }
+#avviso .frase { max-width: 900px; color: var(--avorio); }
+
+/* ===========================================================================
+   LINGUE — in alto a destra, dove non coprono né titolo né testo.
+   =========================================================================== */
+#lingue {
+  position: absolute; right: 0; top: 0; z-index: 6;
+  display: flex; padding: var(--passo) calc(var(--passo) * 1.5);
+}
 .lingua {
-  min-width:64px; height:44px; display:flex; align-items:center;
-  justify-content:center; font-size:22px; letter-spacing:.14em;
-  color:var(--testo-lieve); opacity:.45; transition:opacity .25s, color .25s;
-  border-bottom:2px solid transparent;
+  min-width: var(--tocco); height: var(--tocco);
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--t-sottotit); letter-spacing: .16em;
+  /* Colore pieno, non opacita': a .5 il contrasto scendeva a 2,75:1, sotto
+     qualunque soglia di leggibilita'. */
+  color: var(--avorio-fioco);
+  border-bottom: 3px solid transparent;
+  transition: opacity .25s, color .25s, border-color .25s, transform .12s;
 }
-.lingua.scelta { color:var(--oro); opacity:1; border-bottom-color:var(--oro-tenue); }
+/* Si chiama "corrente", non "scelta": `.scelta` e' gia' la riga della
+   schermata di conferma, e il pulsante della lingua ne ereditava fondo, bordo
+   e raggio. A schermo si vedeva come un riquadro attorno alla lingua attiva,
+   che nessuno aveva disegnato. */
+.lingua.corrente { color: var(--oro-chiaro); border-bottom-color: var(--oro); }
+.lingua.premuto { transform: scale(.94); }
 
-/* Quando la lingua a schermo non ha una voce, il racconto si legge ma non si
-   sente: lo si dice, invece di lasciar credere che l'audio sia rotto. */
-#muto { position:absolute; left:0; bottom:8px; width:100%; text-align:center;
-        font-size:20px; color:var(--testo-lieve); opacity:0;
-        transition:opacity .3s; pointer-events:none; }
-#muto.visibile { opacity:.55; }
+/* ===========================================================================
+   SERVIZIO — cose che si vedono solo quando qualcosa non va.
+   =========================================================================== */
+/* Quando non c'e' voce non c'e' niente da comandare: i pulsanti spariscono
+   invece di restare accesi e inerti sotto le dita di chi li prova, e l'avviso
+   si prende il posto loro. Prima era stampato ATTRAVERSO la barra di
+   avanzamento e sul bordo dei pulsanti. */
+#racconto.senza-voce .comandi,
+#racconto.senza-voce .progresso { display: none; }
+#muto {
+  position: absolute; left: 0; right: 0; bottom: calc(var(--passo) * 2);
+  text-align: center;
+  font-size: var(--t-sottotit); color: var(--avorio-tenue);
+  opacity: 0; transition: opacity .3s; pointer-events: none;
+}
+#muto.visibile { opacity: 1; }
+#spia {
+  position: absolute; right: 10px; bottom: 8px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--oro-scuro); opacity: .3;
+  pointer-events: none;
+}
+#spia.rotto { background: var(--errore-luce); opacity: .95; }
+
+/* Lo stato tecnico si APRE SOPRA la scena, non ci si naviga. Prima era un
+   `location.href`: su un chiosco senza barra degli indirizzi, senza tasto
+   indietro e senza tastiera, chi ci finiva restava su un blocco di JSON finche'
+   qualcuno non entrava da remoto - e il flusso degli eventi, cioe' il racconto
+   in corso, moriva li'. */
+#angolo { position: absolute; right: 0; bottom: 0; width: 110px; height: 110px; z-index: 7; }
+#diagnostica {
+  position: absolute; inset: 0; z-index: 9; background: var(--carbone);
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: var(--passo); padding: calc(var(--passo) * 3);
+}
+#diagnostica[hidden] { display: none; }
+#d-corpo {
+  font-family: ui-monospace, monospace; font-size: 26px; line-height: 1.4;
+  color: var(--avorio); max-height: 70%; overflow: auto; white-space: pre-wrap;
+}
+#d-corpo::-webkit-scrollbar { display: none; }
+#d-chiudi {
+  min-width: calc(var(--tocco) * 2.5); height: var(--tocco);
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--t-scelta); color: var(--avorio);
+  border: 2px solid var(--oro); border-radius: var(--raggio);
+}
+#d-chiudi.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
 </style>
 </head>
 <body>
@@ -116,28 +448,77 @@ html, body {
 
   <div id="lingue"></div>
 
+  <!-- ATTESA -->
   <section id="attesa" class="vista attiva">
-    <div class="marchio">Amelie</div>
+    <svg class="marchio" viewBox="0 0 100 100" aria-hidden="true">
+      <g class="mirino">
+        <path d="M10 30 V18 A8 8 0 0 1 18 10 H30"/>
+        <path d="M70 10 H82 A8 8 0 0 1 90 18 V30"/>
+        <path d="M90 70 V82 A8 8 0 0 1 82 90 H70"/>
+        <path d="M30 90 H18 A8 8 0 0 1 10 82 V70"/>
+      </g>
+      <path class="lettera" d="M35 73 L50 30 L65 73 M39.5 60 H60.5"/>
+    </svg>
+    <div class="nome">Amelie</div>
     <div class="filo"></div>
-    <div class="invito" id="invito">Appoggia una bottiglia</div>
+    <div class="invito" id="invito">Appoggi una bottiglia</div>
   </section>
 
+  <!-- LAVORO -->
   <section id="lavoro" class="vista">
-    <div class="calice"></div>
+    <svg class="calice" viewBox="0 0 100 124" aria-hidden="true">
+      <defs>
+        <!-- Il vino esiste solo dentro la coppa: fuori non si vede salire. -->
+        <clipPath id="coppa">
+          <path d="M30 13 C30 43 37.5 58 50 58 C62.5 58 70 43 70 13 Z"/>
+        </clipPath>
+      </defs>
+      <g clip-path="url(#coppa)">
+        <g class="livello">
+          <rect class="vino" x="22" y="16" width="56" height="54"/>
+          <ellipse class="pelo" cx="50" cy="16" rx="28" ry="2.4"/>
+        </g>
+      </g>
+      <!-- Coppa a tulipano: larga all'orlo, raccolta sul fondo. -->
+      <path class="vetro" d="M30 13 C30 43 37.5 58 50 58 C62.5 58 70 43 70 13"/>
+      <path class="vetro" d="M30 13 H70"/>
+      <path class="vetro" d="M50 58 V97"/>
+      <ellipse class="vetro" cx="50" cy="103" rx="17" ry="5.5"/>
+    </svg>
     <div class="frase" id="frase-lavoro">Sto leggendo l'etichetta…</div>
   </section>
 
+  <!-- RACCONTO -->
   <section id="racconto" class="vista">
-    <div class="titolo"   id="r-titolo"></div>
-    <div class="sottotit" id="r-sottotitolo"></div>
-    <div class="testo"    id="r-testo"></div>
+    <header class="intestazione">
+      <div class="titolo"   id="r-titolo"></div>
+      <div class="sottotit" id="r-sottotitolo"></div>
+    </header>
+    <div class="testo" id="r-testo"></div>
+    <div class="comandi" id="r-comandi">
+      <button class="cmd" data-azione="ricomincia" aria-label="Da capo">
+        <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.3 0 6 2.7 6 6s-2.7 6-6 6-6-2.7-6-6H4c0 4.4 3.6 8 8 8s8-3.6 8-8-3.6-8-8-8z"/></svg>
+      </button>
+      <button class="cmd" data-azione="indietro" aria-label="Indietro">
+        <svg viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>
+      </button>
+      <button class="cmd grande" data-azione="alterna" id="r-alterna" aria-label="Pausa">
+        <svg id="r-icona" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+      </button>
+      <button class="cmd" data-azione="avanti" aria-label="Avanti">
+        <svg viewBox="0 0 24 24"><path d="M13 6v12l8.5-6L13 6zm-.5 6L4 6v12l8.5-6z"/></svg>
+      </button>
+    </div>
+    <div class="progresso"><div class="riempito" id="r-progresso"></div></div>
   </section>
 
+  <!-- CONFERMA -->
   <section id="conferma" class="vista">
     <div class="domanda" id="domanda">Quale di questi?</div>
     <div class="scelte" id="c-scelte"></div>
   </section>
 
+  <!-- AVVISO -->
   <section id="avviso" class="vista">
     <div class="simbolo" id="a-simbolo">↻</div>
     <div class="frase"   id="a-frase"></div>
@@ -145,6 +526,12 @@ html, body {
 
   <div id="muto"></div>
   <div id="spia"></div>
+  <div id="angolo"></div>
+
+  <section id="diagnostica" hidden>
+    <pre id="d-corpo"></pre>
+    <div id="d-chiudi">chiudi</div>
+  </section>
 </div>
 
 <script>
@@ -152,18 +539,178 @@ html, body {
 const $ = (id) => document.getElementById(id);
 const viste = ["attesa", "lavoro", "racconto", "conferma", "avviso"];
 
+/* Un chiosco non deve mai comportarsi da pagina: niente menu contestuale al
+   tocco lungo, niente trascinamento, niente ingrandimento a due dita. Sono
+   difetti che si vedono solo con un dito vero su un tavolo vero. */
+for (const evento of ["contextmenu", "dragstart", "gesturestart", "selectstart"]) {
+  document.addEventListener(evento, (e) => e.preventDefault(), { passive: false });
+}
+
+/* La scena è disegnata per 1280x720 e ci resta: qui si calcola di quanto va
+   ridotta per stare nel pannello, qualunque risoluzione gli venga data. Sul
+   minore dei due rapporti, perché 800x480 è 5:3 e il disegno è 16:9: scalando
+   sulla sola larghezza il fondo del racconto finirebbe fuori dal vetro. */
+function adattaScena() {
+  const k = Math.min(innerWidth / 1280, innerHeight / 720);
+  document.documentElement.style.setProperty("--scala", k);
+}
+adattaScena();
+addEventListener("resize", adattaScena);
+
 function mostra(nome) {
   viste.forEach(v => $(v).classList.toggle("attiva", v === nome));
 }
 
-/* Il testo arriva un pezzo alla volta mentre il modello lo scrive: si accoda
-   invece di sostituire, così non lampeggia e non salta. */
-function scrivi(pezzo, finito) {
-  const t = $("r-testo");
-  t.textContent += pezzo;
-  t.classList.toggle("scrive", !finito);
-  t.scrollTop = t.scrollHeight;
+/* Senza voce non c'è niente da comandare: i pulsanti spariscono e l'avviso
+   prende il loro posto, invece di lasciarli accesi e morti sotto le dita. */
+function segnaVoceMuta(muta) {
+  $("muto").classList.toggle("visibile", muta);
+  $("racconto").classList.toggle("senza-voce", muta);
 }
+
+/* --------------------------------------------------------------- racconto */
+
+let frasi = [];          /* gli span, uno per frase */
+let viva = -1;           /* quale è illuminata adesso */
+
+function componiRacconto(elenco) {
+  const t = $("r-testo");
+  t.innerHTML = "";
+  frasi = (elenco || []).map(testo => {
+    const s = document.createElement("span");
+    s.className = "frase";
+    s.textContent = testo + " ";
+    t.appendChild(s);
+    return s;
+  });
+  viva = -1;
+  t.scrollTop = 0;
+  avanzamento(0);
+}
+
+function illumina(i) {
+  if (i === viva || i < 0 || i >= frasi.length) return;
+  if (frasi[viva]) frasi[viva].classList.remove("viva");
+  viva = i;
+  frasi[viva].classList.add("viva");
+  /* Il testo scorre dietro alla voce: chi ascolta non deve trascinare nulla. */
+  frasi[viva].scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+function avanzamento(quota) {
+  $("r-progresso").style.transform = "scaleX(" + Math.max(0, Math.min(1, quota)) + ")";
+}
+
+const ICONA_PAUSA = "M6 4h4v16H6zM14 4h4v16h-4z";
+const ICONA_PLAY  = "M8 5v14l11-7z";
+let inPausa = false;
+function segnaPausa(valore) {
+  inPausa = valore;
+  $("r-icona").firstElementChild.setAttribute("d", valore ? ICONA_PLAY : ICONA_PAUSA);
+  $("r-alterna").setAttribute("aria-label", valore ? "Riprendi" : "Pausa");
+}
+
+/* ------------------------------------------------------------------ tocco */
+
+/* Un solo posto in cui si decide che cosa è toccabile. Tutto il resto dello
+   schermo è inerte di proposito: su un tavolo di ristorante un tocco
+   accidentale è la norma, non l'eccezione. */
+function rendiToccabile(elemento, azione) {
+  elemento.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    elemento.classList.add("premuto");
+  });
+  for (const evento of ["pointerup", "pointercancel", "pointerleave"]) {
+    elemento.addEventListener(evento, () => elemento.classList.remove("premuto"));
+  }
+  /* Si agisce al RILASCIO, e solo se il dito è ancora sopra: così un tocco
+     partito per sbaglio si annulla scivolando via, come su ogni cosa fatta
+     bene.
+
+     Il confronto è sul RIQUADRO DI PARTENZA, non su elementFromPoint: mentre
+     il dito preme, il pulsante è rimpicciolito al 93% dal ritorno visivo, e
+     chiedere "che cosa c'è sotto questo punto" misurava il dito contro un
+     bersaglio più piccolo di quello che l'occhio vede. Ne nasceva un anello
+     morto di quattro pixel tutt'intorno, proprio dove il dito arriva quando
+     si tocca senza guardare. */
+  elemento.addEventListener("pointerdown", (e) => {
+    elemento._riquadro = elemento.getBoundingClientRect();
+    try { elemento.setPointerCapture(e.pointerId); } catch { /* poco importa */ }
+  });
+  elemento.addEventListener("pointerup", (e) => {
+    const r = elemento._riquadro;
+    if (!r) return;
+    const dentro = e.clientX >= r.left && e.clientX <= r.right &&
+                   e.clientY >= r.top  && e.clientY <= r.bottom;
+    elemento._riquadro = null;
+    if (dentro) azione();
+  });
+}
+
+/* Il filtro anti-rimbalzo è PER AZIONE, e parte da meno infinito: con uno
+   zero condiviso, il primo tocco nei primi duecento millesimi di vita della
+   pagina veniva scartato in silenzio, e "indietro" seguito da "avanti" perdeva
+   il secondo. */
+const ultimoComando = {};
+function comanda(azione) {
+  const ora = performance.now();
+  if (ora - (ultimoComando[azione] ?? -Infinity) < 220) return;
+  ultimoComando[azione] = ora;
+
+  fetch("/racconto/" + azione, { method: "POST" })
+    .then(r => r.json())
+    .then(d => {
+      /* Il server dice se c'era qualcosa da comandare. Un pulsante che non può
+         fare niente si spegne: acceso e inerte è peggio di assente — a racconto
+         finito quello che l'ospite cerca è proprio "da capo", e restava lì a
+         piena luce senza nemmeno un lampo di rifiuto. */
+      spegniComandi(d.ok === false);
+      if (d.ok !== false && "in_pausa" in d) segnaPausa(d.in_pausa === true);
+    })
+    .catch(() => {});
+
+  /* L'icona cambia SUBITO, senza aspettare la risposta: su un tavolo un
+     pulsante che risponde fra duecento millesimi sembra rotto. La risposta
+     conferma o corregge. */
+  if (azione === "alterna")   segnaPausa(!inPausa);
+  if (azione === "ricomincia") { segnaPausa(false); avanzamento(0); }
+}
+
+function spegniComandi(spenti) {
+  document.querySelectorAll("#r-comandi .cmd").forEach(b => { b.disabled = spenti; });
+}
+
+document.querySelectorAll("#r-comandi .cmd").forEach(b => {
+  rendiToccabile(b, () => comanda(b.dataset.azione));
+});
+
+/* --------------------------------------------------------------- lingue */
+
+/* L'elenco lo disegna il server: sa quali lingue esistono e come si chiamano
+   le scritte fisse. La pagina non tiene un proprio elenco, così aggiungere
+   una lingua è un file JSON e nient'altro. */
+function disegnaLingue(m) {
+  document.documentElement.lang = m.lingua || "it";
+  if (m.invito)  $("invito").textContent  = m.invito;
+  if (m.domanda) $("domanda").textContent = m.domanda;
+  if (m.avviso_muto) $("muto").textContent = m.avviso_muto;
+  segnaVoceMuta(m.voce_muta === true);
+
+  const box = $("lingue");
+  const codici = m.disponibili || [];
+  if (codici.length < 2) { box.innerHTML = ""; return; }
+
+  box.innerHTML = "";
+  codici.forEach(codice => {
+    const b = document.createElement("div");
+    b.className = "lingua" + (codice === m.lingua ? " corrente" : "");
+    b.textContent = codice.toUpperCase();
+    rendiToccabile(b, () => fetch("/lingua/" + codice, { method: "POST" }).catch(() => {}));
+    box.appendChild(b);
+  });
+}
+
+/* --------------------------------------------------------------- eventi */
 
 const eventi = new EventSource("/eventi");
 
@@ -174,20 +721,35 @@ eventi.onmessage = (e) => {
   switch (m.tipo) {
     case "stato":
       if (m.vista === "racconto") {
-        $("r-testo").textContent = "";
         $("r-titolo").textContent = m.titolo || "";
         $("r-sottotitolo").textContent = m.sottotitolo || "";
+        /* Il testo si svuota QUI, non quando arriva quello nuovo: fra il
+           cambio di vista e la prima frase passa qualche decimo, e in quel
+           buco si leggerebbe ancora il vino di prima. */
+        componiRacconto([]);
       }
       if (m.vista === "lavoro" && m.frase) $("frase-lavoro").textContent = m.frase;
       if (m.vista === "avviso") {
         $("a-frase").textContent = m.frase || "";
         $("a-simbolo").textContent = m.simbolo || "↻";
+        /* Il tono lo decide il server, che sa se sta chiedendo qualcosa o
+           dichiarando un guasto. Prima erano tutti dello stesso oro. */
+        $("avviso").className = "vista " + (m.tono || "invito");
       }
+      if ("voce_muta" in m) segnaVoceMuta(m.voce_muta === true);
       mostra(m.vista);
       break;
 
-    case "testo":
-      scrivi(m.pezzo || "", !!m.finito);
+    case "racconto":
+      componiRacconto(m.frasi);
+      segnaPausa(false);
+      spegniComandi(false);
+      break;
+
+    case "riproduzione":
+      illumina(m.frase || 0);
+      segnaPausa(m.in_pausa === true);
+      if (m.durata > 0) avanzamento(m.posizione / m.durata);
       break;
 
     case "candidati": {
@@ -197,7 +759,7 @@ eventi.onmessage = (e) => {
         const b = document.createElement("div");
         b.className = "scelta";
         b.textContent = voce;
-        b.onclick = () => fetch("/scegli/" + i, { method: "POST" });
+        rendiToccabile(b, () => fetch("/scegli/" + i, { method: "POST" }).catch(() => {}));
         box.appendChild(b);
       });
       break;
@@ -209,48 +771,59 @@ eventi.onmessage = (e) => {
 
     case "salute":
       $("spia").classList.toggle("rotto", !m.tutto_bene);
-      $("muto").classList.toggle("visibile", m.voce_muta === true);
+      segnaVoceMuta(m.voce_muta === true);
       break;
   }
 };
-
-/* Il selettore di lingua lo disegna il server: sa quali lingue esistono e come
-   si chiamano le scritte fisse. La pagina non tiene un proprio elenco, cosi'
-   aggiungere una lingua e' un file JSON e nient'altro. */
-function disegnaLingue(m) {
-  document.documentElement.lang = m.lingua || "it";
-  if (m.invito)  $("invito").textContent  = m.invito;
-  if (m.domanda) $("domanda").textContent = m.domanda;
-  if (m.avviso_muto) $("muto").textContent = m.avviso_muto;
-  $("muto").classList.toggle("visibile", m.voce_muta === true);
-
-  const box = $("lingue");
-  const codici = m.disponibili || [];
-  if (codici.length < 2) { box.innerHTML = ""; return; }   /* una sola: non si sceglie */
-
-  box.innerHTML = "";
-  codici.forEach(codice => {
-    const b = document.createElement("div");
-    b.className = "lingua" + (codice === m.lingua ? " scelta" : "");
-    b.textContent = codice.toUpperCase();
-    b.onclick = () => fetch("/lingua/" + codice, { method: "POST" });
-    box.appendChild(b);
-  });
-}
 
 /* Se il server cade, EventSource riprova da solo. Si segnala e basta: un
    riavvio della pagina perderebbe il racconto in corso. */
 eventi.onerror = () => $("spia").classList.add("rotto");
 
-/* Tocco prolungato in basso a destra: pagina di stato tecnico, per il collaudo
-   in fiera senza tastiera. */
-let premuto = null;
-document.addEventListener("pointerdown", (e) => {
-  if (e.clientX > innerWidth - 90 && e.clientY > innerHeight - 90) {
-    premuto = setTimeout(() => { location.href = "/stato"; }, 1800);
-  }
-});
-document.addEventListener("pointerup", () => clearTimeout(premuto));
+/* Lo stato tecnico, per il collaudo senza tastiera. Si APRE sopra la scena e
+   non ci si naviga: andarsene da questa pagina, su un chiosco senza barra degli
+   indirizzi, significa non tornare più indietro e perdere il flusso di eventi.
+
+   Tre secondi fermi, con una tolleranza di movimento. Senza la tolleranza il
+   gesto era rovesciato: il centro del contatto su un capacitivo non calibrato
+   oscilla di continuo, quindi non si completava mai per chi lo cercava — e
+   poteva completarsi da solo sotto una mano appoggiata immobile sul bordo. */
+const ANGOLO_TENUTA = 3000;
+const ANGOLO_SCARTO = 30;
+let gesto = null;
+
+function annullaGesto() {
+  if (gesto) { clearTimeout(gesto.t); gesto = null; }
+}
+
+function apriDiagnostica() {
+  gesto = null;
+  $("d-corpo").textContent = "…";
+  fetch("/stato").then(r => r.json())
+    .then(d => { $("d-corpo").textContent = JSON.stringify(d, null, 2); })
+    .catch(e => { $("d-corpo").textContent = "stato non leggibile: " + e; });
+  $("diagnostica").hidden = false;
+}
+
+(function preparaAngolo() {
+  const a = $("angolo");
+  a.addEventListener("pointerdown", (e) => {
+    try { a.setPointerCapture(e.pointerId); } catch { /* poco importa */ }
+    gesto = { id: e.pointerId, x: e.clientX, y: e.clientY,
+              t: setTimeout(apriDiagnostica, ANGOLO_TENUTA) };
+  });
+  a.addEventListener("pointermove", (e) => {
+    if (!gesto || e.pointerId !== gesto.id) return;
+    if (Math.abs(e.clientX - gesto.x) > ANGOLO_SCARTO ||
+        Math.abs(e.clientY - gesto.y) > ANGOLO_SCARTO) annullaGesto();
+  });
+  /* pointercancel è il caso che conta: il browser lo manda quando si prende
+     il tocco per un gesto suo, e senza di lui il pointerup non arriva mai. */
+  a.addEventListener("pointerup", annullaGesto);
+  a.addEventListener("pointercancel", annullaGesto);
+  document.addEventListener("visibilitychange", annullaGesto);
+  rendiToccabile($("d-chiudi"), () => { $("diagnostica").hidden = true; });
+})();
 </script>
 </body>
 </html>

@@ -22,6 +22,17 @@ if [ -z "${XAUTHORITY:-}" ]; then
     done
 fi
 
+# La proposta di tradurre la pagina e' comparsa lo stesso, malgrado i flag:
+# nelle versioni recenti e' una bolla, non piu' una infobar, e si spegne solo
+# dalle preferenze del profilo. Su un chiosco da ristorante una finestrella di
+# Google sopra il marchio non e' un fastidio, e' un difetto.
+PROFILO=/home/arduino/.config/amelie-kiosk/Default
+mkdir -p "$PROFILO"
+if [ ! -s "$PROFILO/Preferences" ] || ! grep -q '"translate"' "$PROFILO/Preferences" 2>/dev/null; then
+    printf '%s' '{"translate":{"enabled":false},"translate_site_blacklist":["127.0.0.1"],"intl":{"accept_languages":"it,en"}}' \
+        > "$PROFILO/Preferences"
+fi
+
 # Il server deve rispondere prima di aprire la pagina, altrimenti Chromium
 # mostra un errore e ci resta.
 for i in $(seq 1 60); do
@@ -44,7 +55,9 @@ exec "$browser" \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \
-    --disable-features=TranslateUI,Translate \
+    --disable-features=TranslateUI,Translate,TranslateSubFrames \
+    --disable-translate \
+    --lang=it \
     --no-first-run \
     --check-for-update-interval=31536000 \
     --disable-pinch \

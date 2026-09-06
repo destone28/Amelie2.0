@@ -48,7 +48,7 @@ from .capture import Camera, CameraNonDisponibile, blocca_esposizione
 from .matcher import Fatti, Livello, Matcher
 from .narrator import Narratore
 from .ocr import Lettore, OCRNonDisponibile
-from .speech import ImpostazioniVoce, Voce, VoceNonDisponibile
+from .speech import ImpostazioniVoce, Riproduttore, Voce, VoceNonDisponibile
 from .state import DURATE_S, Effetto, Evento, Macchina, Stato
 
 log = logging.getLogger("amelie")
@@ -71,6 +71,23 @@ VISTA = {
 
 # Dopo tre letture a vuoto si smette di riprovare.
 TENTATIVI_MAX = 3
+
+# Di quanto saltano i due pulsanti laterali. Cinque secondi: meno non si
+# distingue da un tocco a vuoto, di piu' scavalca una frase intera.
+SALTO_S = 5.0
+# Quanto puo' durare al massimo un racconto prima che il thread di lavoro si
+# liberi comunque. Serve al caso in cui qualcuno mette in pausa e si alza da
+# tavola: la bottiglia tolta lo chiude subito, ma se nessuno la toglie il
+# dispositivo non puo' restare occupato per sempre.
+TETTO_RACCONTO_S = 900.0
+
+# Il tono di ogni schermata, per tenere schermo e anello d'accordo. Prima erano
+# tutti dello stesso oro: un guasto aveva l'aria di un invito.
+TONO = {
+    Stato.RIPOSIZIONA: "invito",     # ambra: si chiede una cosa
+    Stato.GUASTO: "errore",          # rosso: qualcosa non ha funzionato
+    Stato.CONCLUSO: "neutro",
+}
 
 COLORE_ANELLO = {
     Effetto.ANELLO_RESPIRO: AMBRA,
@@ -133,6 +150,11 @@ class Amelie:
         # girare l'OCR per tutta la sera, su una board senza ventola.
         self._tentativi = 0
         self._ferma_voce = threading.Event()
+        # Il racconto in riproduzione, se ce n'e' uno. Lo tocca il thread di
+        # lavoro che lo crea e lo toccano le richieste HTTP dei pulsanti: due
+        # padroni, quindi un lucchetto.
+        self._lettore: Riproduttore | None = None
+        self._lucchetto_lettore = threading.Lock()
 
     # --------------------------------------------------------- comunicazione
 
@@ -164,15 +186,21 @@ class Amelie:
         def frase(chiave: str) -> str:
             return self.lex.frase("schermo", chiave, lingua=self.lingua)
 
-        if stato is Stato.CONCLUSO and self._fatti.vuoto:
+        if stato is Stato.CONCLUSO and self._fatti.vuoto:  # si e' rinunciato
             # Ci si arriva dopo aver rinunciato a leggere l'etichetta: la vista
             # "racconto" mostrerebbe un titolo vuoto e nessun testo, cioe' uno
             # schermo nero con una bottiglia ancora appoggiata sopra.
             self._pubblica({"tipo": "stato", "vista": "avviso", "simbolo": "☐",
-                            "frase": frase("rinuncia")})
+                            "tono": "neutro", "frase": frase("rinuncia"),
+                            "voce_muta": not self._voce_disponibile()})
             return
 
-        m: dict[str, Any] = {"tipo": "stato", "vista": VISTA[stato]}
+        m: dict[str, Any] = {"tipo": "stato", "vista": VISTA[stato],
+                             # Lo schermo e l'anello devono dire la stessa cosa:
+                             # se il LED e' rosso, il simbolo a schermo non puo'
+                             # essere dello stesso oro dell'invito.
+                             "tono": TONO.get(stato, "invito"),
+                             "voce_muta": not self._voce_disponibile()}
         if stato is Stato.RACCONTO:
             f = self._fatti
             m["titolo"] = f.nome or f.tipologia or f.denominazione or (
@@ -255,6 +283,10 @@ class Amelie:
                 self._avvia(self._racconta)
             elif e is Effetto.FERMA_RACCONTO:
                 self._ferma_voce.set()
+                with self._lucchetto_lettore:
+                    lettore, self._lettore = self._lettore, None
+                if lettore is not None:
+                    lettore.ferma()
                 if self.voce:
                     self.voce.zittisci()
             elif e is Effetto.MOSTRA_CANDIDATI:
@@ -358,35 +390,89 @@ class Amelie:
         racconto = self.narratore.racconta(self._fatti)
         log.info("racconto da %s (%d parole)", racconto.origine,
                  len(racconto.testo.split()))
-
-        # Il testo compare a schermo frase per frase, al ritmo della voce: se
-        # arrivasse tutto insieme mentre la voce comincia, si leggerebbe la fine
-        # mentre si ascolta l'inizio.
         frasi = racconto.frasi
 
-        def dillo() -> None:
-            if self.voce is None:
-                return
-            try:
-                self.voce.parla(f for f in frasi if not self._ferma_voce.is_set())
-            except VoceNonDisponibile as e:
-                log.warning("voce non disponibile: %s", e)
+        # Il testo arriva TUTTO INSIEME, e la frase in ascolto si illumina.
+        # Prima compariva un pezzo alla volta, al ritmo stimato della lettura:
+        # una finzione che regge finche' si va dritti, ma con un pulsante di
+        # pausa e uno di riavvolgimento si sfalda al primo tocco. E con un
+        # player davanti, chi guarda vuole vedere quanto manca.
+        self._pubblica({"tipo": "racconto", "frasi": frasi,
+                        "origine": racconto.origine})
 
-        parlante = threading.Thread(target=dillo, daemon=True)
-        parlante.start()
+        if self.voce is None or not self.voce.disponibile_per_lingua:
+            # Nessuna voce per questa lingua: il racconto si legge soltanto, e
+            # allora e' giusto che scorra da solo al ritmo di una lettura.
+            self._scorri_senza_voce(frasi)
+            return
 
+        try:
+            lettore = Riproduttore(
+                self.voce, frasi,
+                su_avanzamento=lambda i: self._pubblica({"tipo": "riproduzione", **i}),
+                passo_s=SALTO_S)
+        except Exception as e:                              # noqa: BLE001
+            log.warning("riproduttore non avviabile: %s", e)
+            self._scorri_senza_voce(frasi)
+            return
+
+        with self._lucchetto_lettore:
+            self._lettore = lettore
+        lettore.avvia()
+        finito = lettore.attendi(timeout=TETTO_RACCONTO_S)
+        with self._lucchetto_lettore:
+            if self._lettore is lettore:
+                self._lettore = None
+        lettore.ferma()
+
+        if finito and not self._ferma_voce.is_set():
+            self.macchina.invia(Evento.RACCONTO_FINITO)
+
+    def _scorri_senza_voce(self, frasi: list[str]) -> None:
+        """Il ripiego quando non c'e' voce: il testo si illumina da solo.
+
+        Il ritmo e' quello di una lettura ad alta voce, circa quindici caratteri
+        al secondo. E' una stima, ma qui non c'e' nessun audio con cui possa
+        andare fuori sincrono.
+        """
         for i, frase in enumerate(frasi):
             if self._ferma_voce.is_set():
-                break
-            self._pubblica({"tipo": "testo", "pezzo": frase + " ",
-                            "finito": i == len(frasi) - 1})
-            # Il ritmo segue la lettura: circa quindici caratteri al secondo,
-            # che e' la velocita' con cui una voce italiana pronuncia.
+                return
+            self._pubblica({"tipo": "riproduzione", "frase": i,
+                            "posizione": 0.0, "durata": 0.0,
+                            "in_pausa": False, "completo": False,
+                            "senza_voce": True})
             time.sleep(min(6.0, max(1.0, len(frase) / 15)))
-
-        parlante.join(timeout=90)
         if not self._ferma_voce.is_set():
             self.macchina.invia(Evento.RACCONTO_FINITO)
+
+    # ------------------------------------------------------------- comandi
+
+    def comanda_racconto(self, azione: str) -> dict:
+        """I pulsanti sotto il racconto. Nient'altro sullo schermo reagisce.
+
+        Se non c'e' niente in riproduzione si risponde e basta: un tocco che
+        arriva mentre il racconto sta finendo non deve sollevare nulla.
+        """
+        with self._lucchetto_lettore:
+            lettore = self._lettore
+        if lettore is None:
+            return {"ok": False}
+        if azione == "alterna":
+            lettore.alterna()
+        elif azione == "pausa":
+            lettore.pausa()
+        elif azione == "riprendi":
+            lettore.riprendi()
+        elif azione == "avanti":
+            lettore.salta(SALTO_S)
+        elif azione == "indietro":
+            lettore.salta(-SALTO_S)
+        elif azione == "ricomincia":
+            lettore.ricomincia()
+        else:
+            return {"ok": False, "motivo": "azione sconosciuta"}
+        return {"ok": True, **lettore.istantanea()}
 
     def scegli(self, indice: int) -> None:
         """L'ospite ha toccato uno dei candidati.
@@ -491,6 +577,16 @@ def crea_app(amelie: Amelie):
         try:
             yield
         finally:
+            # Si sveglia ogni pagina aperta con un segnale di fine. Senza,
+            # il flusso di eventi resta appeso su una coda che nessuno
+            # riempira' piu': uvicorn aspetta educatamente che la connessione
+            # si chiuda, il chiosco non la chiude mai, e lo spegnimento del
+            # servizio finisce a colpi di SIGKILL dopo un minuto e mezzo.
+            for coda in list(amelie._ascoltatori):
+                try:
+                    coda.put_nowait(None)
+                except asyncio.QueueFull:
+                    pass
             for c in compiti:
                 c.cancel()
 
@@ -500,7 +596,15 @@ def crea_app(amelie: Amelie):
 
     @app.get("/")
     async def pagina():
-        return FileResponse(STATICI / "index.html")
+        # Mai in cache. Il chiosco apre questa pagina una volta sola, all'avvio,
+        # e ci resta per giorni: se Chromium se la tiene, aggiornare
+        # l'interfaccia non basta piu' a cambiarla e bisogna ricordarsi di
+        # riavviare anche il chiosco. E' successo, e si e' visto come una
+        # schermata vecchia che non cambiava per nessun motivo.
+        return FileResponse(
+            STATICI / "index.html",
+            headers={"Cache-Control": "no-store, must-revalidate",
+                     "Pragma": "no-cache", "Expires": "0"})
 
     @app.get("/eventi")
     async def eventi():
@@ -515,6 +619,8 @@ def crea_app(amelie: Amelie):
                 amelie._manda_lingua()
                 while True:
                     dati = await coda.get()
+                    if dati is None:        # il servizio sta chiudendo
+                        return
                     yield f"data: {dati}\n\n"
             finally:
                 amelie._ascoltatori.discard(coda)
@@ -527,6 +633,10 @@ def crea_app(amelie: Amelie):
     async def scegli(indice: int):
         amelie.scegli(indice)
         return JSONResponse({"ok": True})
+
+    @app.post("/racconto/{azione}")
+    async def racconto(azione: str):
+        return JSONResponse(amelie.comanda_racconto(azione))
 
     @app.post("/lingua/{codice}")
     async def lingua(codice: str):
@@ -577,8 +687,12 @@ def main() -> None:
         device_audio=args.audio, porta=args.porta)
 
     import uvicorn
+    # Il tetto sullo spegnimento e' una rete di sicurezza, non la soluzione:
+    # quella e' svegliare i flussi di eventi (vedi ciclo_di_vita). Ma se un
+    # domani qualcosa restasse appeso, meglio cinque secondi che il minuto e
+    # mezzo che systemd concede prima di uccidere.
     uvicorn.run(crea_app(Amelie(cfg)), host="127.0.0.1", port=args.porta,
-                log_level="warning")
+                log_level="warning", timeout_graceful_shutdown=5)
 
 
 if __name__ == "__main__":
