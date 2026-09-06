@@ -10,7 +10,7 @@ RemainAfterExit=yes
 ExecStartPre=/bin/sleep 5
 ExecStart=/usr/local/bin/amelie-display.sh
 Environment=DISPLAY=:0
-Environment=XAUTHORITY=/var/lib/lightdm/.Xauthority
+Environment=XAUTHORITY=/home/arduino/.Xauthority
 
 [Install]
 WantedBy=graphical.target

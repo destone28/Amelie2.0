@@ -84,10 +84,16 @@ sudo systemctl daemon-reload
 sudo systemctl enable amelie-llm amelie-audio-guard amelie-display amelie amelie-kiosk
 
 passo "8/8  Avvio automatico della sessione grafica"
-if ! grep -q "^autologin-user=" /etc/lightdm/lightdm.conf 2>/dev/null; then
-    sudo sed -i '/^\[Seat:\*\]/a autologin-user=arduino' /etc/lightdm/lightdm.conf \
-        || echo "    configura a mano l'autologin in /etc/lightdm/lightdm.conf"
-fi
+# Senza autologin il server X appartiene al greeter e Chromium non riesce ad
+# aprirlo: fallisce con "The platform failed to initialize", che non dice quale
+# sia il problema. Con l'autologin la sessione e' di arduino e ~/.Xauthority
+# funziona.
+sudo mkdir -p /etc/lightdm/lightdm.conf.d
+sudo tee /etc/lightdm/lightdm.conf.d/50-amelie-autologin.conf >/dev/null <<'EOF'
+[Seat:*]
+autologin-user=arduino
+autologin-user-timeout=0
+EOF
 
 echo
 echo "${G}Fatto.${N}  Riavvia per verificare l'avvio completo:  sudo reboot"

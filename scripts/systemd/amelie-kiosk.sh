@@ -12,7 +12,15 @@
 set -uo pipefail
 
 export DISPLAY="${DISPLAY:-:0}"
-[ -z "${XAUTHORITY:-}" ] && export XAUTHORITY=/var/lib/lightdm/.Xauthority
+# L'autorizzazione X della SESSIONE dell'utente, non quella del greeter: con
+# l'autologin attivo il server X appartiene ad arduino, e il file del greeter
+# non e' leggibile da lui. Chromium fallisce con "The platform failed to
+# initialize" ed e' un errore che non dice quale sia il problema.
+if [ -z "${XAUTHORITY:-}" ]; then
+    for x in "$HOME/.Xauthority" /var/lib/lightdm/.Xauthority; do
+        [ -r "$x" ] && { export XAUTHORITY="$x"; break; }
+    done
+fi
 
 # Il server deve rispondere prima di aprire la pagina, altrimenti Chromium
 # mostra un errore e ci resta.

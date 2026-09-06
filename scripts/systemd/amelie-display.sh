@@ -22,7 +22,7 @@ FREQ="${AMELIE_FREQ:-60}"
 
 export DISPLAY="${DISPLAY:-:0}"
 if [ -z "${XAUTHORITY:-}" ]; then
-  for x in /var/lib/lightdm/.Xauthority /run/lightdm/root/:0 /var/run/lightdm/root/:0; do
+  for x in "$HOME/.Xauthority" /var/lib/lightdm/.Xauthority /run/lightdm/root/:0; do
     [ -r "$x" ] && { export XAUTHORITY="$x"; break; }
   done
 fi

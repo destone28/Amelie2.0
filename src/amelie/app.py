@@ -83,7 +83,17 @@ class Configurazione:
     simula_mcu: bool = False
     senza_camera: bool = False
     senza_voce: bool = False
-    senza_modello: bool = False
+    # Il modello e' SPENTO in modo predefinito, e non e' una scelta di comodo.
+    # Misurato su questa board, un modello da 1 miliardo di parametri produce
+    # italiano non presentabile: «La Falanghina e' un'annata di media eta'»,
+    # «Il colore della bacca e' bianco» (recita l'etichetta del campo), e sul
+    # Nebbiolo inverte i fatti - il template dice «colore scarico» e lui scrive
+    # «colore scuro». Provati anche Qwen 2.5 1.5B (peggiore e piu' lento) e la
+    # riscrittura del template (butta via meta' dei fatti).
+    # Il testo pre-generato in cache resta la prima scelta; sotto c'e' il
+    # template, che e' vero per costruzione. Con --con-modello si riaccende la
+    # generazione dal vivo per l'ignoto.
+    senza_modello: bool = True
     device_audio: str = "hw:0,3"
     porta: int = 8080
     periodo_sensore_s: float = 0.15
@@ -397,7 +407,9 @@ def main() -> None:
     ap.add_argument("--simula-mcu", action="store_true")
     ap.add_argument("--senza-camera", action="store_true")
     ap.add_argument("--senza-voce", action="store_true")
-    ap.add_argument("--senza-modello", action="store_true")
+    ap.add_argument("--con-modello", action="store_true",
+                    help="genera dal vivo per cio' che non e' in cache "
+                         "(lento e di qualita' incerta: vedi docs/04-QUALITA.md)")
     ap.add_argument("--porta", type=int, default=8080)
     ap.add_argument("--audio", default="hw:0,3")
     ap.add_argument("-v", "--verboso", action="store_true")
@@ -409,7 +421,7 @@ def main() -> None:
 
     cfg = Configurazione(
         simula_mcu=args.simula_mcu, senza_camera=args.senza_camera,
-        senza_voce=args.senza_voce, senza_modello=args.senza_modello,
+        senza_voce=args.senza_voce, senza_modello=not args.con_modello,
         device_audio=args.audio, porta=args.porta)
 
     import uvicorn

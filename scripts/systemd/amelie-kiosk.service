@@ -7,7 +7,7 @@ Requires=amelie-display.service
 Type=simple
 User=arduino
 Environment=DISPLAY=:0
-Environment=XAUTHORITY=/var/lib/lightdm/.Xauthority
+Environment=XAUTHORITY=/home/arduino/.Xauthority
 ExecStartPre=/bin/sleep 8
 ExecStart=/usr/local/bin/amelie-kiosk.sh
 Restart=always
