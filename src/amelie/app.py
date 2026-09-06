@@ -481,6 +481,11 @@ def crea_app(amelie: Amelie):
         amelie._loop = asyncio.get_running_loop()
         compiti = [asyncio.create_task(amelie.sorveglia()),
                    asyncio.create_task(amelie.salute())]
+        # Le voci si caricano ADESSO, in un thread a parte: quindici secondi
+        # l'una mentre nessuno guarda non li vede nessuno, gli stessi quindici
+        # secondi dopo che un ospite ha toccato la bandierina sono un guasto.
+        if amelie.voce is not None:
+            threading.Thread(target=amelie.voce.scalda, daemon=True).start()
         amelie._mostra(amelie.macchina.stato)
         amelie._manda_lingua()
         try:

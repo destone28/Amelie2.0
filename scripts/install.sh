@@ -15,8 +15,10 @@ set -euo pipefail
 RADICE="${RADICE:-$HOME/amelie}"
 MODELLO_LLM="gemma-3-1b-it-Q4_K_M.gguf"
 URL_LLM="https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/$MODELLO_LLM"
-VOCE="it_IT-serena-medium"
-URL_VOCE="https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/serena/medium"
+# Una voce per lingua. Entrambe addestrate DA ZERO su dataset liberi: vedi
+# docs/ATTRIBUZIONI.md per il perche' non si prendono le piu' diffuse.
+BASE_VOCI="https://huggingface.co/rhasspy/piper-voices/resolve/main"
+VOCI="it/it_IT/serena/medium/it_IT-serena-medium en/en_US/ljspeech/medium/en_US-ljspeech-medium"
 
 SALTA_MODELLO=0
 [ "${1:-}" = "--senza-modello" ] && SALTA_MODELLO=1
@@ -75,9 +77,12 @@ cat > models/NOTICE <<'EOF'
 Gemma is provided under and subject to the Gemma Terms of Use found at
 ai.google.dev/gemma/terms
 EOF
-for est in onnx onnx.json; do
-    [ -f "models/$VOCE.$est" ] || curl -sL --retry 3 \
-        -o "models/$VOCE.$est" "$URL_VOCE/$VOCE.$est" || true
+for percorso in $VOCI; do
+    voce="${percorso##*/}"
+    for est in onnx onnx.json; do
+        [ -f "models/$voce.$est" ] || curl -sL --retry 3 \
+            -o "models/$voce.$est" "$BASE_VOCI/$percorso.$est" || true
+    done
 done
 
 passo "6/8  Database dei vini"

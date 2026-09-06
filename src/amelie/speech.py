@@ -34,7 +34,7 @@ import re
 import shutil
 import subprocess
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Iterable, Iterator
 
@@ -48,6 +48,14 @@ VOCE_PREDEFINITA = "it_IT-serena-medium"
 # meglio del sentire un motore italiano leggere l'inglese.
 VOCI = {
     "it": "it_IT-serena-medium",
+    # Addestrata DA ZERO sul dataset LJ Speech, di pubblico dominio. La scelta
+    # e' la stessa dell'italiano e per la stessa ragione: le voci inglesi piu'
+    # diffuse di Piper - `lessac` e tutte quelle rifinite a partire da lei,
+    # `alba` e `libritts_r` comprese - poggiano sul dataset Blizzard Challenge
+    # 2013, che vieta esplicitamente l'uso commerciale. Qui l'uso puo' essere
+    # commerciale, quindi non basta che la scheda dica CC BY: bisogna guardare
+    # anche da CHE COSA e' stata rifinita.
+    "en": "en_US-ljspeech-medium",
 }
 CARTELLA_CACHE = Path.home() / ".cache" / "amelie" / "voce"
 
@@ -126,7 +134,12 @@ class Voce:
 
     def __init__(self, impostazioni: ImpostazioniVoce | None = None) -> None:
         self.imp = impostazioni or ImpostazioniVoce()
-        self._voce = None
+        # Le voci caricate, per nome di modello. Si tengono TUTTE: caricarne una
+        # costa quindici secondi su questa board, e un ospite che tocca la
+        # bandierina non puo' restare quindici secondi in silenzio a chiedersi
+        # se ha rotto qualcosa. Sono sessanta megabyte l'una, su tre giga e
+        # mezzo: si pagano una volta e non si ripagano piu'.
+        self._voci: dict[str, object] = {}
         self._lock = threading.Lock()
         # Falso quando la lingua a schermo non ha una voce: il racconto si legge
         # ma non si sente. Meglio del silenzio inspiegato, e molto meglio di un
@@ -137,32 +150,50 @@ class Voce:
 
     # -------------------------------------------------------------- motore
 
-    def _carica(self):
-        if self._voce is not None:
-            return self._voce
+    def _carica(self, modello: str | None = None):
+        nome = modello or self.imp.modello
+        if (gia := self._voci.get(nome)) is not None:
+            return gia
         with self._lock:
-            if self._voce is not None:
-                return self._voce
+            if (gia := self._voci.get(nome)) is not None:
+                return gia
             try:
                 from piper import PiperVoice
             except ImportError as e:  # pragma: no cover
                 raise VoceNonDisponibile(
                     "il pacchetto 'piper-tts' non è installato"
                 ) from e
-            percorso = self._percorso_modello()
+            percorso = self._percorso_modello(nome)
             log.info("carico la voce %s", percorso)
-            self._voce = PiperVoice.load(str(percorso))
-            return self._voce
+            self._voci[nome] = PiperVoice.load(str(percorso))
+            return self._voci[nome]
 
-    def _percorso_modello(self) -> Path:
+    def scalda(self, lingue: Iterable[str] = ()) -> None:
+        """Carica in anticipo le voci delle lingue indicate.
+
+        Va chiamata all'avvio, fuori dal percorso dell'ospite: quindici secondi
+        mentre nessuno guarda non li vede nessuno, gli stessi quindici secondi
+        dopo un tocco sono un guasto.
+        """
+        for lingua in (lingue or VOCI):
+            modello = VOCI.get(lingua)
+            if not modello:
+                continue
+            try:
+                self._carica(modello)
+            except VoceNonDisponibile as e:
+                log.warning("voce %s non caricata: %s", modello, e)
+
+    def _percorso_modello(self, modello: str | None = None) -> Path:
+        nome = modello or self.imp.modello
         for base in (Path.home() / ".local" / "share" / "piper" / "voices",
                      Path.home() / "amelie" / "models",
                      Path("/usr/share/piper-voices")):
-            p = base / f"{self.imp.modello}.onnx"
+            p = base / f"{nome}.onnx"
             if p.exists():
                 return p
         raise VoceNonDisponibile(
-            f"modello {self.imp.modello}.onnx non trovato. "
+            f"modello {nome}.onnx non trovato. "
             f"Scaricalo con scripts/fetch_voce.sh"
         )
 
@@ -260,8 +291,9 @@ class Voce:
         if nuovo == self.imp.modello:
             return True
         with self._lock:
-            self.imp.modello = nuovo
-            self._voce = None      # si ricarica alla prossima frase
+            # ImpostazioniVoce e' congelato di proposito - e' configurazione,
+            # non stato - quindi se ne costruisce uno nuovo invece di mutarlo.
+            self.imp = replace(self.imp, modello=nuovo)
         log.info("voce: %s", nuovo)
         return True
 
