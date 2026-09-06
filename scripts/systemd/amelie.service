@@ -1,0 +1,20 @@
+[Unit]
+Description=Amelie - applicazione
+After=network.target amelie-llm.service amelie-audio-guard.service
+Wants=amelie-llm.service
+
+[Service]
+Type=simple
+User=arduino
+WorkingDirectory=/home/arduino/amelie
+Environment=PYTHONPATH=/home/arduino/amelie/src
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/arduino/amelie/venv/bin/python -m amelie.app --porta 8080
+Restart=always
+RestartSec=5
+# Un Amelie che non parte e' peggio di un Amelie muto: se il modello o l'MCU
+# mancano, l'applicazione deve avviarsi lo stesso e dirlo sulla pagina di stato.
+MemoryMax=900M
+
+[Install]
+WantedBy=multi-user.target

@@ -38,9 +38,23 @@ MODELLO = "gemma-3-1b-it-Q4_K_M"
 
 
 def da_fare(con: sqlite3.Connection, ambito: str, lingua: str) -> list[tuple[int, str]]:
-    tabella = {"denominazione": "denominazione", "vitigno": "vitigno"}[ambito]
-    filtro = " WHERE descrizione IS NOT NULL" if ambito == "vitigno" else ""
-    tutti = con.execute(f"SELECT id, nome FROM {tabella}{filtro} ORDER BY id").fetchall()
+    """Cosa manca, ordinato per QUANTO SERVE.
+
+    Nove ore di calcolo sono una notte intera: se si interrompe a meta', le
+    voci gia' fatte devono essere quelle che il dispositivo incontrera' davvero.
+    Le denominazioni si ordinano per quanti vini vi fanno riferimento - un
+    Chianti si incontra ogni sera, un Valtellina Superiore Sassella molto meno.
+    """
+    if ambito == "denominazione":
+        tutti = con.execute(
+            "SELECT d.id, d.nome FROM denominazione d"
+            " LEFT JOIN vino v ON v.denominazione_id = d.id"
+            " GROUP BY d.id ORDER BY count(v.id) DESC, d.nome"
+        ).fetchall()
+    else:
+        tutti = con.execute(
+            "SELECT id, nome FROM vitigno WHERE descrizione IS NOT NULL"
+            " ORDER BY id").fetchall()
     fatti = {r[0] for r in con.execute(
         "SELECT ambito_id FROM racconto WHERE ambito=? AND lingua=?", (ambito, lingua))}
     return [(i, n) for i, n in tutti if i not in fatti]
@@ -98,7 +112,7 @@ def main() -> None:
                 if ok:
                     testo, origine = grezzo, "modello"
                     break
-                print(f"    scartato ({nome}): {invenzioni}")
+                print(f"    scartato ({nome}): {invenzioni}")  # noqa: B023
         except ModelloNonDisponibile as e:
             print(f"  modello caduto: {e}")
             break

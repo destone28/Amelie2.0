@@ -1,0 +1,21 @@
+[Unit]
+Description=Amelie - schermo a tutto campo
+After=amelie-display.service amelie.service
+Requires=amelie-display.service
+
+[Service]
+Type=simple
+User=arduino
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/var/lib/lightdm/.Xauthority
+ExecStartPre=/bin/sleep 8
+ExecStart=/usr/local/bin/amelie-kiosk.sh
+Restart=always
+RestartSec=8
+# Chromium e' adattivo nel consumo: con un tetto si comporta da dispositivo
+# piccolo invece di prendersi tutto cio' che trova.
+MemoryHigh=420M
+MemoryMax=520M
+
+[Install]
+WantedBy=graphical.target
