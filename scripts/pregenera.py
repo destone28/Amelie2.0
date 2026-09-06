@@ -29,6 +29,10 @@ from pathlib import Path
 RADICE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RADICE / "src"))
 
+import json                                                   # noqa: E402
+import urllib.error                                           # noqa: E402
+import urllib.request                                         # noqa: E402
+
 from amelie.llm import Modello, ModelloNonDisponibile        # noqa: E402
 from amelie.matcher import Fatti, Livello, Matcher           # noqa: E402
 from amelie.narrator import (  # noqa: E402
@@ -37,6 +41,22 @@ from amelie.narrator import (  # noqa: E402
 
 DB = RADICE / "data" / "amelie.db"
 MODELLO = "gemma-3-1b-it-Q4_K_M"
+STATO_APP = "http://127.0.0.1:8080/stato"
+
+
+def dispositivo_in_uso() -> bool:
+    """Qualcuno ha appoggiato una bottiglia proprio adesso?
+
+    Generare occupa tutti e quattro i core, e misurato sul campo raddoppia il
+    tempo dell'OCR: da 5,2 a 11 secondi. Un ospite in attesa viene prima di un
+    lotto notturno, quindi il lotto si ferma da solo e riprende dopo.
+    """
+    try:
+        with urllib.request.urlopen(STATO_APP, timeout=2) as r:
+            return json.loads(r.read()).get("stato", "attesa") != "attesa"
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+        # L'applicazione non risponde: nessuno la sta usando.
+        return False
 
 
 def da_fare(con: sqlite3.Connection, ambito: str, lingua: str) -> list[tuple[int, str]]:
@@ -99,6 +119,17 @@ def main() -> None:
     t_inizio = time.monotonic()
 
     for k, (ambito, ident, nome) in enumerate(coda, 1):
+        atteso = 0
+        while dispositivo_in_uso():
+            if atteso == 0:
+                print("  (dispositivo in uso: mi fermo)")
+            time.sleep(5)
+            atteso += 5
+            if atteso > 600:      # dieci minuti: qualcosa e' rimasto appeso
+                break
+        if atteso:
+            print(f"  (ripreso dopo {atteso}s)")
+
         f = fatti_per(m, ambito, ident)
         if f.vuoto:
             n_errore += 1

@@ -183,6 +183,13 @@ def _estrai_righe(risultato: Any) -> list[Riga]:
     if risultato is None:
         return []
 
+    # Attenzione all'ordine dei controlli: quando RapidOCR non trova nulla
+    # restituisce comunque il suo oggetto, ma con txts a None. Senza questo
+    # ramo si finiva nel caso "uscita non riconosciuta" e si registrava un
+    # avviso a ogni scatto a vuoto - cioe' ogni volta che non c'e' la bottiglia.
+    if hasattr(risultato, "txts") and getattr(risultato, "txts") is None:
+        return []
+
     testi = getattr(risultato, "txts", None)
     if testi is not None:
         # Attenzione: `scores` e `boxes` sono array numpy. Un `or` su un array
