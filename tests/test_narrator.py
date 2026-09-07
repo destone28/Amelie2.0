@@ -318,3 +318,65 @@ class TestChiusura:
         n.chiudi()
         assert fermo.is_set(), "il lettore non ha finito"
         assert not errori, errori
+
+
+class TestMarginiDiSilenzio:
+    """Il DSP mangia l'inizio e la fine di ogni flusso.
+
+    Misurato sulla board: `aplay` esce 0,35 s prima della fine dell'audio, e il
+    DSP comincia a rendere qualche decimo dopo l'apertura. Su nove secondi di
+    racconto non si nota; su una frase da un secondo se ne perde la maggior
+    parte, e resta solo un rumorino.
+    """
+
+    def test_i_margini_esistono_e_sono_sensati(self):
+        from amelie.speech import (
+            MARGINE_APERTURA_S, MARGINE_CHIUSURA_S, MARGINE_PLAYER_S)
+        # Devono coprire il taglio misurato di 0,35 s, senza diventare
+        # un'attesa percepibile.
+        assert MARGINE_APERTURA_S >= 0.35
+        assert MARGINE_CHIUSURA_S >= 0.35
+        assert MARGINE_PLAYER_S > 0
+        for m in (MARGINE_APERTURA_S, MARGINE_CHIUSURA_S, MARGINE_PLAYER_S):
+            assert m <= 1.0, "un margine cosi' lungo si sentirebbe come un ritardo"
+
+    def test_il_silenzio_ha_la_durata_chiesta(self):
+        from amelie.speech import silenzio
+        assert len(silenzio(1.0, 22050)) == 22050 * 2
+        assert len(silenzio(0.5, 48000)) == 48000
+        assert silenzio(0.1, 22050).strip(b"\x00") == b"", "non e' silenzio"
+
+    def test_una_frase_corta_viene_imbottita(self, monkeypatch):
+        """La prova che conta: quanto si scrive davvero sul flusso.
+
+        Una frase da un secondo deve arrivare al device dentro un flusso piu'
+        lungo di lei, altrimenti il DSP la perde.
+        """
+        from amelie.speech import (
+            MARGINE_APERTURA_S, MARGINE_CHIUSURA_S, ImpostazioniVoce, Voce)
+
+        scritti = []
+
+        class FintoStdin:
+            def write(self, dati): scritti.append(dati)
+            def flush(self): pass
+            def close(self): pass
+
+        class FintoProc:
+            stdin = FintoStdin()
+            def wait(self, timeout=None): return 0
+            def kill(self): pass
+
+        v = Voce(ImpostazioniVoce(usa_cache=False))
+        monkeypatch.setattr(v, "apri_uscita", lambda: FintoProc())
+        monkeypatch.setattr(v, "sintetizza", lambda f: b"\x11\x22" * 22050)  # 1 s
+
+        v.parla(["una frase"])
+
+        totale = sum(len(x) for x in scritti)
+        atteso = (22050 * 2
+                  + int(22050 * MARGINE_APERTURA_S) * 2
+                  + int(22050 * MARGINE_CHIUSURA_S) * 2)
+        assert totale == atteso, "i margini non sono stati scritti"
+        assert scritti[0].strip(b"\x00") == b"", "il primo pezzo dev'essere silenzio"
+        assert scritti[-1].strip(b"\x00") == b"", "l'ultimo pezzo dev'essere silenzio"

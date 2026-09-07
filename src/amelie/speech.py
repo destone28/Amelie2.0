@@ -59,6 +59,25 @@ PEZZO_S = 0.1
 # piu' la posizione dichiarata corre avanti a quella che l'orecchio sente. Due
 # decimi sono il compromesso: impercettibile, e regge l'OCR in parallelo.
 BUFFER_ALSA_US = 200_000
+
+# Il DSP di questa board non comincia a rendere il suono nell'istante in cui si
+# apre il flusso, e `aplay` esce PRIMA che l'ultimo pezzo sia uscito davvero.
+# Misurato qui: su ogni durata, dai tre secondi al secondo scarso, aplay
+# impiega 0,35 s in meno del dovuto. Su nove secondi di racconto non si nota;
+# su una frase da un secondo se ne mangia i due terzi e resta un rumorino - che
+# e' esattamente come e' stato descritto la prima volta che si e' provato
+# l'annuncio della lingua in cuffia.
+#
+# Il rimedio e' del silenzio davanti e dietro: costa niente e non si sente.
+MARGINE_APERTURA_S = 0.6
+MARGINE_CHIUSURA_S = 0.5
+# Nel player il margine davanti si paga a ogni ripresa e a ogni salto, quindi
+# si tiene corto: li' il flusso e' lungo e il problema morde molto meno.
+MARGINE_PLAYER_S = 0.3
+
+
+def silenzio(secondi: float, frequenza: int = 22050) -> bytes:
+    return b"\x00\x00" * int(frequenza * secondi)
 # Di quanto si sta AVANTI rispetto a cio' che l'orecchio sente. Senza un freno
 # non lo si decide: si scrive finche' qualcuno accetta, e fra la pipe del
 # sistema (64 KB, cioe' un secondo e mezzo di parlato) e il buffer ALSA la
@@ -298,6 +317,9 @@ class Voce:
         """
         proc = self.apri_uscita()
         try:
+            # Silenzio davanti: il DSP ci mette qualche decimo ad avviarsi, e
+            # senza questo margine l'inizio della frase non esce.
+            proc.stdin.write(silenzio(MARGINE_APERTURA_S, self.imp.frequenza))
             for frase in frasi:
                 pcm = self.sintetizza(frase)
                 if not pcm:
@@ -309,9 +331,12 @@ class Voce:
                     log.warning("riproduzione interrotta")
                     break
         finally:
+            # E silenzio dietro, perche' aplay esce prima che l'ultimo pezzo sia
+            # stato reso: senza, l'ultima parola viene tagliata.
             try:
+                proc.stdin.write(silenzio(MARGINE_CHIUSURA_S, self.imp.frequenza))
                 proc.stdin.close()
-            except (BrokenPipeError, OSError):
+            except (BrokenPipeError, OSError, ValueError):
                 pass
             try:
                 proc.wait(timeout=30)
@@ -599,6 +624,13 @@ class Riproduttore:
                         return
                     if self._proc is None:
                         self._proc = self.voce.apri_uscita()
+                        # Il margine di avvio NON entra nella posizione: e'
+                        # silenzio che serve al DSP, non racconto.
+                        try:
+                            self._proc.stdin.write(
+                                silenzio(MARGINE_PLAYER_S, self._bps // 2))
+                        except (BrokenPipeError, OSError, ValueError):
+                            pass
                     if self._orologio is None:
                         self._orologio = (time.monotonic(), self._posizione)
                     proc = self._proc
@@ -637,6 +669,15 @@ class Riproduttore:
                 self._avvisa()
         finally:
             with self._sveglia:
+                # Se si e' arrivati in fondo si lascia scorrere la coda, invece
+                # di tagliare l'ultima parola: aplay esce prima del dovuto.
+                if self._proc is not None and not self._fermo.is_set():
+                    try:
+                        self._proc.stdin.write(
+                            silenzio(MARGINE_CHIUSURA_S, self._bps // 2))
+                        self._proc.stdin.flush()
+                    except (BrokenPipeError, OSError, ValueError):
+                        pass
                 self._chiudi_aplay()
             self._finito.set()
             self._avvisa()
