@@ -439,3 +439,61 @@ class TestUscitaSempreAperta:
             assert u.PEZZO_S < u.RISERVA_S
         finally:
             v.chiudi()
+
+
+class TestDidascalia:
+    """La didascalia deve seguire la VOCE, non la scrittura.
+
+    Fra lo scrivere una frase nell'uscita e il sentirla ci sono la riserva e il
+    buffer di ALSA: mezzo secondo. Una didascalia agganciata alla scrittura
+    correrebbe avanti di quel mezzo secondo, e su una frase da un secondo si
+    vede.
+    """
+
+    def test_la_didascalia_arriva_una_frase_per_volta_e_in_ordine(self, monkeypatch):
+        from amelie.speech import ImpostazioniVoce, Voce
+
+        class FintoStdin:
+            def __init__(self): self.scritti = []
+            def write(self, dati):
+                import time
+                self.scritti.append(bytes(dati))
+                time.sleep(len(dati) / (22050 * 2))
+            def flush(self): pass
+            def close(self): pass
+
+        class FintoProc:
+            def __init__(self): self.stdin = FintoStdin()
+            def wait(self, timeout=None): return 0
+            def kill(self): pass
+
+        v = Voce(ImpostazioniVoce(usa_cache=False))
+        monkeypatch.setattr(v, "apri_uscita", lambda: FintoProc())
+        monkeypatch.setattr(v, "sintetizza", lambda f: b"\x11\x22" * 4410)  # 0,2 s
+
+        viste = []
+        try:
+            v.parla(["Prima.", "Seconda.", "Terza."], su_frase=viste.append)
+        finally:
+            v.chiudi()
+
+        assert viste == ["Prima.", "Seconda.", "Terza."]
+
+    def test_senza_didascalia_non_si_aspetta_niente(self, monkeypatch):
+        """Chi non chiede la didascalia non deve pagare le attese che serve a lei."""
+        import inspect
+
+        from amelie.speech import Voce
+        sorgente = inspect.getsource(Voce.parla)
+        assert "su_frase is not None" in sorgente, (
+            "l'attesa per sincronizzare la didascalia va fatta SOLO se qualcuno "
+            "la sta guardando: e' un'attesa per frase, e senza motivo "
+            "rallenterebbe ogni racconto")
+
+    def test_le_frasi_si_spezzano_dove_finiscono(self):
+        from amelie.narrator import spezza_in_frasi
+        assert spezza_in_frasi("Uno. Due! Tre? Quattro…") == [
+            "Uno.", "Due!", "Tre?", "Quattro…"]
+        assert spezza_in_frasi("") == []
+        # Un punto dentro una sigla non spezza: non c'e' spazio dopo.
+        assert len(spezza_in_frasi("Un Barolo D.O.C.G. del 2016.")) == 1

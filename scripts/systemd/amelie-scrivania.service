@@ -1,0 +1,14 @@
+[Unit]
+Description=Amelie - spegne cio' che la scrivania avvia da sola
+After=graphical.target
+PartOf=graphical.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=arduino
+Environment=DISPLAY=:0
+ExecStart=/usr/local/bin/amelie-scrivania.sh
+
+[Install]
+WantedBy=graphical.target

@@ -56,7 +56,27 @@ class Racconto:
     def frasi(self) -> list[str]:
         """Spezza in frasi, che è l'unità con cui il TTS può iniziare a parlare
         prima che il testo sia finito."""
-        return [f.strip() for f in re.split(r"(?<=[.!?…])\s+", self.testo) if f.strip()]
+        return spezza_in_frasi(self.testo)
+
+
+# Si spezza dopo un punto SOLO se quello che segue comincia come una frase:
+# maiuscola, virgoletta o parentesi. Altrimenti «Un Barolo D.O.C.G. del 2016»
+# si spaccava dentro la sigla e ne usciva un frammento che comincia in
+# minuscolo - una pausa sbagliata nella voce, e una didascalia a meta'.
+_FINE_FRASE = re.compile(r"""(?<=[.!?…])\s+(?=[A-ZÀ-Ý«"“'(])""")
+
+
+def spezza_in_frasi(testo: str) -> list[str]:
+    """La frase è l'unità con cui il dispositivo parla e con cui si legge.
+
+    Serve in due posti: al racconto, che comincia a parlare prima di aver
+    finito di scrivere, e alla didascalia, che deve cambiare quando cambia la
+    voce e non prima.
+
+    Diverso da `a_frasi`, che fa lo stesso su un FLUSSO di token mentre il
+    modello scrive: qui il testo c'è già tutto.
+    """
+    return [f.strip() for f in _FINE_FRASE.split(testo) if f.strip()]
 
 
 # ---------------------------------------------------------------- verifica

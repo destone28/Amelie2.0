@@ -46,7 +46,7 @@ from .bridge import (
 )
 from .capture import Camera, CameraNonDisponibile, blocca_esposizione
 from .matcher import Fatti, Livello, Matcher
-from .narrator import Narratore
+from .narrator import Narratore, spezza_in_frasi
 from .ocr import Lettore, OCRNonDisponibile
 from .speech import ImpostazioniVoce, Riproduttore, Voce, VoceNonDisponibile
 from .state import DURATE_S, Effetto, Evento, Macchina, Stato
@@ -380,12 +380,20 @@ class Amelie:
             return
         log.info("annuncio [%s]: %r", lingua, frase)
         try:
-            self.voce.parla([frase])
+            # Le frasi si dicono una per volta perche' la didascalia le segua:
+            # una frase intera a schermo mentre se ne sente mezza non e'
+            # sincronia, e' un sottotitolo scritto in anticipo.
+            self.voce.parla(spezza_in_frasi(frase), su_frase=self._didascalia)
         except Exception as e:                              # noqa: BLE001
             log.warning("annuncio della lingua non riuscito: %s", e)
         finally:
+            self._didascalia("")
             # Si torna alla lingua a schermo, che puo' essere un'altra.
             self.voce.per_lingua(self.lingua)
+
+    def _didascalia(self, testo: str) -> None:
+        """Che cosa il dispositivo sta dicendo, adesso."""
+        self._pubblica({"tipo": "didascalia", "testo": testo})
 
     def _ferma_racconto(self) -> None:
         """Ferma la riproduzione in corso e chi la stava aspettando."""

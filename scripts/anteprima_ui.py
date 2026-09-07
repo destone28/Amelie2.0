@@ -96,6 +96,20 @@ SCENE: dict[str, list[dict]] = {
             "Cannubi Barolo — Réva",
             "Barolo Bussia — Tenuta Rocca"]}],
 
+    # La didascalia: si prova sulla schermata d'attesa, che è dove si tocca la
+    # bandierina per sentire l'annuncio.
+    "didascalia": [
+        LINGUA_IT, {"tipo": "stato", "vista": "attesa"},
+        {"tipo": "didascalia",
+         "testo": "Da adesso racconto i vini in italiano."}],
+
+    "didascalia_lunga": [
+        LINGUA_IT, {"tipo": "stato", "vista": "lavoro",
+                    "frase": "Sto leggendo l'etichetta…"},
+        {"tipo": "didascalia",
+         "testo": "Colore scarico che inganna: sotto c'è una struttura "
+                  "tannica fra le più longeve al mondo."}],
+
     "riposiziona": [
         LINGUA_IT,
         {"tipo": "stato", "vista": "avviso", "simbolo": "↻", "tono": "invito",

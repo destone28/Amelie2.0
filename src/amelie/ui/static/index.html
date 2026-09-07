@@ -401,6 +401,34 @@ svg { display: block; }
 .lingua.premuto { transform: scale(.94); }
 
 /* ===========================================================================
+   DIDASCALIA — che cosa il dispositivo sta dicendo, adesso.
+
+   Sta in basso, come un sottotitolo, e cambia quando cambia la VOCE: il server
+   la manda nel momento in cui una frase comincia a sentirsi, non quando la
+   scrive. Fra le due cose ci sono la riserva dell'uscita e il buffer di ALSA,
+   cioè mezzo secondo, e su una frase da un secondo mezzo secondo si vede.
+
+   La velatura sotto serve a renderla leggibile su qualunque vista senza
+   coprirla: sfuma da trasparente a quasi opaco solo nell'ultimo terzo.
+   =========================================================================== */
+#didascalia {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 8;
+  display: flex; align-items: flex-end; justify-content: center;
+  min-height: 168px;
+  padding: 0 calc(var(--passo) * 6) calc(var(--passo) * 3);
+  font-size: var(--t-invito); line-height: 1.28; color: var(--avorio);
+  text-align: center; pointer-events: none;
+  background: linear-gradient(transparent 0, rgba(20,16,15,.55) 45%,
+                              rgba(20,16,15,.9) 100%);
+  opacity: 0; transition: opacity .25s var(--curva);
+}
+#didascalia.visibile { opacity: 1; }
+/* Nel racconto no: il testo c'è già tutto, con la frase in ascolto accesa, e
+   una didascalia sarebbe la stessa frase scritta due volte a due centimetri
+   di distanza. */
+#racconto.attiva ~ #didascalia { display: none; }
+
+/* ===========================================================================
    SERVIZIO — cose che si vedono solo quando qualcosa non va.
    =========================================================================== */
 /* Quando non c'e' voce non c'e' niente da comandare: i pulsanti spariscono
@@ -538,6 +566,7 @@ svg { display: block; }
     <div class="frase"   id="a-frase"></div>
   </section>
 
+  <div id="didascalia"></div>
   <div id="muto"></div>
   <div id="spia"></div>
   <div id="angolo"></div>
@@ -573,6 +602,14 @@ addEventListener("resize", adattaScena);
 
 function mostra(nome) {
   viste.forEach(v => $(v).classList.toggle("attiva", v === nome));
+}
+
+/* Quello che il dispositivo sta dicendo, adesso. Arriva già temporizzato: il
+   server la manda quando la frase comincia a sentirsi, non quando la scrive. */
+function didascalia(testo) {
+  const d = $("didascalia");
+  d.textContent = testo || "";
+  d.classList.toggle("visibile", !!testo);
 }
 
 /* Senza voce non c'è niente da comandare: i pulsanti spariscono e l'avviso
@@ -751,6 +788,9 @@ eventi.onmessage = (e) => {
         $("avviso").className = "vista " + (m.tono || "invito");
       }
       if ("voce_muta" in m) segnaVoceMuta(m.voce_muta === true);
+      /* Cambiando scena si tace: una didascalia rimasta accesa parlerebbe di
+         una bottiglia che non c'è più. */
+      didascalia("");
       mostra(m.vista);
       break;
 
@@ -778,6 +818,10 @@ eventi.onmessage = (e) => {
       });
       break;
     }
+
+    case "didascalia":
+      didascalia(m.testo);
+      break;
 
     case "lingua":
       disegnaLingue(m);

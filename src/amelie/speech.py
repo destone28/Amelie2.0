@@ -416,22 +416,40 @@ class Voce:
     # Il nome vecchio, per chi lo usava.
     _aplay = apri_uscita
 
-    def parla(self, frasi: Iterable[str]) -> None:
+    def parla(self, frasi: Iterable[str], *, su_frase=None) -> None:
         """Pronuncia un flusso di frasi e aspetta che siano uscite davvero.
 
         Versa nel flusso sempre aperto: non si apre e non si chiude niente, e
         quindi non si pagano i due secondi che il DSP impiega ad avviarsi.
+
+        `su_frase` viene chiamata quando una frase **comincia a sentirsi**, non
+        quando la si scrive. Fra le due cose ci sono la riserva dell'uscita e il
+        buffer di ALSA, cioe' mezzo secondo: una didascalia agganciata alla
+        scrittura correrebbe avanti alla voce di quel mezzo secondo, e su una
+        frase da un secondo si vedrebbe.
         """
         uscita = self.uscita()
         for frase in frasi:
             pcm = self.sintetizza(frase)
-            if pcm:
-                uscita.scrivi(pcm)
-        # Si aspetta che la pancia si svuoti, altrimenti chi ha chiamato crede
-        # di aver finito mentre l'ultima parola non e' ancora uscita.
-        scadenza = time.monotonic() + 60
-        while uscita.in_pancia_s() > 0.01 and time.monotonic() < scadenza:
-            time.sleep(0.05)
+            if not pcm:
+                continue
+            if su_frase is not None:
+                # Si aspetta che la frase PRECEDENTE sia stata consegnata tutta
+                # e sia uscita da ALSA: da quell'istante quella nuova comincia.
+                self._attendi_uscita(uscita)
+                try:
+                    su_frase(frase)
+                except Exception:                           # noqa: BLE001
+                    log.exception("errore nella didascalia")
+            uscita.scrivi(pcm)
+        self._attendi_uscita(uscita)
+
+    @staticmethod
+    def _attendi_uscita(uscita: "Uscita", tetto_s: float = 60.0) -> None:
+        """Aspetta che tutto il consegnato sia stato davvero riprodotto."""
+        scadenza = time.monotonic() + tetto_s
+        while uscita.in_pancia_s() > 0.02 and time.monotonic() < scadenza:
+            time.sleep(0.02)
         time.sleep(BUFFER_ALSA_US / 1_000_000)
 
     def per_lingua(self, codice: str) -> bool:
