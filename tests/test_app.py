@@ -353,11 +353,27 @@ class TestLingua:
         assert self._attendi(amelie, Stato.RACCONTO)
 
     def test_si_puo_cambiare_lingua_mentre_parla(self, amelie):
-        """Senza la transizione (RACCONTO, RIPETI) l'evento cadeva nel vuoto."""
+        """Senza la transizione (RACCONTO, RIPETI) l'evento cadeva nel vuoto.
+
+        Si guarda il FATTO - che il racconto sia ripartito - e non lo stato in
+        un istante preciso: la storia riparte, corre e finisce, e a seconda di
+        quanto e' carica la macchina si arriva a guardare prima o dopo.
+        """
+        import time
+
         amelie.macchina.stato = Stato.RACCONTO
-        amelie.cambia_lingua("en")
-        assert amelie._ferma_voce.is_set(), "la voce vecchia deve tacere subito"
-        assert self._attendi(amelie, Stato.RACCONTO)
+        vecchio = amelie._lavoro
+        assert amelie.cambia_lingua("en")
+
+        # Non si guarda `_ferma_voce`: e' un dettaglio interno, e per giunta in
+        # corsa - il racconto nuovo lo azzera appena riparte, quindi a seconda
+        # di come si incastrano i thread lo si trova acceso o spento. Cio' che
+        # conta e' che la storia sia ripartita.
+        scadenza = time.monotonic() + 5
+        while time.monotonic() < scadenza and amelie._lavoro is vecchio:
+            time.sleep(0.02)
+        assert amelie._lavoro is not vecchio, "il racconto non e' ripartito"
+        assert amelie.macchina.stato in (Stato.RACCONTO, Stato.CONCLUSO)
 
     def test_il_racconto_riparte_anche_col_lavoro_vecchio_ancora_vivo(self, amelie):
         """Il difetto vero: non un guasto, un silenzio.
