@@ -155,9 +155,13 @@ class Amelie:
         # padroni, quindi un lucchetto.
         self._lettore: Riproduttore | None = None
         self._lucchetto_lettore = threading.Lock()
-        # Un annuncio alla volta: due tocchi ravvicinati sulla bandierina non
-        # devono sovrapporre due voci.
+        # Gli annunci si fanno UNO ALLA VOLTA e per INTERO. Chi tocca mentre
+        # uno sta parlando non lo interrompe: lascia detto quale lingua vuole
+        # sentire dopo, e i tocchi che si accumulano nel frattempo si riducono
+        # a quell'unica richiesta.
         self._lucchetto_annuncio = threading.Lock()
+        self._lingua_da_annunciare: str | None = None
+        self._annunciatore_vivo = False
 
     # --------------------------------------------------------- comunicazione
 
@@ -291,17 +295,44 @@ class Amelie:
     def _parla_dopo(self, *, annuncia: bool, riprendi: bool) -> None:
         """Annuncia e semmai fa ripartire il racconto, fuori dal filo HTTP.
 
-        Sono due cose lente - una sintesi e l'attesa di un thread - e chi ha
-        toccato lo schermo non deve aspettarle: il tocco deve rispondere subito.
+        Sono cose lente - una sintesi, l'attesa di un thread - e chi ha toccato
+        lo schermo non deve aspettarle: il tocco deve rispondere subito.
         """
-        threading.Thread(target=self._annuncia_e_riprendi,
-                         args=(annuncia, riprendi), daemon=True).start()
-
-    def _annuncia_e_riprendi(self, annuncia: bool, riprendi: bool) -> None:
         if annuncia:
-            self._annuncia_lingua()
-        if not riprendi:
-            return
+            self._chiedi_annuncio(self.lingua)
+        if riprendi:
+            threading.Thread(target=self._riprendi_racconto, daemon=True).start()
+
+    def _chiedi_annuncio(self, lingua: str) -> None:
+        """Chiede di annunciare una lingua. Uno alla volta, per intero.
+
+        Il primo tocco parla SUBITO. Chi tocca mentre quello parla non lo
+        interrompe: lascia detto cosa vuole sentire dopo, e se arrivano dieci
+        tocchi resta solo l'ultimo.
+
+        Interrompere era la scelta di prima, ed era sbagliata: le frasi durano
+        un secondo abbondante, e provando l'audio si tocca ogni mezzo secondo.
+        Ogni annuncio tagliava il precedente prima che uscisse dalle casse, e
+        non si sentiva NIENTE - sembrava un guasto dell'amplificatore.
+        """
+        with self._lucchetto_annuncio:
+            self._lingua_da_annunciare = lingua
+            if self._annunciatore_vivo:
+                return
+            self._annunciatore_vivo = True
+        threading.Thread(target=self._ciclo_annunci, daemon=True).start()
+
+    def _ciclo_annunci(self) -> None:
+        while True:
+            with self._lucchetto_annuncio:
+                lingua = self._lingua_da_annunciare
+                self._lingua_da_annunciare = None
+                if lingua is None:
+                    self._annunciatore_vivo = False
+                    return
+            self._annuncia_lingua(lingua)
+
+    def _riprendi_racconto(self) -> None:
         # Il thread del racconto vecchio deve essere USCITO prima di chiedere
         # quello nuovo: `_avvia` rifiuta il lavoro se ne trova uno vivo, e
         # rifiutandolo mandava un ERRORE che in RACCONTO non ha transizione.
@@ -330,19 +361,23 @@ class Amelie:
                 log.warning("frase fissa non pre-sintetizzata (%s): %s", lingua, e)
         self.voce.per_lingua(self.lingua)      # si torna alla lingua a schermo
 
-    def _annuncia_lingua(self) -> None:
-        frase = self.lex.frase("voce", "conferma_lingua", lingua=self.lingua)
-        if not frase or self.voce is None or not self.voce.disponibile_per_lingua:
+    def _annuncia_lingua(self, lingua: str | None = None) -> None:
+        lingua = lingua or self.lingua
+        frase = self.lex.frase("voce", "conferma_lingua", lingua=lingua)
+        if not frase or self.voce is None:
             return
-        # Si zittisce PRIMA di prendere il lucchetto: due tocchi ravvicinati
-        # devono accavallarsi, non accodarsi. Il secondo taglia la voce del
-        # primo, che così rilascia subito.
-        self.voce.zittisci()
-        with self._lucchetto_annuncio:
-            try:
-                self.voce.parla([frase])
-            except Exception as e:                          # noqa: BLE001
-                log.warning("annuncio della lingua non riuscito: %s", e)
+        # La voce si allinea qui: fra il tocco e il turno di parola la lingua
+        # puo' essere gia' cambiata di nuovo.
+        if not self.voce.per_lingua(lingua):
+            return
+        log.info("annuncio [%s]: %r", lingua, frase)
+        try:
+            self.voce.parla([frase])
+        except Exception as e:                              # noqa: BLE001
+            log.warning("annuncio della lingua non riuscito: %s", e)
+        finally:
+            # Si torna alla lingua a schermo, che puo' essere un'altra.
+            self.voce.per_lingua(self.lingua)
 
     def _ferma_racconto(self) -> None:
         """Ferma la riproduzione in corso e chi la stava aspettando."""

@@ -391,7 +391,7 @@ class TestLingua:
     def test_toccare_la_lingua_gia_attiva_annuncia_lo_stesso(self, amelie):
         """E' il modo piu' rapido di provare l'audio senza una bottiglia."""
         annunci = []
-        amelie._annuncia_lingua = lambda: annunci.append(amelie.lingua)
+        amelie._annuncia_lingua = lambda l=None: annunci.append(l or amelie.lingua)
         assert not amelie.cambia_lingua(amelie.lingua)   # nulla e' cambiato
         import time
         scadenza = time.monotonic() + 3
@@ -399,12 +399,53 @@ class TestLingua:
             time.sleep(0.02)
         assert annunci, "nessun annuncio: non si puo' provare l'audio con un tocco"
 
+    def test_tocchi_ravvicinati_producono_un_solo_annuncio(self, amelie):
+        """Il difetto che ha fatto sembrare rotto l'amplificatore.
+
+        Le frasi durano un secondo abbondante, e ogni tocco zittiva quella in
+        corso. Otto tocchi in nove secondi - che e' come si prova un audio -
+        non producevano NESSUN suono udibile: ognuno tagliava il precedente
+        prima che uscisse. Ora parla solo l'ultimo, e parla per intero.
+        """
+        import time
+
+        annunci = []
+
+        def parla_piano(lingua=None):
+            # Una frase vera dura un secondo abbondante: senza questa durata il
+            # test non riproduce il caso, perche' la coda non ha mai niente da
+            # fondere e ogni tocco fa in tempo a parlare.
+            annunci.append(lingua or amelie.lingua)
+            time.sleep(0.4)
+
+        amelie._annuncia_lingua = parla_piano
+        for _ in range(4):
+            amelie.cambia_lingua("en")
+            time.sleep(0.05)
+            amelie.cambia_lingua("it")
+            time.sleep(0.05)
+        time.sleep(2.0)
+        # Il primo parla subito, i sette che arrivano mentre parla si riducono a
+        # uno: al massimo due annunci, mai otto troncati.
+        assert len(annunci) <= 2, f"{len(annunci)} annunci: {annunci}"
+        assert annunci[-1] == "it", "l'ULTIMA lingua toccata dev'essere annunciata"
+
+    def test_un_tocco_solo_annuncia(self, amelie):
+        import time
+        annunci = []
+        amelie._annuncia_lingua = lambda l=None: annunci.append(l or amelie.lingua)
+        amelie.cambia_lingua("en")
+        scadenza = time.monotonic() + 3
+        while time.monotonic() < scadenza and not annunci:
+            time.sleep(0.02)
+        assert annunci == ["en"]
+
     def test_una_lingua_inesistente_non_annuncia(self, amelie):
         annunci = []
-        amelie._annuncia_lingua = lambda: annunci.append(1)
+        amelie._annuncia_lingua = lambda l=None: annunci.append(1)
         assert not amelie.cambia_lingua("de")
         import time
-        time.sleep(0.3)
+        time.sleep(1.0)
         assert not annunci
 
     def test_l_annuncio_esiste_in_ogni_lingua(self, amelie):
@@ -421,3 +462,80 @@ class TestLingua:
         amelie._mostra(Stato.CONCLUSO)          # senza fatti: e' una rinuncia
         assert catturati[0]["vista"] == "avviso"
         assert catturati[0]["frase"], "nessun messaggio: lo schermo resterebbe vuoto"
+
+
+class TestAvvio:
+    """Che l'applicazione PARTA, con tutto acceso.
+
+    Il buco che questa classe chiude: nessun test montava l'applicazione con la
+    voce, e il ciclo di vita chiama metodi che nessun altro chiama. Cancellandone
+    uno per sbaglio, i test restavano tutti verdi e il servizio non si avviava
+    piu' - `AttributeError` dentro lo startup, e il chiosco su una pagina che non
+    rispondeva.
+    """
+
+    def test_il_ciclo_di_vita_trova_tutto_quello_che_chiama(self):
+        """I metodi che solo l'avvio usa esistono davvero."""
+        for nome in ("_scalda_voci", "_mostra", "_manda_lingua",
+                     "sorveglia", "salute"):
+            assert callable(getattr(Amelie, nome, None)), \
+                f"Amelie.{nome} non esiste: l'applicazione non si avvierebbe"
+
+    def test_il_ciclo_di_vita_parte_e_si_chiude(self):
+        """Il vero avvio: e' dentro qui che l'applicazione moriva.
+
+        Si entra e si esce dal ciclo di vita come fa uvicorn. Non serve un
+        client HTTP: il punto e' che lo startup esegua fino in fondo, che e'
+        esattamente quello che non faceva piu'.
+        """
+        import asyncio
+
+        from amelie.app import crea_app
+
+        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                  senza_voce=True, senza_modello=True))
+        app = crea_app(a)
+
+        async def prova():
+            async with app.router.lifespan_context(app):
+                await asyncio.sleep(0.1)
+
+        try:
+            asyncio.run(prova())
+        finally:
+            a.matcher.chiudi()
+            a.narratore.chiudi()
+
+    def test_il_ciclo_di_vita_parte_anche_con_la_voce(self):
+        """Il caso che mancava: con la voce accesa si chiama `_scalda_voci`.
+
+        E' l'unico posto che lo chiama, quindi era l'unico modo di accorgersi
+        che non c'era piu'.
+        """
+        import asyncio
+
+        from amelie.app import crea_app
+
+        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                  senza_voce=True, senza_modello=True))
+        # Una voce finta: qui non interessa il suono, interessa che il ciclo di
+        # vita percorra il ramo che la usa.
+        class VoceFinta:
+            imp = type("i", (), {"device_alsa": "nulla", "frequenza": 22050})()
+            disponibile_per_lingua = True
+            def scalda(self, lingue=()): pass
+            def per_lingua(self, codice): return True
+            def sintetizza(self, frase): return b""
+            def zittisci(self): pass
+        a.voce = VoceFinta()
+        app = crea_app(a)
+
+        async def prova():
+            async with app.router.lifespan_context(app):
+                await asyncio.sleep(0.3)
+
+        try:
+            asyncio.run(prova())
+        finally:
+            a.matcher.chiudi()
+            a.narratore.chiudi()
