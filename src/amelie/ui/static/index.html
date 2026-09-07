@@ -153,20 +153,26 @@ svg { display: block; }
 /* ===========================================================================
    MARCHIO — la semplificazione del logo.
 
-   Dell'originale restano le due cose che valgono: i QUATTRO MIRINI agli
-   angoli e la A. La sagoma animale è stata tolta perché sotto il centimetro
-   diventa una macchia, e perché i mirini dicono già quello che il dispositivo
-   fa — inquadrare un'etichetta e leggerla. La A è costruita con tre tratti
-   invece che con un contorno pieno: resta nitida a ogni misura e non dipende
-   da nessun font installato.
+   Tre segni e nient'altro: i QUATTRO MIRINI agli angoli, la BOTTIGLIA al
+   centro, la A dentro la bottiglia. Letto tutto insieme dice esattamente cosa
+   fa l'oggetto — inquadra una bottiglia e la legge — e il nome ci sta dentro.
+
+   La sagoma animale dell'originale è stata tolta: sotto il centimetro
+   diventava una macchia. Tutto è costruito con tratti, non con contorni
+   pieni, così resta nitido a ogni misura e non dipende da nessun font
+   installato.
    =========================================================================== */
 .marchio { width: var(--t-marchio); height: var(--t-marchio); }
 .marchio .mirino {
-  fill: none; stroke: var(--oro); stroke-width: 6;
+  fill: none; stroke: var(--oro); stroke-width: 5.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.marchio .bottiglia {
+  fill: none; stroke: var(--oro); stroke-width: 4.5;
   stroke-linecap: round; stroke-linejoin: round;
 }
 .marchio .lettera {
-  fill: none; stroke: var(--avorio); stroke-width: 7.5;
+  fill: none; stroke: var(--avorio); stroke-width: 5.4;
   stroke-linecap: butt; stroke-linejoin: miter;
 }
 
@@ -452,12 +458,20 @@ svg { display: block; }
   <section id="attesa" class="vista attiva">
     <svg class="marchio" viewBox="0 0 100 100" aria-hidden="true">
       <g class="mirino">
-        <path d="M10 30 V18 A8 8 0 0 1 18 10 H30"/>
-        <path d="M70 10 H82 A8 8 0 0 1 90 18 V30"/>
-        <path d="M90 70 V82 A8 8 0 0 1 82 90 H70"/>
-        <path d="M30 90 H18 A8 8 0 0 1 10 82 V70"/>
+        <path d="M9 29 V17 A8 8 0 0 1 17 9 H29"/>
+        <path d="M71 9 H83 A8 8 0 0 1 91 17 V29"/>
+        <path d="M91 71 V83 A8 8 0 0 1 83 91 H71"/>
+        <path d="M29 91 H17 A8 8 0 0 1 9 83 V71"/>
       </g>
-      <path class="lettera" d="M35 73 L50 30 L65 73 M39.5 60 H60.5"/>
+      <!-- La bottiglia: collo, spalla, corpo. Il fondo è arrotondato appena,
+           quanto basta perché non sembri una scatola. -->
+      <path class="bottiglia"
+            d="M45 20 H55 V37 C55 41 66 45 66 55 V83
+               A3.5 3.5 0 0 1 62.5 86.5 H37.5
+               A3.5 3.5 0 0 1 34 83 V55 C34 45 45 41 45 37 Z"/>
+      <path class="bottiglia" d="M45 26 H55"/>
+      <!-- La A sta dentro il corpo della bottiglia, dove sta l'etichetta. -->
+      <path class="lettera" d="M41.5 80.5 L50 57 L58.5 80.5 M44.7 71.6 H55.3"/>
     </svg>
     <div class="nome">Amelie</div>
     <div class="filo"></div>
