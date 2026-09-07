@@ -155,6 +155,9 @@ class Amelie:
         # padroni, quindi un lucchetto.
         self._lettore: Riproduttore | None = None
         self._lucchetto_lettore = threading.Lock()
+        # Un annuncio alla volta: due tocchi ravvicinati sulla bandierina non
+        # devono sovrapporre due voci.
+        self._lucchetto_annuncio = threading.Lock()
 
     # --------------------------------------------------------- comunicazione
 
@@ -170,7 +173,9 @@ class Amelie:
                 pass
 
     def _su_transizione(self, t) -> None:
-        if t.cambia_stato:
+        # Anche un rientro nello stesso stato ridisegna e rimette il tetto: e'
+        # una transizione dichiarata, non un evento caduto nel vuoto.
+        if t.cambia_stato or t.rientro:
             log.info("%s -> %s", t.da.value, t.a.value)
             self._scadenza = (time.monotonic() + t.durata_s) if t.durata_s else None
             self._mostra(t.a)
@@ -249,12 +254,26 @@ class Amelie:
     def cambia_lingua(self, codice: str) -> bool:
         """L'ospite ha toccato la bandierina.
 
-        Se un racconto e' a schermo si rifa' SUBITO nella lingua nuova, senza
-        chiedere di rimettere la bottiglia: i fatti sono gia' in mano e si
-        portano dietro tutte le lingue proprio per questo.
+        Il dispositivo RISPONDE A VOCE - «Lingua italiana», «English language» -
+        e solo dopo, se un racconto era in corso, lo rifà nella lingua nuova.
+        L'annuncio non è un vezzo: è la conferma che la lingua è cambiata *e*
+        che l'audio funziona, ed è il modo più rapido di provare amplificatore
+        e casse senza appoggiare una bottiglia.
+
+        Il racconto riparte SUBITO nella lingua nuova, senza chiedere di
+        rimettere la bottiglia: i fatti sono già in mano e si portano dietro
+        tutte le lingue proprio per questo.
         """
-        if codice not in self.lex.lingue or codice == self.lingua:
+        if codice not in self.lex.lingue:
             return False
+
+        if codice == self.lingua:
+            # Toccare la lingua già attiva non cambia niente, ma l'annuncio si
+            # fa lo stesso: è l'unico modo di riprovare l'audio con un tocco
+            # solo, invece di dover alternare avanti e indietro.
+            self._parla_dopo(annuncia=True, riprendi=False)
+            return False
+
         log.info("lingua: %s -> %s", self.lingua, codice)
         self.lingua = codice
         self.narratore.lingua = codice
@@ -262,12 +281,86 @@ class Amelie:
             self.voce.per_lingua(codice)
         self._manda_lingua()
         self._mostra(self.macchina.stato)
-        if self.macchina.stato in (Stato.RACCONTO, Stato.CONCLUSO):
-            self._ferma_voce.set()
-            if self.voce:
-                self.voce.zittisci()
-            self.macchina.invia(Evento.RIPETI)
+
+        riprendi = self.macchina.stato in (Stato.RACCONTO, Stato.CONCLUSO)
+        if riprendi:
+            self._ferma_racconto()
+        self._parla_dopo(annuncia=True, riprendi=riprendi)
         return True
+
+    def _parla_dopo(self, *, annuncia: bool, riprendi: bool) -> None:
+        """Annuncia e semmai fa ripartire il racconto, fuori dal filo HTTP.
+
+        Sono due cose lente - una sintesi e l'attesa di un thread - e chi ha
+        toccato lo schermo non deve aspettarle: il tocco deve rispondere subito.
+        """
+        threading.Thread(target=self._annuncia_e_riprendi,
+                         args=(annuncia, riprendi), daemon=True).start()
+
+    def _annuncia_e_riprendi(self, annuncia: bool, riprendi: bool) -> None:
+        if annuncia:
+            self._annuncia_lingua()
+        if not riprendi:
+            return
+        # Il thread del racconto vecchio deve essere USCITO prima di chiedere
+        # quello nuovo: `_avvia` rifiuta il lavoro se ne trova uno vivo, e
+        # rifiutandolo mandava un ERRORE che in RACCONTO non ha transizione.
+        # Cadeva nel vuoto: la lingua cambiava a schermo e la storia non
+        # ripartiva mai, senza che niente lo dicesse.
+        self._attendi_lavoro(5.0)
+        self.macchina.invia(Evento.RIPETI)
+
+    def _scalda_voci(self) -> None:
+        """Carica le voci e pre-sintetizza le frasi che si dicono sempre.
+
+        L'annuncio della lingua è una frase fissa, e sintetizzarla al momento
+        costerebbe un secondo di silenzio proprio dopo il tocco: la si mette in
+        cache all'avvio, dove il tempo non lo vede nessuno.
+        """
+        if self.voce is None:
+            return
+        self.voce.scalda()
+        for lingua in self.lex.lingue:
+            frase = self.lex.frase("voce", "conferma_lingua", lingua=lingua)
+            if not frase or not self.voce.per_lingua(lingua):
+                continue
+            try:
+                self.voce.sintetizza(frase)
+            except Exception as e:                          # noqa: BLE001
+                log.warning("frase fissa non pre-sintetizzata (%s): %s", lingua, e)
+        self.voce.per_lingua(self.lingua)      # si torna alla lingua a schermo
+
+    def _annuncia_lingua(self) -> None:
+        frase = self.lex.frase("voce", "conferma_lingua", lingua=self.lingua)
+        if not frase or self.voce is None or not self.voce.disponibile_per_lingua:
+            return
+        # Si zittisce PRIMA di prendere il lucchetto: due tocchi ravvicinati
+        # devono accavallarsi, non accodarsi. Il secondo taglia la voce del
+        # primo, che così rilascia subito.
+        self.voce.zittisci()
+        with self._lucchetto_annuncio:
+            try:
+                self.voce.parla([frase])
+            except Exception as e:                          # noqa: BLE001
+                log.warning("annuncio della lingua non riuscito: %s", e)
+
+    def _ferma_racconto(self) -> None:
+        """Ferma la riproduzione in corso e chi la stava aspettando."""
+        self._ferma_voce.set()
+        with self._lucchetto_lettore:
+            lettore, self._lettore = self._lettore, None
+        if lettore is not None:
+            lettore.ferma()
+        if self.voce is not None:
+            self.voce.zittisci()
+
+    def _attendi_lavoro(self, secondi: float) -> None:
+        """Aspetta che il thread di lavoro esca. Mai se stessi."""
+        lavoro = self._lavoro
+        if lavoro is not None and lavoro is not threading.current_thread():
+            lavoro.join(timeout=secondi)
+            if lavoro.is_alive():
+                log.warning("il lavoro precedente non è uscito in %.0f s", secondi)
 
     # -------------------------------------------------------------- effetti
 
@@ -571,7 +664,7 @@ def crea_app(amelie: Amelie):
         # l'una mentre nessuno guarda non li vede nessuno, gli stessi quindici
         # secondi dopo che un ospite ha toccato la bandierina sono un guasto.
         if amelie.voce is not None:
-            threading.Thread(target=amelie.voce.scalda, daemon=True).start()
+            threading.Thread(target=amelie._scalda_voci, daemon=True).start()
         amelie._mostra(amelie.macchina.stato)
         amelie._manda_lingua()
         try:

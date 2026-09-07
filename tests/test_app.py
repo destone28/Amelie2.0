@@ -336,18 +336,83 @@ class TestLingua:
         assert visti["it"] != visti["en"]
         assert visti["en"], "manca la frase inglese"
 
+    def _attendi(self, amelie, stato, secondi=5.0):
+        """L'annuncio e la ripresa girano in un thread: non sono istantanei."""
+        import time
+        scadenza = time.monotonic() + secondi
+        while time.monotonic() < scadenza:
+            if amelie.macchina.stato is stato:
+                return True
+            time.sleep(0.02)
+        return False
+
     def test_il_racconto_riparte_quando_si_cambia_lingua(self, amelie):
         """Coi fatti gia' in mano non serve rimettere la bottiglia."""
         amelie.macchina.stato = Stato.CONCLUSO
         amelie.cambia_lingua("en")
-        assert amelie.macchina.stato is Stato.RACCONTO
+        assert self._attendi(amelie, Stato.RACCONTO)
 
     def test_si_puo_cambiare_lingua_mentre_parla(self, amelie):
         """Senza la transizione (RACCONTO, RIPETI) l'evento cadeva nel vuoto."""
         amelie.macchina.stato = Stato.RACCONTO
         amelie.cambia_lingua("en")
-        assert amelie.macchina.stato is Stato.RACCONTO
         assert amelie._ferma_voce.is_set(), "la voce vecchia deve tacere subito"
+        assert self._attendi(amelie, Stato.RACCONTO)
+
+    def test_il_racconto_riparte_anche_col_lavoro_vecchio_ancora_vivo(self, amelie):
+        """Il difetto vero: non un guasto, un silenzio.
+
+        `_avvia` rifiuta il lavoro se ne trova uno gia' vivo, e rifiutandolo
+        manda ERRORE - che in RACCONTO non ha transizione. L'evento cadeva nel
+        vuoto: la lingua cambiava a schermo, il racconto non ripartiva mai, e
+        niente lo diceva.
+        """
+        import threading
+        import time
+
+        fermo = threading.Event()
+        vecchio = threading.Thread(target=fermo.wait, daemon=True)
+        vecchio.start()
+        time.sleep(0.05)
+        amelie._lavoro = vecchio
+        amelie.macchina.stato = Stato.RACCONTO
+
+        amelie.cambia_lingua("en")
+        time.sleep(0.3)
+        assert amelie._lavoro is vecchio, "non doveva partire nulla di nuovo"
+        fermo.set()                       # il racconto vecchio finisce adesso
+
+        scadenza = time.monotonic() + 5
+        while time.monotonic() < scadenza and amelie._lavoro is vecchio:
+            time.sleep(0.02)
+        assert amelie._lavoro is not vecchio, \
+            "il racconto non e' ripartito dopo l'uscita del lavoro precedente"
+
+    def test_toccare_la_lingua_gia_attiva_annuncia_lo_stesso(self, amelie):
+        """E' il modo piu' rapido di provare l'audio senza una bottiglia."""
+        annunci = []
+        amelie._annuncia_lingua = lambda: annunci.append(amelie.lingua)
+        assert not amelie.cambia_lingua(amelie.lingua)   # nulla e' cambiato
+        import time
+        scadenza = time.monotonic() + 3
+        while time.monotonic() < scadenza and not annunci:
+            time.sleep(0.02)
+        assert annunci, "nessun annuncio: non si puo' provare l'audio con un tocco"
+
+    def test_una_lingua_inesistente_non_annuncia(self, amelie):
+        annunci = []
+        amelie._annuncia_lingua = lambda: annunci.append(1)
+        assert not amelie.cambia_lingua("de")
+        import time
+        time.sleep(0.3)
+        assert not annunci
+
+    def test_l_annuncio_esiste_in_ogni_lingua(self, amelie):
+        for lingua in amelie.lex.lingue:
+            frase = amelie.lex.frase("voce", "conferma_lingua", lingua=lingua)
+            assert frase, f"manca l'annuncio per {lingua}"
+        assert (amelie.lex.frase("voce", "conferma_lingua", lingua="it")
+                != amelie.lex.frase("voce", "conferma_lingua", lingua="en"))
 
     def test_la_rinuncia_parla_la_lingua_scelta(self, amelie):
         amelie.cambia_lingua("en")

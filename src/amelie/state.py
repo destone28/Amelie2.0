@@ -189,6 +189,21 @@ class Transizione:
     def cambia_stato(self) -> bool:
         return self.da != self.a
 
+    @property
+    def rientro(self) -> bool:
+        """Si e' rientrati nello stesso stato per una regola dichiarata.
+
+        Non e' la stessa cosa di un evento ignorato. Un evento che nello stato
+        corrente non significa niente non deve fare nulla; una transizione
+        scritta apposta verso lo stesso stato - `(RACCONTO, RIPETI)` - deve
+        eseguire uscita e ingresso, altrimenti dichiararla non serve a niente.
+
+        E' successo davvero: la riga c'era, e ripetere il racconto o cambiare
+        lingua mentre parlava non faceva assolutamente nulla. Nessun errore,
+        nessun messaggio: la storia semplicemente non ripartiva.
+        """
+        return not self.cambia_stato and bool(self.effetti)
+
 
 @dataclass
 class Macchina:
@@ -219,7 +234,10 @@ class Macchina:
         """
         destinazione = self._destinazione(evento)
 
-        if destinazione is None or destinazione is self.stato:
+        # Solo l'ASSENZA di una regola lascia la macchina inerte. Una regola che
+        # riporta allo stesso stato e' una scelta di chi l'ha scritta, e va
+        # eseguita: vedi `Transizione.rientro`.
+        if destinazione is None:
             t = Transizione(da=self.stato, evento=evento, a=self.stato)
         else:
             t = Transizione(

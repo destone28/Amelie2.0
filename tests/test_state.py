@@ -11,6 +11,7 @@ import pytest
 from amelie.state import (
     DURATE_S,
     EFFETTI_INGRESSO,
+    EFFETTI_USCITA,
     TRANSIZIONI,
     Effetto,
     Evento,
@@ -209,3 +210,45 @@ class TestCoerenzaDelleTabelle:
 
     def test_assestamento_abbastanza_lungo_da_fermare_l_oscillazione(self):
         assert 0.4 <= DURATE_S[Stato.ASSESTAMENTO] <= 1.0
+
+
+class TestRientro:
+    """Una regola verso lo stesso stato deve fare qualcosa, o non serve scriverla.
+
+    La macchina trattava allo stesso modo due cose diverse: un evento che nello
+    stato corrente non significa niente, e una transizione scritta apposta verso
+    lo stesso stato. La prima deve restare inerte, la seconda no.
+
+    Il difetto non si vedeva: `(RACCONTO, RIPETI) -> RACCONTO` era dichiarata e
+    non produceva alcun effetto, quindi ripetere il racconto o cambiare lingua
+    mentre parlava non faceva assolutamente nulla. Nessun errore, nessun
+    messaggio, nessuna traccia nei registri.
+    """
+
+    def test_un_evento_senza_regola_resta_inerte(self):
+        m = Macchina()
+        assert m.stato is Stato.ATTESA
+        t = m.invia(Evento.RACCONTO_FINITO)      # qui non significa niente
+        assert t.a is Stato.ATTESA
+        assert not t.effetti
+        assert not t.cambia_stato and not t.rientro
+
+    def test_una_regola_verso_se_stesso_esegue_gli_effetti(self):
+        m = Macchina()
+        m.stato = Stato.RACCONTO
+        t = m.invia(Evento.RIPETI)
+        assert t.a is Stato.RACCONTO
+        assert not t.cambia_stato, "lo stato non cambia"
+        assert t.rientro, "ma la transizione e' dichiarata, quindi vale"
+        assert Effetto.FERMA_RACCONTO in t.effetti, "manca l'uscita"
+        assert Effetto.AVVIA_RACCONTO in t.effetti, "manca l'ingresso"
+
+    def test_ogni_regola_verso_se_stesso_ha_effetti(self):
+        """Una regola del genere senza effetti sarebbe una riga morta."""
+        for (da, evento), a in TRANSIZIONI.items():
+            if da is not a:
+                continue
+            effetti = EFFETTI_USCITA.get(da, ()) + EFFETTI_INGRESSO.get(a, ())
+            assert effetti, (
+                f"({da.value}, {evento.value}) -> {a.value} non fa niente: "
+                "o le si danno degli effetti o la si toglie")
