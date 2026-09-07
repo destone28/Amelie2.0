@@ -340,20 +340,17 @@ class TestUscitaSempreAperta:
         aperture = []
 
         class FintoStdin:
-            """Finge ALSA: accetta al ritmo del suono, non a velocità infinita.
+            """Registra e basta.
 
-            Senza questa attesa il thread che versa gira a vuoto a piena
-            velocità e il test non finisce più. È ALSA a dettare il passo, e un
-            finto che non blocca non è un finto fedele.
+            Non deve rallentare: il passo lo detta ora chi versa, con il suo
+            orologio. Un finto che aspettasse a sua volta raddoppierebbe il
+            ritmo e i test durerebbero il doppio del dovuto.
             """
 
             def __init__(self, scritti):
                 self.scritti = scritti
 
-            def write(self, dati):
-                self.scritti.append(bytes(dati))
-                time.sleep(len(dati) / (22050 * 2))
-
+            def write(self, dati): self.scritti.append(bytes(dati))
             def flush(self): pass
             def close(self): pass
 
@@ -415,13 +412,39 @@ class TestUscitaSempreAperta:
             v.chiudi()
 
     def test_svuotare_butta_via_cio_che_non_e_ancora_uscito(self, monkeypatch):
-        from amelie.speech import Uscita
         v, _ = self._voce_finta(monkeypatch)
         try:
             u = v.uscita()
             u.scrivi(b"\x11\x22" * 22050)      # un secondo
             u.svuota()
-            assert u.in_pancia_s() == 0.0
+            # Resta solo la latenza fissa: cio' che e' gia' passato ad aplay e
+            # non e' ancora uscito. La coda e' vuota.
+            assert u.in_pancia_s() == pytest.approx(u.latenza_s, abs=0.05)
+        finally:
+            v.chiudi()
+
+    def test_si_versa_al_ritmo_del_suono_e_non_a_riempimento(self, monkeypatch):
+        """L'invariante che fa combaciare didascalia e voce.
+
+        Scrivendo finche' qualcuno accetta si finisce molto avanti a cio' che
+        si sente: la pipe del sistema da sola tiene 64 KB, che a 22050 mono
+        sono un secondo e mezzo di parlato. Era quello il ritardo con cui la
+        voce arrivava dopo il testo.
+        """
+        import time
+
+        v, aperture = self._voce_finta(monkeypatch)
+        try:
+            u = v.uscita()
+            time.sleep(0.05)
+            t0, n0 = time.monotonic(), len(aperture[0].scritti)
+            time.sleep(1.0)
+            versati = (len(aperture[0].scritti) - n0) * u.PEZZO_S
+            trascorso = time.monotonic() - t0
+            # In un secondo si versa circa un secondo di suono, non dieci.
+            assert versati == pytest.approx(trascorso, abs=0.35), (
+                f"versati {versati:.2f}s di suono in {trascorso:.2f}s reali: "
+                "si sta correndo avanti all'orecchio")
         finally:
             v.chiudi()
 
@@ -455,10 +478,7 @@ class TestDidascalia:
 
         class FintoStdin:
             def __init__(self): self.scritti = []
-            def write(self, dati):
-                import time
-                self.scritti.append(bytes(dati))
-                time.sleep(len(dati) / (22050 * 2))
+            def write(self, dati): self.scritti.append(bytes(dati))
             def flush(self): pass
             def close(self): pass
 
@@ -478,6 +498,55 @@ class TestDidascalia:
             v.chiudi()
 
         assert viste == ["Prima.", "Seconda.", "Terza."]
+
+    def test_la_didascalia_compare_QUANDO_la_frase_comincia_a_sentirsi(
+            self, monkeypatch):
+        """Il difetto vero: il testo compariva uno o due secondi prima della voce.
+
+        Fra lo scrivere una frase e il sentirla c'è tutto quello che è in
+        viaggio: la coda, la pipe del sistema — 64 KB, cioè un secondo e mezzo
+        di parlato a 22050 mono — e il buffer di ALSA. Aspettare che si
+        svuotasse solo la coda faceva credere di aver finito con un secondo e
+        mezzo di anticipo.
+
+        Qui si verifica il conto: la frase N deve comparire dopo la latenza più
+        la somma delle durate di quelle prima.
+        """
+        import time
+
+        from amelie.speech import ImpostazioniVoce, Voce
+
+        class FintoStdin:
+            def __init__(self): self.scritti = []
+            def write(self, dati): self.scritti.append(bytes(dati))
+            def flush(self): pass
+            def close(self): pass
+
+        class FintoProc:
+            def __init__(self): self.stdin = FintoStdin()
+            def wait(self, timeout=None): return 0
+            def kill(self): pass
+
+        v = Voce(ImpostazioniVoce(usa_cache=False))
+        monkeypatch.setattr(v, "apri_uscita", lambda: FintoProc())
+        # Due frasi da mezzo secondo l'una.
+        monkeypatch.setattr(v, "sintetizza", lambda f: b"\x11\x22" * 11025)
+
+        u = v.uscita()
+        time.sleep(0.3)                     # il flusso va a regime
+        quando = []
+        t0 = time.monotonic()
+        try:
+            v.parla(["Prima.", "Seconda."],
+                    su_frase=lambda f: quando.append(time.monotonic() - t0))
+        finally:
+            v.chiudi()
+
+        assert len(quando) == 2
+        # La prima comincia a sentirsi dopo la latenza; la seconda mezzo
+        # secondo dopo, che e' la durata della prima.
+        assert quando[0] == pytest.approx(u.latenza_s, abs=0.25)
+        assert quando[1] - quando[0] == pytest.approx(0.5, abs=0.25)
 
     def test_senza_didascalia_non_si_aspetta_niente(self, monkeypatch):
         """Chi non chiede la didascalia non deve pagare le attese che serve a lei."""

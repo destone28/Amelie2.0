@@ -102,6 +102,15 @@ class Uscita:
     # player scappa avanti a quella che l'orecchio sente.
     RISERVA_S = 0.3
     PEZZO_S = 0.08
+    # Di quanto si sta avanti a cio' che l'orecchio sente. Senza un freno non
+    # lo si decide: si scrive finche' qualcuno accetta, e la pipe del sistema
+    # da sola tiene 64 KB, cioe' UN SECONDO E MEZZO di parlato a 22050 mono.
+    # E' quello il ritardo con cui la voce arrivava dopo la didascalia.
+    VANTAGGIO_S = 0.25
+    # Se si resta indietro di piu' di cosi' - il sistema occupato, l'OCR che
+    # parte - si riparte da capo col conto invece di recuperare a raffica, che
+    # riempirebbe di nuovo la pipe.
+    RECUPERO_MAX_S = 0.6
 
     def __init__(self, voce: "Voce") -> None:
         self.voce = voce
@@ -112,6 +121,7 @@ class Uscita:
         self._fermo = threading.Event()
         self._proc: subprocess.Popen | None = None
         self._filo: threading.Thread | None = None
+        self._versati = 0
 
     @property
     def aperta(self) -> bool:
@@ -136,15 +146,43 @@ class Uscita:
                 self._spazio.wait(0.1)
             self._coda.extend(pcm)
 
+    def attendi_residuo(self, residuo_s: float, tetto_s: float = 120.0) -> None:
+        """Aspetta finche' manca `residuo_s` alla fine di cio' che e' in coda.
+
+        E' il conto che fa combaciare la didascalia con la voce. `in_pancia_s`
+        dice fra quanto verra' sentito l'ULTIMO byte accodato; se dopo aver
+        accodato una frase lunga `d` si aspetta che ne manchi esattamente `d`,
+        quel momento e' quello in cui la frase COMINCIA a sentirsi.
+        """
+        # Sotto la latenza non si puo' scendere: e' cio' che e' gia' partito.
+        bersaglio = max(residuo_s, self.latenza_s + 0.02)
+        scadenza = time.monotonic() + tetto_s
+        while self.in_pancia_s() > bersaglio and time.monotonic() < scadenza:
+            if self._fermo.wait(0.02):
+                return
+
     def svuota(self) -> None:
         """Butta via cio' che non e' ancora uscito. E' il "taci adesso"."""
         with self._spazio:
             self._coda.clear()
             self._spazio.notify_all()
 
+    @property
+    def latenza_s(self) -> float:
+        """Quanto passa fra il consegnare un byte e il sentirlo."""
+        return self.VANTAGGIO_S + BUFFER_ALSA_US / 1_000_000
+
     def in_pancia_s(self) -> float:
+        """Quanto manca perche' TUTTO il consegnato sia stato sentito.
+
+        Non e' solo la coda: c'e' anche cio' che e' gia' passato ad aplay e non
+        e' ancora uscito. Contare solo la coda faceva credere di aver finito
+        con un secondo e mezzo di anticipo, e la didascalia correva avanti alla
+        voce di altrettanto.
+        """
         with self._stato:
-            return len(self._coda) / self._bps
+            coda = len(self._coda) / self._bps
+        return coda + self.latenza_s
 
     def chiudi(self) -> None:
         self._fermo.set()
@@ -165,8 +203,21 @@ class Uscita:
                 pass
 
     def _versa(self) -> None:
+        """Versa a PASSO D'OROLOGIO, non a riempimento.
+
+        Se si scrive finche' qualcuno accetta, si finisce molto avanti a cio'
+        che si sente: la pipe del sistema da sola tiene 64 KB, che a 22050 mono
+        sono un secondo e mezzo di parlato, e dopo c'e' il buffer di ALSA. E'
+        quello il ritardo con cui la voce arrivava dopo la didascalia.
+
+        Scrivendo al ritmo del suono, "consegnato" torna a voler dire "sentito"
+        a meno del vantaggio dichiarato.
+        """
         pezzo = int(self.PEZZO_S * self._bps)
         muto = silenzio(self.PEZZO_S, self.voce.imp.frequenza)
+        inizio = time.monotonic()
+        self._versati = 0
+
         while not self._fermo.is_set():
             with self._spazio:
                 dati = bytes(self._coda[:pezzo])
@@ -175,14 +226,29 @@ class Uscita:
                 proc = self._proc
             if proc is None:
                 return
-            try:
+            if not dati:
                 # Silenzio quando non c'e' niente da dire: e' cio' che tiene
                 # sveglio il DSP e fa parlare tutto il resto all'istante.
-                proc.stdin.write(dati or muto)
+                dati = muto
+
+            atteso = inizio + self._versati / self._bps - self.VANTAGGIO_S
+            ritardo = atteso - time.monotonic()
+            if ritardo > 0:
+                if self._fermo.wait(ritardo):
+                    return
+            elif ritardo < -self.RECUPERO_MAX_S:
+                # Si e' rimasti indietro sul serio: si riparte da capo col
+                # conto, invece di recuperare a raffica e riempire la pipe.
+                inizio = time.monotonic()
+                self._versati = 0
+
+            try:
+                proc.stdin.write(dati)
                 proc.stdin.flush()
             except (BrokenPipeError, OSError, ValueError):
                 log.warning("uscita audio chiusa sotto di noi")
                 return
+            self._versati += len(dati)
 
 # Una voce per lingua. La scelta e' di LICENZA prima che di gusto: vedi la nota
 # in testa al modulo per l'italiano, e docs/ATTRIBUZIONI.md per l'inglese.
@@ -423,34 +489,49 @@ class Voce:
         quindi non si pagano i due secondi che il DSP impiega ad avviarsi.
 
         `su_frase` viene chiamata quando una frase **comincia a sentirsi**, non
-        quando la si scrive. Fra le due cose ci sono la riserva dell'uscita e il
-        buffer di ALSA, cioe' mezzo secondo: una didascalia agganciata alla
-        scrittura correrebbe avanti alla voce di quel mezzo secondo, e su una
-        frase da un secondo si vedrebbe.
+        quando la si scrive. Fra le due cose c'e' tutto cio' che e' in viaggio:
+        la coda di questa classe, la pipe del sistema - 64 KB, cioe' un secondo
+        e mezzo di parlato - e il buffer di ALSA. Agganciando la didascalia alla
+        scrittura, il testo compariva uno o due secondi prima della voce.
         """
         uscita = self.uscita()
         for frase in frasi:
             pcm = self.sintetizza(frase)
             if not pcm:
                 continue
+            uscita.scrivi(pcm)
             if su_frase is not None:
-                # Si aspetta che la frase PRECEDENTE sia stata consegnata tutta
-                # e sia uscita da ALSA: da quell'istante quella nuova comincia.
-                self._attendi_uscita(uscita)
+                # Si accoda PRIMA e si mostra DOPO: la frase comincia a sentirsi
+                # quando manca esattamente la sua durata alla fine della coda.
+                # Mostrandola al momento di scriverla si correva avanti di tutto
+                # cio' che era ancora in viaggio - la pipe del sistema da sola
+                # tiene un secondo e mezzo di parlato.
+                uscita.attendi_residuo(len(pcm) / self._byte_al_secondo())
                 try:
                     su_frase(frase)
                 except Exception:                           # noqa: BLE001
                     log.exception("errore nella didascalia")
-            uscita.scrivi(pcm)
         self._attendi_uscita(uscita)
 
+    def _byte_al_secondo(self) -> int:
+        return byte_al_secondo(self.imp.frequenza)
+
     @staticmethod
-    def _attendi_uscita(uscita: "Uscita", tetto_s: float = 60.0) -> None:
-        """Aspetta che tutto il consegnato sia stato davvero riprodotto."""
+    def _attendi_uscita(uscita: "Uscita", tetto_s: float = 120.0) -> None:
+        """Aspetta che tutto il consegnato sia stato davvero SENTITO.
+
+        `in_pancia_s` conta anche cio' che e' gia' passato ad aplay e non e'
+        ancora uscito, quindi qui si aspetta fino in fondo. Aspettare solo che
+        la coda si svuotasse faceva credere di aver finito con un secondo e
+        mezzo di anticipo.
+        """
         scadenza = time.monotonic() + tetto_s
-        while uscita.in_pancia_s() > 0.02 and time.monotonic() < scadenza:
+        while (uscita.in_pancia_s() > uscita.latenza_s + 0.02
+               and time.monotonic() < scadenza):
             time.sleep(0.02)
-        time.sleep(BUFFER_ALSA_US / 1_000_000)
+        # E poi la latenza vera e propria: quello che e' stato consegnato per
+        # ultimo deve ancora attraversare la pipe e il buffer di ALSA.
+        time.sleep(min(uscita.latenza_s, max(0.0, scadenza - time.monotonic())))
 
     def per_lingua(self, codice: str) -> bool:
         """Passa alla voce di quella lingua, se ce n'e' una.
