@@ -10,12 +10,18 @@
  *
  * ── DUE VINCOLI CHE FANNO FALLIRE IN SILENZIO ────────────────────────────────
  *
- * 1. App Lab carica il binario in SRAM con un tetto di 131.072 byte. Un binario
- *    più grande COMPILA senza errori e poi va in bus fault al caricamento, senza
- *    diagnostica. Includere <Modulino.h> tira dentro sette librerie — due driver
- *    ToF completi, IMU, barometro, umidità, sensore RGB, grafica — ed è il modo
- *    più rapido per avvicinarsi al limite. Qui si includono SOLO i due header
- *    che servono davvero.
+ * 1. App Lab carica il binario in SRAM con un tetto di 131.072 byte, e un binario
+ *    più grande COMPILA senza errori per poi andare in bus fault al caricamento.
+ *    Da qui l'idea di includere solo gli header dei due Modulino che servono,
+ *    invece di <Modulino.h> che ne tira dentro sette — due driver ToF completi,
+ *    IMU, barometro, umidità, sensore RGB, grafica.
+ *
+ *    MISURATO, e l'idea era sbagliata due volte. Primo: Arduino_Modulino 0.9.0
+ *    NON espone ModulinoPixels.h e ModulinoDistance.h, quindi lo sketch non
+ *    compilava affatto. Secondo: caricando con `arduino-cli` per il core
+ *    arduino:zephyr, <Modulino.h> compreso, il binario occupa 33.000 byte di
+ *    programma su 1.966.080 e 3.772 byte di RAM su 523.624. L'1%. Il tetto dei
+ *    131 KB riguarda un'altra via di caricamento, non questa.
  *
  * 2. Chiamare Bridge.call() o Monitor.print() DENTRO un gestore registrato con
  *    provide() manda in stallo il canale di comunicazione. È documentato. Per
@@ -33,8 +39,7 @@
  */
 
 #include <Arduino_RouterBridge.h>
-#include <ModulinoPixels.h>
-#include <ModulinoDistance.h>
+#include <Modulino.h>
 
 /* Indirizzi a 7 bit. Il datasheet chiama 0x6C l'indirizzo "Modulino" e 0x36
  * quello "Hardware": qui va quello hardware. Passare 0x6C fallisce in SILENZIO,
@@ -93,14 +98,26 @@ static void applica(ModulinoPixels &p, StatoLed &s) {
 void setup() {
   Bridge.begin();
 
+  /* I METODI SI DICHIARANO PRIMA DI TOCCARE L'I2C.
+   *
+   * Se un Modulino non risponde - non ancora collegato, un cavetto staccato,
+   * un indirizzo sbagliato - begin() puo' non tornare, e allora setup() non
+   * finisce e Linux non vede MAI i metodi. Il sintomo e' identico a un
+   * firmware non caricato: il router risponde e ogni chiamata dice "method not
+   * available". E' successo, e ci si perde un'ora a cercare nel posto
+   * sbagliato.
+   *
+   * Dichiarandoli qui, il firmware si puo' verificare PRIMA di collegare
+   * qualsiasi cosa - che e' l'ordine in cui si monta un dispositivo - e un
+   * modulo guasto costa un anello spento, non un dispositivo muto. */
+  Bridge.provide("set_anello", set_anello);
+  Bridge.provide("set_flash", set_flash);
+  Bridge.provide("distanza", distanza);
+
   /* Su UNO Q i Modulino stanno su Wire1: la libreria lo sceglie da sola. */
   anello.begin();
   flash.begin();
   tof.begin();
-
-  Bridge.provide("set_anello", set_anello);
-  Bridge.provide("set_flash", set_flash);
-  Bridge.provide("distanza", distanza);
 
   /* Un lampo d'ambra all'accensione: dice che il firmware è vivo prima ancora
    * che Linux abbia finito di avviarsi, che richiede 20-30 secondi. */

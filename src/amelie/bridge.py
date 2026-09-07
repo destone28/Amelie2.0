@@ -84,14 +84,24 @@ class Ponte:
 
     @property
     def disponibile(self) -> bool:
+        """C'e' un MCU che risponde E che sa fare quello che gli si chiede.
+
+        Non basta che il socket del router esista: il router c'e' anche quando
+        sull'MCU non gira lo sketch di Amelie, e in quel caso ogni chiamata
+        fallisce con "method not available". Controllare solo il socket faceva
+        dichiarare `mcu: true` a un dispositivo che non poteva ne' leggere il
+        sensore ne' accendere l'anello - ed e' esattamente lo stato in cui si
+        trova una board appena preparata, prima di caricare il firmware.
+        """
         try:
-            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            s.settimeout(1.0)
-            s.connect(self.percorso)
-            s.close()
-            return True
-        except OSError:
+            self.chiama("distanza")
+        except ErroreMCU:
+            log.warning("il router risponde ma lo sketch di Amelie non c'e': "
+                        "carica firmware/amelie_mcu")
             return False
+        except (PonteNonDisponibile, OSError):
+            return False
+        return True
 
     def chiama(self, metodo: str, *parametri: Any) -> Any:
         """Invoca un metodo esposto dallo sketch. Solleva se l'MCU risponde male."""

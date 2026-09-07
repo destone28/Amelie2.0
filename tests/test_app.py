@@ -555,3 +555,38 @@ class TestAvvio:
         finally:
             a.matcher.chiudi()
             a.narratore.chiudi()
+
+
+class TestPonteOnesto:
+    """«MCU disponibile» deve voler dire che l'MCU sa fare quello che serve.
+
+    Il router della UNO Q gira anche quando sull'MCU non c'è lo sketch di
+    Amelie: il socket esiste, si connette, e ogni chiamata fallisce con
+    «method not available». Controllare solo il socket faceva dichiarare
+    `mcu: true` a un dispositivo che non poteva né leggere il sensore né
+    accendere l'anello — ed è esattamente lo stato di una board appena
+    preparata, prima di caricare il firmware.
+    """
+
+    def test_un_router_senza_sketch_non_e_un_mcu_disponibile(self):
+        from amelie.bridge import ErroreMCU, Ponte
+
+        p = Ponte()
+        p.chiama = lambda *a, **k: (_ for _ in ()).throw(
+            ErroreMCU("distanza: method distanza not available"))
+        assert not p.disponibile
+
+    def test_un_mcu_che_risponde_e_disponibile(self):
+        from amelie.bridge import Ponte
+
+        p = Ponte()
+        p.chiama = lambda *a, **k: 42
+        assert p.disponibile
+
+    def test_senza_router_non_e_disponibile(self):
+        from amelie.bridge import Ponte, PonteNonDisponibile
+
+        p = Ponte(percorso="/non/esiste")
+        p.chiama = lambda *a, **k: (_ for _ in ()).throw(
+            PonteNonDisponibile("niente socket"))
+        assert not p.disponibile
