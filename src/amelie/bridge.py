@@ -42,6 +42,9 @@ ANELLO = 0x36     # l'anello sotto la bottiglia
 FLASH = 0x37      # l'illuminatore per la camera, riprogrammato
 DISTANZA = 0x29   # VL53L4CD, indirizzo fisso
 
+# L'ordine è quello dei bit che lo sketch somma in `moduli()`: 1, 2, 4.
+NOMI_MODULI = ("anello", "flash", "distanza")
+
 
 @dataclass(frozen=True)
 class Colore:
@@ -148,6 +151,22 @@ class Ponte:
     def flash(self, c: Colore) -> None:
         self.chiama("set_flash", c.r, c.g, c.b, c.luminosita)
 
+    def moduli(self) -> dict[str, bool]:
+        """Quali Modulino il microcontrollore vede in questo momento.
+
+        Serve a montare: si collega un pezzo per volta e si chiede al
+        dispositivo se lo vede, invece di dedurlo da un LED che non si accende.
+
+        Non solleva mai. Chi chiede questo sta cercando un guasto, e un firmware
+        vecchio che non conosce il metodo è uno dei guasti possibili: rispondere
+        «non vedo niente» lo racconta meglio di un'eccezione.
+        """
+        try:
+            v = int(self.chiama("moduli"))
+        except (ErroreMCU, PonteNonDisponibile, OSError, TypeError, ValueError):
+            return dict.fromkeys(NOMI_MODULI, False)
+        return {nome: bool(v & (1 << i)) for i, nome in enumerate(NOMI_MODULI)}
+
     def distanza_mm(self) -> int | None:
         """Distanza letta dal sensore, o None se la misura non è valida.
 
@@ -178,6 +197,11 @@ class PonteSimulato(Ponte):
         self.comandi.append((metodo, parametri))
         if metodo == "distanza":
             return -1 if self.distanza_finta is None else self.distanza_finta
+        if metodo == "moduli":
+            # Un banco simulato ha tutto collegato: senza questo `True` varrebbe
+            # 1, cioè «vedo solo l'anello», e la simulazione racconterebbe un
+            # guasto che non c'è.
+            return (1 << len(NOMI_MODULI)) - 1
         return True
 
 

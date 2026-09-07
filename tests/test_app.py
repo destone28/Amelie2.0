@@ -590,3 +590,52 @@ class TestPonteOnesto:
         p.chiama = lambda *a, **k: (_ for _ in ()).throw(
             PonteNonDisponibile("niente socket"))
         assert not p.disponibile
+
+
+class TestModuliVisti:
+    """`moduli()` è lo strumento del montaggio: si collega un pezzo per volta e
+    si chiede al dispositivo se lo vede, invece di dedurlo da un LED spento.
+
+    Perché serva a quello, deve rispondere sempre — anche a un firmware vecchio
+    che non conosce il metodo, che è uno dei guasti che si stanno cercando.
+    """
+
+    def _ponte(self, risposta):
+        from amelie.bridge import Ponte
+
+        p = Ponte()
+        p.chiama = lambda *a, **k: (
+            (_ for _ in ()).throw(risposta)
+            if isinstance(risposta, Exception) else risposta)
+        return p
+
+    def test_i_bit_stanno_nell_ordine_dello_sketch(self):
+        assert self._ponte(0).moduli() == {
+            "anello": False, "flash": False, "distanza": False}
+        assert self._ponte(1).moduli()["anello"]
+        assert self._ponte(2).moduli()["flash"]
+        assert self._ponte(4).moduli()["distanza"]
+        assert all(self._ponte(7).moduli().values())
+
+    def test_il_sensore_da_solo_non_e_l_anello(self):
+        """Il caso del montaggio vero: sensore collegato, anelli ancora no."""
+        assert self._ponte(4).moduli() == {
+            "anello": False, "flash": False, "distanza": True}
+
+    def test_un_firmware_vecchio_dice_non_vedo_niente(self):
+        from amelie.bridge import ErroreMCU, PonteNonDisponibile
+
+        for guasto in (ErroreMCU("moduli: method not available"),
+                       PonteNonDisponibile("niente socket"),
+                       OSError("socket sparito")):
+            assert self._ponte(guasto).moduli() == {
+                "anello": False, "flash": False, "distanza": False}
+
+    def test_una_risposta_senza_senso_non_fa_saltare_niente(self):
+        assert self._ponte(None).moduli() == {
+            "anello": False, "flash": False, "distanza": False}
+
+    def test_il_banco_simulato_ha_tutto_collegato(self):
+        from amelie.bridge import PonteSimulato
+
+        assert all(PonteSimulato().moduli().values())

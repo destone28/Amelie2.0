@@ -8,7 +8,7 @@
  * Questa divisione permette l'attesa a consumo bassissimo: qui si fa la guardia
  * sul sensore, e Linux viene svegliato solo quando arriva una bottiglia.
  *
- * ── DUE VINCOLI CHE FANNO FALLIRE IN SILENZIO ────────────────────────────────
+ * ── TRE VINCOLI CHE FANNO FALLIRE IN SILENZIO ────────────────────────────────
  *
  * 1. App Lab carica il binario in SRAM con un tetto di 131.072 byte, e un binario
  *    più grande COMPILA senza errori per poi andare in bus fault al caricamento.
@@ -28,6 +28,13 @@
  *    questo i gestori qui sotto non fanno altro che scrivere in una variabile,
  *    e ogni accesso a Wire1 avviene nel loop().
  *
+ * 3. Un .ino non è un .cpp: prima di compilarlo, Arduino gli genera i prototipi
+ *    di tutte le funzioni e li infila subito PRIMA della prima definizione di
+ *    funzione del file. Un tipo dichiarato dopo quel punto non esiste ancora
+ *    quando il prototipo lo nomina, e si prende un "has not been declared" su
+ *    una riga che sta sotto la dichiarazione e sembra corretta. Per questo qui
+ *    tutti i tipi e le variabili stanno insieme in cima, e le funzioni dopo.
+ *
  * ── I DUE ANELLI ─────────────────────────────────────────────────────────────
  *
  * I Modulino Pixels nascono tutti all'indirizzo 0x36. Il secondo va
@@ -41,17 +48,30 @@
 #include <Arduino_RouterBridge.h>
 #include <Modulino.h>
 
+/* ─── tutto ciò che si dichiara, prima di qualsiasi funzione (vincolo 3) ────── */
+
 /* Indirizzi a 7 bit. Il datasheet chiama 0x6C l'indirizzo "Modulino" e 0x36
  * quello "Hardware": qui va quello hardware. Passare 0x6C fallisce in SILENZIO,
  * perché begin() ritorna comunque true. */
-static const uint8_t IND_ANELLO = 0x36;
-static const uint8_t IND_FLASH  = 0x37;
+static const uint8_t IND_ANELLO   = 0x36;
+static const uint8_t IND_FLASH    = 0x37;
+static const uint8_t IND_DISTANZA = 0x29;   /* VL53L4CD, fisso */
+static const uint8_t N_LED = 8;
 
 ModulinoPixels anello(IND_ANELLO);
 ModulinoPixels flash(IND_FLASH);
 ModulinoDistance tof;
 
-static const uint8_t N_LED = 8;
+/* Quali moduli hanno risposto. Si cercano invece di darli per presenti: un
+ * `begin()` su un indirizzo che non risponde puo' NON TORNARE, e allora setup()
+ * non finisce e Linux non vede mai i metodi - sintomo identico a un firmware
+ * assente. E' successo montando: con i Modulino ancora scollegati il
+ * dispositivo sembrava senza firmware.
+ *
+ * Si ricercano anche a caldo, ogni due secondi, cosi' durante il montaggio si
+ * collega un pezzo per volta e prende vita da solo. */
+static bool c_anello = false, c_flash = false, c_tof = false;
+static uint32_t ultimo_sondaggio = 0;
 
 /* Stato richiesto da Linux. I gestori scrivono qui e basta: l'accesso a Wire1
  * avviene solo nel loop, mai dentro un handler del Bridge. */
@@ -67,6 +87,19 @@ static StatoLed rich_anello, rich_flash;
 static int ultima_mm = -1;
 static bool presente = false;
 static uint32_t ultimo_invio = 0;
+
+/* ─── il bus ───────────────────────────────────────────────────────────────── */
+
+static bool risponde(uint8_t indirizzo) {
+  Wire1.beginTransmission(indirizzo);
+  return Wire1.endTransmission() == 0;
+}
+
+static void cerca_moduli() {
+  if (!c_anello && risponde(IND_ANELLO))   c_anello = anello.begin();
+  if (!c_flash  && risponde(IND_FLASH))    c_flash  = flash.begin();
+  if (!c_tof    && risponde(IND_DISTANZA)) c_tof    = tof.begin();
+}
 
 /* ─── gestori esposti a Linux ──────────────────────────────────────────────── */
 
@@ -85,6 +118,14 @@ bool set_flash(int r, int g, int b, int lum) {
  * dichiara la misura non valida quando il segnale di ritorno è troppo debole,
  * ed è esattamente ciò che succede con il piatto vuoto. */
 int distanza() { return ultima_mm; }
+
+/* Quali moduli il microcontrollore vede in questo momento, come somma di bit:
+ * 1 anello, 2 flash, 4 sensore. Serve a montare - si collega un pezzo per volta
+ * e si chiede al dispositivo se lo vede - e a capire un guasto senza smontare
+ * niente. */
+int moduli() {
+  return (c_anello ? 1 : 0) | (c_flash ? 2 : 0) | (c_tof ? 4 : 0);
+}
 
 /* ─── ciclo ────────────────────────────────────────────────────────────────── */
 
@@ -113,23 +154,33 @@ void setup() {
   Bridge.provide("set_anello", set_anello);
   Bridge.provide("set_flash", set_flash);
   Bridge.provide("distanza", distanza);
+  Bridge.provide("moduli", moduli);
 
-  /* Su UNO Q i Modulino stanno su Wire1: la libreria lo sceglie da sola. */
-  anello.begin();
-  flash.begin();
-  tof.begin();
+  /* Su UNO Q i Modulino stanno su Wire1. Si cercano, non si danno per presenti. */
+  Wire1.begin();
+  cerca_moduli();
 
   /* Un lampo d'ambra all'accensione: dice che il firmware è vivo prima ancora
    * che Linux abbia finito di avviarsi, che richiede 20-30 secondi. */
-  for (uint8_t i = 0; i < N_LED; i++) anello.set(i, 255, 150, 40, 20);
-  anello.show();
+  if (c_anello) {
+    for (uint8_t i = 0; i < N_LED; i++) anello.set(i, 255, 150, 40, 20);
+    anello.show();
+  }
 }
 
 void loop() {
   /* Il solo include di Arduino_RouterBridge limita il loop a circa 1 kHz anche
    * senza chiamate: il ponte si aggancia al loop per sincronizzarsi. Non ha
    * senso girare più veloci di così. */
-  if (tof.available()) {
+
+  /* Ogni due secondi si guarda se e' comparso qualcosa di nuovo sul bus. */
+  uint32_t ora_ms = millis();
+  if (ora_ms - ultimo_sondaggio > 2000) {
+    ultimo_sondaggio = ora_ms;
+    cerca_moduli();
+  }
+
+  if (c_tof && tof.available()) {
     ultima_mm = (int)tof.get();
   } else {
     ultima_mm = -1;
@@ -145,8 +196,8 @@ void loop() {
     Bridge.notify("bottiglia", presente, ultima_mm);
   }
 
-  applica(anello, rich_anello);
-  applica(flash, rich_flash);
+  if (c_anello) applica(anello, rich_anello);
+  if (c_flash)  applica(flash, rich_flash);
 
   delay(20);
 }
