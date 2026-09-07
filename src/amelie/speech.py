@@ -145,7 +145,12 @@ class ImpostazioniVoce:
     modello: str = VOCE_PREDEFINITA
     # Dove suonare. Sulla UNO Q l'HDMI e' il PCM 3 della scheda del SoC: non
     # esiste un device che si chiami "HDMI", e' il backend di MultiMedia4.
-    device_alsa: str = "hw:0,3"
+    # plughw, non hw: il device HDMI accetta SOLO 32000-48000 Hz e uno o due
+    # canali, mentre Piper produce 22050 mono. Con `hw:` ogni riproduzione
+    # falliva con "Unable to install hw params", e il primo sintomo era che non
+    # si sentiva niente. `plughw` mette in mezzo la conversione di ALSA, che su
+    # questa board costa una frazione di punto percentuale di CPU.
+    device_alsa: str = "plughw:0,3"
     # Due thread su quattro: gli altri due servono al modello linguistico, che
     # su questa board e' sempre il collo di bottiglia.
     thread: int = 2

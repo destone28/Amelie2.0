@@ -114,7 +114,7 @@ class Configurazione:
     # template, che e' vero per costruzione. Con --con-modello si riaccende la
     # generazione dal vivo per l'ignoto.
     senza_modello: bool = True
-    device_audio: str = "hw:0,3"
+    device_audio: str = "plughw:0,3"
     porta: int = 8080
     periodo_sensore_s: float = 0.15
     # La lingua di partenza. Si cambia a schermo, con un tocco, e il
@@ -673,7 +673,7 @@ def main() -> None:
                     help="genera dal vivo per cio' che non e' in cache "
                          "(lento e di qualita' incerta: vedi docs/04-QUALITA.md)")
     ap.add_argument("--porta", type=int, default=8080)
-    ap.add_argument("--audio", default="hw:0,3")
+    ap.add_argument("--audio", default="plughw:0,3")
     ap.add_argument("-v", "--verboso", action="store_true")
     args = ap.parse_args()
 

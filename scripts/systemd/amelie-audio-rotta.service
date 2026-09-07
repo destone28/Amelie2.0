@@ -1,0 +1,18 @@
+[Unit]
+Description=Amelie - apre la rotta audio verso lo schermo
+# Dopo la guardia, che e' quella che garantisce l'esistenza della scheda: qui
+# si da' per scontato che ci sia, e si apre soltanto il passaggio.
+After=amelie-audio-guard.service sound.target
+Wants=amelie-audio-guard.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/amelie-audio-rotta.sh
+# Il controllo torna a zero se l'ADSP viene riavviato a caldo: se succede, la
+# guardia riavvia il servizio e questo riapre.
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

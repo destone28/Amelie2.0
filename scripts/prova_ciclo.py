@@ -24,7 +24,7 @@ def main() -> None:
     ap.add_argument("--foto", type=Path)
     ap.add_argument("--con-voce", action="store_true")
     ap.add_argument("--salva", type=Path, help="dove salvare lo scatto")
-    ap.add_argument("--audio", default="hw:0,3")
+    ap.add_argument("--audio", default="plughw:0,3")
     args = ap.parse_args()
 
     import cv2
