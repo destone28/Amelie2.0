@@ -320,63 +320,122 @@ class TestChiusura:
         assert not errori, errori
 
 
-class TestMarginiDiSilenzio:
-    """Il DSP mangia l'inizio e la fine di ogni flusso.
+class TestUscitaSempreAperta:
+    """Il flusso audio si apre una volta e non si chiude mai.
 
-    Misurato sulla board: `aplay` esce 0,35 s prima della fine dell'audio, e il
-    DSP comincia a rendere qualche decimo dopo l'apertura. Su nove secondi di
-    racconto non si nota; su una frase da un secondo se ne perde la maggior
-    parte, e resta solo un rumorino.
+    Il DSP di questa board impiega **circa due secondi** a cominciare a rendere
+    il suono dopo l'apertura del flusso. Non e' una stima: si sono fatti
+    ascoltare sei bip a un secondo l'uno dall'altro e se ne sono sentiti
+    quattro. Aprendo e chiudendo `aplay` a ogni frase, una frase da un secondo
+    sparisce del tutto - se ne sente l'ultima sillaba, e sembra un guasto
+    dell'amplificatore.
     """
 
-    def test_i_margini_esistono_e_sono_sensati(self):
-        from amelie.speech import (
-            MARGINE_APERTURA_S, MARGINE_CHIUSURA_S, MARGINE_PLAYER_S)
-        # Devono coprire il taglio misurato di 0,35 s, senza diventare
-        # un'attesa percepibile.
-        assert MARGINE_APERTURA_S >= 0.35
-        assert MARGINE_CHIUSURA_S >= 0.35
-        assert MARGINE_PLAYER_S > 0
-        for m in (MARGINE_APERTURA_S, MARGINE_CHIUSURA_S, MARGINE_PLAYER_S):
-            assert m <= 1.0, "un margine cosi' lungo si sentirebbe come un ritardo"
+    @staticmethod
+    def _voce_finta(monkeypatch):
+        import time
 
-    def test_il_silenzio_ha_la_durata_chiesta(self):
-        from amelie.speech import silenzio
-        assert len(silenzio(1.0, 22050)) == 22050 * 2
-        assert len(silenzio(0.5, 48000)) == 48000
-        assert silenzio(0.1, 22050).strip(b"\x00") == b"", "non e' silenzio"
+        from amelie.speech import ImpostazioniVoce, Voce
 
-    def test_una_frase_corta_viene_imbottita(self, monkeypatch):
-        """La prova che conta: quanto si scrive davvero sul flusso.
-
-        Una frase da un secondo deve arrivare al device dentro un flusso piu'
-        lungo di lei, altrimenti il DSP la perde.
-        """
-        from amelie.speech import (
-            MARGINE_APERTURA_S, MARGINE_CHIUSURA_S, ImpostazioniVoce, Voce)
-
-        scritti = []
+        aperture = []
 
         class FintoStdin:
-            def write(self, dati): scritti.append(dati)
+            """Finge ALSA: accetta al ritmo del suono, non a velocità infinita.
+
+            Senza questa attesa il thread che versa gira a vuoto a piena
+            velocità e il test non finisce più. È ALSA a dettare il passo, e un
+            finto che non blocca non è un finto fedele.
+            """
+
+            def __init__(self, scritti):
+                self.scritti = scritti
+
+            def write(self, dati):
+                self.scritti.append(bytes(dati))
+                time.sleep(len(dati) / (22050 * 2))
+
             def flush(self): pass
             def close(self): pass
 
         class FintoProc:
-            stdin = FintoStdin()
+            def __init__(self):
+                self.scritti = []
+                self.stdin = FintoStdin(self.scritti)
+                self.ucciso = False
             def wait(self, timeout=None): return 0
-            def kill(self): pass
+            def kill(self): self.ucciso = True
 
         v = Voce(ImpostazioniVoce(usa_cache=False))
-        monkeypatch.setattr(v, "apri_uscita", lambda: FintoProc())
-        monkeypatch.setattr(v, "sintetizza", lambda f: b"\x11\x22" * 22050)  # 1 s
 
-        v.parla(["una frase"])
+        def apri():
+            p = FintoProc()
+            aperture.append(p)
+            return p
 
-        totale = sum(len(x) for x in scritti)
-        atteso = (22050 * 2
-                  + int(22050 * MARGINE_APERTURA_S) * 2
-                  + int(22050 * MARGINE_CHIUSURA_S) * 2)
-        assert totale == atteso, "i margini non sono stati scritti"
-        assert scritti[0].strip(b"\x00") == b"", "il primo pezzo dev'essere silenzio"
-        assert scritti[-1].strip(b"\x00") == b"", "l'ultimo pezzo dev'essere silenzio"
+        monkeypatch.setattr(v, "apri_uscita", apri)
+        monkeypatch.setattr(v, "sintetizza", lambda f: b"\x11\x22" * 2205)  # 0,1 s
+        return v, aperture
+
+    def test_il_flusso_si_apre_una_volta_sola(self, monkeypatch):
+        """Tre frasi, una sola apertura: e' tutto il punto."""
+        v, aperture = self._voce_finta(monkeypatch)
+        try:
+            for _ in range(3):
+                v.parla(["qualcosa"])
+            assert len(aperture) == 1, (
+                f"{len(aperture)} aperture invece di una: si pagherebbero due "
+                "secondi di avvio del DSP a ogni frase")
+        finally:
+            v.chiudi()
+
+    def test_il_flusso_non_si_chiude_quando_si_zittisce(self, monkeypatch):
+        """Zittire e' buttare via la coda, non chiudere il rubinetto."""
+        v, aperture = self._voce_finta(monkeypatch)
+        try:
+            v.parla(["qualcosa"])
+            v.zittisci()
+            assert not aperture[0].ucciso, "il flusso e' stato chiuso"
+            v.parla(["ancora"])
+            assert len(aperture) == 1, "riaperto dopo lo zittisci"
+        finally:
+            v.chiudi()
+
+    def test_si_versa_silenzio_quando_non_c_e_niente_da_dire(self, monkeypatch):
+        """E' il silenzio che tiene sveglio il DSP."""
+        import time
+        v, aperture = self._voce_finta(monkeypatch)
+        try:
+            v.uscita()
+            time.sleep(0.4)
+            scritti = aperture[0].scritti
+            assert scritti, "il flusso non sta scrivendo niente"
+            assert all(x.strip(b"\x00") == b"" for x in scritti), \
+                "a riposo si deve versare silenzio, non altro"
+        finally:
+            v.chiudi()
+
+    def test_svuotare_butta_via_cio_che_non_e_ancora_uscito(self, monkeypatch):
+        from amelie.speech import Uscita
+        v, _ = self._voce_finta(monkeypatch)
+        try:
+            u = v.uscita()
+            u.scrivi(b"\x11\x22" * 22050)      # un secondo
+            u.svuota()
+            assert u.in_pancia_s() == 0.0
+        finally:
+            v.chiudi()
+
+    def test_scrivere_non_corre_avanti_all_orecchio(self, monkeypatch):
+        """La riserva e' cio' che tiene onesta la posizione del player.
+
+        Senza un tetto si scriverebbe finche' qualcuno accetta, e la posizione
+        dichiarata scapperebbe avanti a quella che si sente.
+        """
+        from amelie.speech import Uscita
+        v, _ = self._voce_finta(monkeypatch)
+        try:
+            u = v.uscita()
+            assert u.RISERVA_S <= 0.5, "una riserva cosi' grande si vedrebbe"
+            assert u.PEZZO_S < u.RISERVA_S
+        finally:
+            v.chiudi()

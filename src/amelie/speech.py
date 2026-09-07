@@ -68,26 +68,121 @@ BUFFER_ALSA_US = 200_000
 # e' esattamente come e' stato descritto la prima volta che si e' provato
 # l'annuncio della lingua in cuffia.
 #
-# Il rimedio e' del silenzio davanti e dietro: costa niente e non si sente.
+# Il rimedio NON e' imbottire di silenzio: e' non chiudere mai il flusso. Vedi
+# `Uscita`. Questi margini restano solo per chi suona un file da fuori.
 MARGINE_APERTURA_S = 0.6
 MARGINE_CHIUSURA_S = 0.5
-# Nel player il margine davanti si paga a ogni ripresa e a ogni salto, quindi
-# si tiene corto: li' il flusso e' lungo e il problema morde molto meno.
-MARGINE_PLAYER_S = 0.3
 
 
 def silenzio(secondi: float, frequenza: int = 22050) -> bytes:
     return b"\x00\x00" * int(frequenza * secondi)
-# Di quanto si sta AVANTI rispetto a cio' che l'orecchio sente. Senza un freno
-# non lo si decide: si scrive finche' qualcuno accetta, e fra la pipe del
-# sistema (64 KB, cioe' un secondo e mezzo di parlato) e il buffer ALSA la
-# posizione dichiarata scappa avanti di quasi due secondi. Misurato: dopo una
-# ripresa la posizione avanzava di quattro secondi in due. Con un cursore a
-# schermo e un pulsante di pausa quel disallineamento si vede e si sente, per
-# questo si scrive a passo d'orologio tenendo solo questo vantaggio - grande
-# abbastanza da sopravvivere a un OCR che parte, piccolo abbastanza da non
-# accorgersene.
-VANTAGGIO_S = 0.35
+
+
+class Uscita:
+    """Un flusso audio che si apre una volta sola e non si chiude mai.
+
+    Il DSP di questa board impiega **circa due secondi** a cominciare a rendere
+    il suono dopo l'apertura del flusso. Non e' una stima: si sono fatti
+    ascoltare sei bip a un secondo l'uno dall'altro, e se ne sono sentiti
+    quattro. Aprire e chiudere `aplay` a ogni frase significa pagare quei due
+    secondi ogni volta - e una frase da un secondo sparisce del tutto, ne resta
+    l'ultima sillaba.
+
+    Allungare le frasi sarebbe un cerotto: i primi due secondi del racconto
+    verrebbero mangiati lo stesso, e sono quelli che dicono che vino e'.
+
+    Qui il flusso resta aperto: quando non c'e' niente da dire si versa
+    silenzio, che costa quarantaquattro kilobyte al secondo e nessun problema.
+    Il prezzo si paga una volta all'accensione, dove non lo sente nessuno.
+    """
+
+    # Quanto si tiene in pancia prima di far aspettare chi scrive. Serve a due
+    # cose: che il suono non si interrompa se il sistema e' occupato, e che chi
+    # scrive non corra troppo avanti - altrimenti la posizione dichiarata dal
+    # player scappa avanti a quella che l'orecchio sente.
+    RISERVA_S = 0.3
+    PEZZO_S = 0.08
+
+    def __init__(self, voce: "Voce") -> None:
+        self.voce = voce
+        self._bps = byte_al_secondo(voce.imp.frequenza)
+        self._coda = bytearray()
+        self._stato = threading.Lock()
+        self._spazio = threading.Condition(self._stato)
+        self._fermo = threading.Event()
+        self._proc: subprocess.Popen | None = None
+        self._filo: threading.Thread | None = None
+
+    @property
+    def aperta(self) -> bool:
+        return self._filo is not None and self._filo.is_alive()
+
+    def avvia(self) -> None:
+        if self.aperta:
+            return
+        self._fermo.clear()
+        self._proc = self.voce.apri_uscita()
+        self._filo = threading.Thread(target=self._versa, daemon=True)
+        self._filo.start()
+        log.info("uscita audio aperta e tenuta aperta")
+
+    def scrivi(self, pcm: bytes) -> None:
+        """Accoda del suono. Aspetta se la riserva e' gia' piena."""
+        if not pcm:
+            return
+        soglia = int(self.RISERVA_S * self._bps)
+        with self._spazio:
+            while len(self._coda) > soglia and not self._fermo.is_set():
+                self._spazio.wait(0.1)
+            self._coda.extend(pcm)
+
+    def svuota(self) -> None:
+        """Butta via cio' che non e' ancora uscito. E' il "taci adesso"."""
+        with self._spazio:
+            self._coda.clear()
+            self._spazio.notify_all()
+
+    def in_pancia_s(self) -> float:
+        with self._stato:
+            return len(self._coda) / self._bps
+
+    def chiudi(self) -> None:
+        self._fermo.set()
+        with self._spazio:
+            self._spazio.notify_all()
+        if self._filo is not None:
+            self._filo.join(timeout=3)
+        with self._stato:
+            proc, self._proc = self._proc, None
+        if proc is not None:
+            try:
+                proc.stdin.close()
+            except Exception:                               # noqa: BLE001
+                pass
+            try:
+                proc.kill(); proc.wait(timeout=2)
+            except Exception:                               # noqa: BLE001
+                pass
+
+    def _versa(self) -> None:
+        pezzo = int(self.PEZZO_S * self._bps)
+        muto = silenzio(self.PEZZO_S, self.voce.imp.frequenza)
+        while not self._fermo.is_set():
+            with self._spazio:
+                dati = bytes(self._coda[:pezzo])
+                del self._coda[:len(dati)]
+                self._spazio.notify_all()
+                proc = self._proc
+            if proc is None:
+                return
+            try:
+                # Silenzio quando non c'e' niente da dire: e' cio' che tiene
+                # sveglio il DSP e fa parlare tutto il resto all'istante.
+                proc.stdin.write(dati or muto)
+                proc.stdin.flush()
+            except (BrokenPipeError, OSError, ValueError):
+                log.warning("uscita audio chiusa sotto di noi")
+                return
 
 # Una voce per lingua. La scelta e' di LICENZA prima che di gusto: vedi la nota
 # in testa al modulo per l'italiano, e docs/ATTRIBUZIONI.md per l'inglese.
@@ -197,6 +292,9 @@ class Voce:
         # ma non si sente. Meglio del silenzio inspiegato, e molto meglio di un
         # motore italiano che prova a leggere l'inglese.
         self.disponibile_per_lingua = True
+        # Il flusso verso lo schermo si apre una volta e resta aperto: vedi
+        # `Uscita` per il perche'.
+        self._uscita: Uscita | None = None
         self.cache = CARTELLA_CACHE
         self.cache.mkdir(parents=True, exist_ok=True)
 
@@ -219,6 +317,15 @@ class Voce:
             log.info("carico la voce %s", percorso)
             self._voci[nome] = PiperVoice.load(str(percorso))
             return self._voci[nome]
+
+    def uscita(self) -> "Uscita":
+        """Il flusso sempre aperto. Si apre alla prima richiesta."""
+        with self._lock:
+            if self._uscita is None:
+                self._uscita = Uscita(self)
+        if not self._uscita.aperta:
+            self._uscita.avvia()
+        return self._uscita
 
     def scalda(self, lingue: Iterable[str] = ()) -> None:
         """Carica in anticipo le voci delle lingue indicate.
@@ -310,38 +417,22 @@ class Voce:
     _aplay = apri_uscita
 
     def parla(self, frasi: Iterable[str]) -> None:
-        """Riproduce un flusso di frasi, cominciando dalla prima.
+        """Pronuncia un flusso di frasi e aspetta che siano uscite davvero.
 
-        `aplay` resta aperto per tutta la durata: riaprirlo a ogni frase
-        introdurrebbe un buco di silenzio e uno schiocco fra una e l'altra.
+        Versa nel flusso sempre aperto: non si apre e non si chiude niente, e
+        quindi non si pagano i due secondi che il DSP impiega ad avviarsi.
         """
-        proc = self.apri_uscita()
-        try:
-            # Silenzio davanti: il DSP ci mette qualche decimo ad avviarsi, e
-            # senza questo margine l'inizio della frase non esce.
-            proc.stdin.write(silenzio(MARGINE_APERTURA_S, self.imp.frequenza))
-            for frase in frasi:
-                pcm = self.sintetizza(frase)
-                if not pcm:
-                    continue
-                try:
-                    proc.stdin.write(pcm)
-                    proc.stdin.flush()
-                except BrokenPipeError:
-                    log.warning("riproduzione interrotta")
-                    break
-        finally:
-            # E silenzio dietro, perche' aplay esce prima che l'ultimo pezzo sia
-            # stato reso: senza, l'ultima parola viene tagliata.
-            try:
-                proc.stdin.write(silenzio(MARGINE_CHIUSURA_S, self.imp.frequenza))
-                proc.stdin.close()
-            except (BrokenPipeError, OSError, ValueError):
-                pass
-            try:
-                proc.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+        uscita = self.uscita()
+        for frase in frasi:
+            pcm = self.sintetizza(frase)
+            if pcm:
+                uscita.scrivi(pcm)
+        # Si aspetta che la pancia si svuoti, altrimenti chi ha chiamato crede
+        # di aver finito mentre l'ultima parola non e' ancora uscita.
+        scadenza = time.monotonic() + 60
+        while uscita.in_pancia_s() > 0.01 and time.monotonic() < scadenza:
+            time.sleep(0.05)
+        time.sleep(BUFFER_ALSA_US / 1_000_000)
 
     def per_lingua(self, codice: str) -> bool:
         """Passa alla voce di quella lingua, se ce n'e' una.
@@ -370,9 +461,17 @@ class Voce:
 
         Serve quando si toglie la bottiglia mentre il dispositivo parla: deve
         smettere subito, non finire la frase su un tavolo vuoto.
+
+        Si butta via cio' che non e' ancora uscito, e il flusso resta APERTO:
+        chiuderlo costerebbe altri due secondi alla prossima parola.
         """
-        subprocess.run(["pkill", "-f", f"aplay.*{self.imp.device_alsa}"],
-                       capture_output=True)
+        if self._uscita is not None:
+            self._uscita.svuota()
+
+    def chiudi(self) -> None:
+        if self._uscita is not None:
+            self._uscita.chiudi()
+            self._uscita = None
 
 
 class VoceNonDisponibile(RuntimeError):
@@ -443,10 +542,10 @@ class Riproduttore:
         self._completo = False
         self._errore: Exception | None = None
 
-        self._proc: subprocess.Popen | None = None
-        # (istante di partenza, posizione a quell'istante): serve a scrivere a
-        # passo d'orologio invece che a riempire i buffer.
-        self._orologio: tuple[float, int] | None = None
+        # Il flusso e' quello sempre aperto della voce: non se ne apre uno
+        # proprio, perche' aprirlo costa i due secondi di avvio del DSP - e
+        # dopo ogni pausa e ogni salto si pagherebbero di nuovo.
+        self._uscita = voce.uscita()
         self._stato = threading.Lock()
         self._sveglia = threading.Condition(self._stato)
         self._fermo = threading.Event()
@@ -494,16 +593,15 @@ class Riproduttore:
             self._thread.append(t)
 
     def pausa(self) -> None:
+        # Quello che era gia' stato consegnato ma non ancora sentito va
+        # riascoltato: riprendere piu' avanti taglierebbe una parola.
+        indietro = self._uscita.in_pancia_s() + BUFFER_ALSA_US / 1_000_000
         with self._sveglia:
             if self._in_pausa:
                 return
             self._in_pausa = True
-            # Si torna indietro di quanto ALSA teneva ancora in pancia: quei
-            # decimi di secondo erano gia' stati "scritti" ma non ancora
-            # sentiti, e riprendere piu' avanti taglierebbe una parola.
-            self._posizione = max(0, self._posizione
-                                  - int(self._bps * VANTAGGIO_S))
-            self._chiudi_aplay()
+            self._posizione = max(0, self._posizione - int(self._bps * indietro))
+            self._taci()
             self._sveglia.notify_all()
         self._avvisa()
 
@@ -533,7 +631,7 @@ class Riproduttore:
         with self._sveglia:
             nuovo = self._posizione + int(secondi * self._bps)
             self._posizione = max(0, min(nuovo, len(self._pcm)))
-            self._chiudi_aplay()          # si butta cio' che ALSA aveva in coda
+            self._taci()                  # si butta cio' che non e' ancora uscito
             self._sveglia.notify_all()
         self._avvisa()
 
@@ -541,7 +639,7 @@ class Riproduttore:
         with self._sveglia:
             self._posizione = 0
             self._in_pausa = False
-            self._chiudi_aplay()
+            self._taci()
             self._sveglia.notify_all()
         self._avvisa()
 
@@ -549,7 +647,7 @@ class Riproduttore:
         """Basta, e subito: la bottiglia e' stata tolta dal tavolo."""
         self._fermo.set()
         with self._sveglia:
-            self._chiudi_aplay()
+            self._taci()
             self._sveglia.notify_all()
 
     def attendi(self, timeout: float | None = None) -> bool:
@@ -567,25 +665,13 @@ class Riproduttore:
         except Exception:                                   # noqa: BLE001
             log.exception("errore nell'avviso di avanzamento")
 
-    def _chiudi_aplay(self) -> None:
-        """Va chiamata col lucchetto in mano."""
-        proc, self._proc = self._proc, None
-        self._orologio = None
-        if proc is None:
-            return
-        try:
-            # Prima si stacca lo stdin, poi si uccide: chiudendo solo il
-            # processo, il buffer di Python resta da svuotare e all'uscita
-            # dell'interprete salta fuori un BrokenPipeError che non significa
-            # niente ma sporca i registri.
-            proc.stdin.close()
-        except Exception:                                   # noqa: BLE001
-            pass
-        try:
-            proc.kill()                # non terminate: si vuole silenzio ORA
-            proc.wait(timeout=2)
-        except Exception:                                   # noqa: BLE001
-            pass
+    def _taci(self) -> None:
+        """Butta via cio' che e' stato consegnato ma non ancora sentito.
+
+        Il flusso NON si chiude: chiuderlo costerebbe due secondi alla
+        riapertura, e la ripresa dopo una pausa sarebbe muta per metа.
+        """
+        self._uscita.svuota()
 
     def _sintetizza_tutto(self) -> None:
         try:
@@ -622,62 +708,23 @@ class Riproduttore:
                         self._sveglia.wait(0.25)
                     if self._fermo.is_set():
                         return
-                    if self._proc is None:
-                        self._proc = self.voce.apri_uscita()
-                        # Il margine di avvio NON entra nella posizione: e'
-                        # silenzio che serve al DSP, non racconto.
-                        try:
-                            self._proc.stdin.write(
-                                silenzio(MARGINE_PLAYER_S, self._bps // 2))
-                        except (BrokenPipeError, OSError, ValueError):
-                            pass
-                    if self._orologio is None:
-                        self._orologio = (time.monotonic(), self._posizione)
-                    proc = self._proc
-                    partenza, base = self._orologio
                     inizio = self._posizione
                     dati = bytes(self._pcm[inizio:inizio + pezzo])
 
                 if not dati:
                     continue
-
-                # Il passo d'orologio: si scrive quando il tempo reale ha quasi
-                # raggiunto il punto in cui si e' arrivati, mai prima.
-                atteso = partenza + (inizio - base) / self._bps - VANTAGGIO_S
-                ritardo = atteso - time.monotonic()
-                if ritardo > 0:
-                    if self._fermo.wait(ritardo):
-                        return
-                    with self._sveglia:
-                        # Nel frattempo qualcuno puo' aver toccato pausa o
-                        # salto: se e' successo, il pezzo in mano non vale piu'.
-                        if (self._proc is not proc or self._posizione != inizio
-                                or self._in_pausa):
-                            continue
-
-                try:
-                    proc.stdin.write(dati)
-                    proc.stdin.flush()
-                except (BrokenPipeError, ValueError, OSError):
-                    # aplay e' stato chiuso sotto di noi: e' una pausa o un
-                    # salto, non un guasto. Si riparte dalla nuova posizione.
-                    continue
+                # Scrivere BLOCCA quando la riserva e' piena, ed e' quello che
+                # tiene il passo: non serve un orologio, lo detta ALSA.
+                self._uscita.scrivi(dati)
                 with self._sveglia:
-                    # Solo se nel frattempo nessuno ha spostato la testina.
-                    if self._proc is proc and self._posizione == inizio:
+                    if self._in_pausa or self._fermo.is_set():
+                        # Il permesso e' stato tolto mentre si scriveva: si
+                        # butta via quel pezzo invece di farlo uscire dopo.
+                        self._uscita.svuota()
+                        continue
+                    if self._posizione == inizio:
                         self._posizione = inizio + len(dati)
                 self._avvisa()
         finally:
-            with self._sveglia:
-                # Se si e' arrivati in fondo si lascia scorrere la coda, invece
-                # di tagliare l'ultima parola: aplay esce prima del dovuto.
-                if self._proc is not None and not self._fermo.is_set():
-                    try:
-                        self._proc.stdin.write(
-                            silenzio(MARGINE_CHIUSURA_S, self._bps // 2))
-                        self._proc.stdin.flush()
-                    except (BrokenPipeError, OSError, ValueError):
-                        pass
-                self._chiudi_aplay()
             self._finito.set()
             self._avvisa()

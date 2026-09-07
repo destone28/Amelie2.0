@@ -350,6 +350,14 @@ class Amelie:
         """
         if self.voce is None:
             return
+        # Il flusso audio si apre ADESSO e non si chiude piu'. Il DSP di questa
+        # board impiega circa due secondi a cominciare a rendere il suono dopo
+        # l'apertura, e pagarli qui - all'accensione, mentre nessuno ascolta -
+        # e' l'unico modo perche' ogni frase dopo esca all'istante.
+        try:
+            self.voce.uscita()
+        except Exception as e:                              # noqa: BLE001
+            log.warning("uscita audio non aperta: %s", e)
         self.voce.scalda()
         for lingua in self.lex.lingue:
             frase = self.lex.frase("voce", "conferma_lingua", lingua=lingua)
