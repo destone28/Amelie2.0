@@ -33,12 +33,27 @@ if [ ! -s "$PROFILO/Preferences" ] || ! grep -q '"translate"' "$PROFILO/Preferen
         > "$PROFILO/Preferences"
 fi
 
-# Il server deve rispondere prima di aprire la pagina, altrimenti Chromium
-# mostra un errore e ci resta.
-for i in $(seq 1 60); do
-    curl -sf -m 2 http://127.0.0.1:8080/ >/dev/null 2>&1 && break
-    sleep 1
-done
+# NON si aspetta il server. Si parte dalla SCHERMATA D'AVVIO, che e' un file e
+# quindi esiste gia': compare in un paio di secondi, col marchio, e resta finche'
+# il dispositivo non e' pronto davvero - poi e' lei a portarsi sull'applicazione.
+#
+# Prima si aspettava che il server rispondesse, e per tutta l'attesa - otto
+# secondi di ExecStartPre piu' i trenta del caricamento - lo schermo mostrava la
+# scrivania del sistema operativo. Aspettare qui significa mostrare qualcos'altro
+# li'.
+AVVIO="${AMELIE_AVVIO:-/home/arduino/amelie/src/amelie/ui/static/avvio.html}"
+if [ -r "$AVVIO" ]; then
+    PARTENZA="file://$AVVIO"
+else
+    # Senza la schermata d'avvio si torna al comportamento di prima, aspettando
+    # il server: meglio qualche secondo di scrivania che un errore di Chromium.
+    echo "schermata d'avvio non trovata in $AVVIO" >&2
+    for _ in $(seq 1 90); do
+        curl -sf -m 2 http://127.0.0.1:8080/ >/dev/null 2>&1 && break
+        sleep 1
+    done
+    PARTENZA="http://127.0.0.1:8080/"
+fi
 
 # Nessun puntatore, nessun risparmio energetico: uno schermo che si addormenta
 # porta via anche l'audio (vedi amelie-display.sh).
@@ -49,9 +64,12 @@ for browser in chromium chromium-browser google-chrome; do
 done
 command -v "$browser" >/dev/null 2>&1 || { echo "nessun browser trovato" >&2; exit 1; }
 
+# --kiosk con l'indirizzo, e NON --app=: in modalita' applicazione un cambio di
+# origine - che e' esattamente cio' che fa la schermata d'avvio quando si sposta
+# sul server - puo' essere espulso in una finestra di browser normale, con la
+# barra degli indirizzi. In chiosco non c'e' nessuna interfaccia da nascondere.
 exec "$browser" \
-    --kiosk \
-    --app=http://127.0.0.1:8080/ \
+    --kiosk "$PARTENZA" \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \

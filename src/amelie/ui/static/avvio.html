@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Amelie</title>
+<style>
+/* ===========================================================================
+   LA SCHERMATA D'AVVIO.
+
+   Serve a coprire i quaranta secondi fra l'accensione e il dispositivo pronto.
+   Non è una cortesia: senza, l'ospite vede la scrivania del sistema operativo,
+   e poi una pagina bianca, e poi Amelie. Tre ambienti diversi per un oggetto
+   che deve sembrarne uno solo.
+
+   È un FILE, non una pagina servita: deve comparire quando il server non
+   esiste ancora — è esattamente per quello che esiste. Quindi qui dentro non
+   c'è niente che venga da fuori: né font, né immagini, né fogli di stile. La
+   copia dei colori e delle misure da index.html è voluta, ed è l'unico
+   duplicato accettabile del progetto: l'alternativa è che la schermata
+   d'avvio dipenda dalla cosa che sta aspettando.
+
+   Il fondo è lo STESSO di index.html, e lo stesso che amelie-sessione.sh
+   stende sulla radice di X e amelie-sipario.sh sul framebuffer. Dall'istante
+   in cui il pannello si accende fino al racconto non c'è un solo stacco di
+   colore.
+   =========================================================================== */
+:root {
+  --bordeaux-scuro:  #3D1512;
+  --oro-scuro:       #8A6B30;
+  --oro:             #C8860D;
+  --oro-chiaro:      #E3B457;
+  --avorio-fioco:    #8C7F74;
+  --carbone:         #14100F;
+  --fondo: radial-gradient(ellipse at 50% 118%,
+             #2E100D 0%, var(--bordeaux-scuro) 46%, var(--carbone) 100%);
+  --passo: 12px;
+  --t-marchio: 132px;
+  --t-titolo:   64px;
+  --t-minuto:   26px;
+  --curva: cubic-bezier(.22,.61,.36,1);
+}
+*, *::before, *::after {
+  margin: 0; padding: 0; box-sizing: border-box;
+  cursor: none; -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; user-select: none;
+}
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: var(--fondo); color: var(--oro-chiaro);
+  font-family: "EB Garamond", Garamond, "Times New Roman", serif;
+  /* La stessa interlinea dell'interfaccia. Senza, il nome del marchio e' alto
+     diciotto pixel di meno - l'interlinea del font invece di 1,45 - e il gruppo
+     si centra piu' in basso: al passaggio dall'una all'altra il marchio
+     saltava, ed era l'unico modo di accorgersi che sono due pagine. */
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+svg { display: block; }
+
+/* Come in index.html: il disegno è per 1280x720 e si scala sul pannello. */
+#scena {
+  position: absolute; left: 50%; top: 50%;
+  width: 1280px; height: 720px; margin: -360px 0 0 -640px;
+  transform: scale(var(--scala, 1)); transform-origin: center center;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: calc(var(--passo) * 2);
+  /* Il marchio deve stare nello STESSO punto della schermata d'attesa, dove
+     sotto al filo c'e' anche la riga «Appoggi una bottiglia». Qui quella riga
+     non c'e' - all'accensione non si sa ancora in che lingua scriverla - e
+     senza questo spazio il gruppo si centra quaranta pixel piu' in basso: al
+     momento del passaggio il marchio salterebbe, e il passaggio si vedrebbe.
+     Sono l'altezza di quella riga (40 x 1,45) e il suo distacco. */
+  padding-bottom: calc(58px + var(--passo) * 2);
+}
+
+.marchio { width: var(--t-marchio); height: var(--t-marchio); }
+.marchio .mirino {
+  fill: none; stroke: var(--oro); stroke-width: 5.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.marchio .bottiglia {
+  fill: none; stroke: var(--oro); stroke-width: 4.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.marchio .lettera {
+  fill: none; stroke: #F4EDE3; stroke-width: 5.4;
+  stroke-linecap: butt; stroke-linejoin: miter;
+}
+.nome {
+  font-size: var(--t-titolo); letter-spacing: .22em;
+  color: var(--oro-chiaro); text-transform: uppercase;
+  margin-top: calc(var(--passo) * 1.5);
+}
+
+/* Il filo del marchio, che qui respira. Un solo segno che si muove, lento:
+   dice «sto arrivando» senza contare secondi che nessuno può prevedere — il
+   caricamento delle voci dura quanto dura, e una barra di avanzamento finta
+   sarebbe una bugia scritta sul primo schermo che si vede.
+   Si muove solo per trasformazione e opacità, le due cose che il compositor
+   sposta da solo: all'avvio i quattro core stanno già facendo tutto il resto. */
+.filo {
+  position: relative; width: 260px; height: 2px; overflow: hidden;
+  background: linear-gradient(90deg, transparent, rgba(138,107,48,.5), transparent);
+}
+.filo::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, var(--oro-chiaro), transparent);
+  transform: translateX(-100%);
+  animation: scorre 2.4s var(--curva) infinite;
+}
+@keyframes scorre {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .filo::after { animation: none; opacity: .5; transform: none; }
+}
+
+/* Se ci mette molto più del solito, lo dice. Un dispositivo che resta sul
+   marchio per cinque minuti senza spiegare niente non si distingue da uno
+   rotto, e chi lo guarda non ha una tastiera per chiederglielo.
+   In due lingue: qui la lingua scelta non si sa ancora, sta nel server che
+   non ha ancora risposto. */
+#lento {
+  position: absolute; left: 0; right: 0; bottom: calc(var(--passo) * 4);
+  text-align: center; font-size: var(--t-minuto); line-height: 1.6;
+  color: var(--avorio-fioco);
+  opacity: 0; transition: opacity 1.2s var(--curva);
+}
+#lento.visibile { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="scena">
+  <svg class="marchio" viewBox="0 0 100 100" aria-hidden="true">
+    <g class="mirino">
+      <path d="M9 29 V17 A8 8 0 0 1 17 9 H29"/>
+      <path d="M71 9 H83 A8 8 0 0 1 91 17 V29"/>
+      <path d="M91 71 V83 A8 8 0 0 1 83 91 H71"/>
+      <path d="M29 91 H17 A8 8 0 0 1 9 83 V71"/>
+    </g>
+    <path class="bottiglia"
+          d="M45 20 H55 V37 C55 41 66 45 66 55 V83
+             A3.5 3.5 0 0 1 62.5 86.5 H37.5
+             A3.5 3.5 0 0 1 34 83 V55 C34 45 45 41 45 37 Z"/>
+    <path class="bottiglia" d="M45 26 H55"/>
+    <path class="lettera" d="M41.5 80.5 L50 57 L58.5 80.5 M44.7 71.6 H55.3"/>
+  </svg>
+  <div class="nome">Amelie</div>
+  <div class="filo"></div>
+  <div id="lento">
+    Ci vuole più del solito.<br>
+    This is taking longer than usual.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* Come in index.html: `min(100vw / 1280, 100vh / 720)` in CSS sembra giusto ma
+   una divisione fra lunghezze resta una lunghezza, e scale() vuole un numero
+   puro. Il fattore lo calcola qui il JavaScript. */
+function adattaScena() {
+  document.documentElement.style.setProperty(
+    "--scala", Math.min(innerWidth / 1280, innerHeight / 720));
+}
+adattaScena();
+addEventListener("resize", adattaScena);
+
+const APP = "http://127.0.0.1:8080/";
+/* Scritto per esteso e non composto: e' l'unico legame fra questa pagina e il
+   dispositivo, e deve potersi leggere da qui senza ricostruirlo a mente. */
+const PRONTO = "http://127.0.0.1:8080/pronto";
+const PERIODO_MS = 400;
+/* Quanto si aspetta prima di ammettere che ci sta mettendo troppo. Un avvio
+   sano arriva in cinquanta secondi scarsi, di cui una trentina per le due
+   voci; novanta secondi sono il doppio abbondante, quindi qui c'è davvero
+   qualcosa che non va. */
+const PAZIENZA_MS = 90000;
+
+setTimeout(() => document.getElementById("lento").classList.add("visibile"),
+           PAZIENZA_MS);
+
+/* Si aspetta che il dispositivo sia PRONTO, non che il server risponda. Fra le
+   due cose ci sono le due voci da caricare, una trentina di secondi: andarsene
+   appena il server risponde significa mostrare all'ospite una schermata viva
+   su un dispositivo che alla prima frase resterebbe muto. */
+let vado = false;
+function guarda() {
+  fetch(PRONTO, { cache: "no-store" })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.pronta || vado) return;
+      vado = true;
+      /* replace e non href: così questa pagina non resta nella cronologia, e
+         un gesto di ritorno — che su un chiosco non dovrebbe esistere, ma i
+         browser li inventano — non riporta mai indietro all'avvio. */
+      location.replace(APP);
+    })
+    .catch(() => {})
+    .finally(() => { if (!vado) setTimeout(guarda, PERIODO_MS); });
+}
+guarda();
+</script>
+</body>
+</html>

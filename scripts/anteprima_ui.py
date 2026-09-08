@@ -28,6 +28,8 @@ RADICE = Path(__file__).resolve().parent.parent
 PAGINA = RADICE / "src" / "amelie" / "ui" / "static" / "index.html"
 
 # Le scritte fisse arrivano dal server, quindi vanno finte anche qui.
+VOLUME = {"tipo": "volume", "valore": 60, "passo": 10, "attivo": True}
+
 LINGUA_IT = {"tipo": "lingua", "lingua": "it", "disponibili": ["it", "en"],
              "invito": "Appoggi una bottiglia", "domanda": "Quale di questi?",
              "voce_muta": False, "avviso_muto": ""}
@@ -110,6 +112,20 @@ SCENE: dict[str, list[dict]] = {
          "testo": "Colore scarico che inganna: sotto c'è una struttura "
                   "tannica fra le più longeve al mondo."}],
 
+    # Il comando del volume: si apre col tocco, quindi il tocco va finto.
+    "volume": [LINGUA_IT, {"tipo": "stato", "vista": "attesa"}, VOLUME],
+    "volume_muto": [LINGUA_IT, {"tipo": "stato", "vista": "attesa"},
+                    {**VOLUME, "valore": 0}],
+    # Il caso peggiore: aperto sopra il titolo di un vino, che e' cio' che sta
+    # sotto quando qualcuno alza il volume a racconto in corso.
+    "volume_sul_racconto": [
+        LINGUA_IT,
+        {"tipo": "stato", "vista": "racconto", "voce_muta": False,
+         "titolo": "Amarone della Valpolicella Classico Riserva",
+         "sottotitolo": "Tenuta Serego Alighieri di Masi Agricola · 2015"},
+        {"tipo": "racconto", "origine": "cache", "frasi": RACCONTO_IT},
+        VOLUME],
+
     "riposiziona": [
         LINGUA_IT,
         {"tipo": "stato", "vista": "avviso", "simbolo": "↻", "tono": "invito",
@@ -130,6 +146,15 @@ SCENE: dict[str, list[dict]] = {
          "in_pausa": False, "senza_voce": True}],
 }
 
+# Le scene che esistono solo dopo un tocco. Il codice gira DOPO lo script della
+# pagina, perche' e' in un setTimeout: al momento dell'iniezione le funzioni non
+# esistono ancora.
+DOPO = {
+    "volume": "alternaVolume()",
+    "volume_muto": "alternaVolume()",
+    "volume_sul_racconto": "alternaVolume()",
+}
+
 # Sostituisce EventSource e fetch: la pagina crede di parlare col server.
 FINTA = """
 <script>
@@ -142,6 +167,7 @@ class EventSource {
 }
 window.fetch = () => Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
 const MESSAGGI = __MESSAGGI__;
+setTimeout(() => { try { __DOPO__; } catch (e) { console.error(e); } }, 300);
 </script>
 """
 
@@ -154,12 +180,31 @@ def trova_browser() -> str:
     sys.exit("nessun Chromium trovato: serve per rendere le pagine")
 
 
+def ritrai(browser: str, pagina: str, uscita: Path, args) -> None:
+    """Rende una pagina gia' composta e la salva come immagine."""
+    with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False,
+                                     encoding="utf-8") as f:
+        f.write(pagina)
+        temporaneo = f.name
+    subprocess.run([
+        browser, "--headless=new", "--disable-gpu", "--hide-scrollbars",
+        "--force-device-scale-factor=1", "--no-sandbox",
+        f"--window-size={args.larghezza},{args.altezza}",
+        # Il tempo virtuale deve coprire la dissolvenza fra le viste (0,4 s) e i
+        # temporizzatori: con meno si fotografa la scena precedente.
+        "--virtual-time-budget=4000",
+        f"--screenshot={uscita}", f"file://{temporaneo}",
+    ], check=False, capture_output=True)
+    print(f"  {uscita.stem}: {'ok' if uscita.exists() else 'FALLITO'}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("cartella", nargs="?", default="anteprima")
     ap.add_argument("--larghezza", type=int, default=1280)
     ap.add_argument("--altezza", type=int, default=720)
-    ap.add_argument("--solo", action="append", choices=sorted(SCENE))
+    ap.add_argument("--solo", action="append",
+                    choices=sorted([*SCENE, "avvio"]))
     args = ap.parse_args()
 
     browser = trova_browser()
@@ -167,27 +212,21 @@ def main() -> None:
     fuori.mkdir(parents=True, exist_ok=True)
     sorgente = PAGINA.read_text(encoding="utf-8")
 
-    for nome in (args.solo or SCENE):
+    # La schermata d'avvio e' un file a se': si rende com'e', spegnendo solo la
+    # richiesta che la porterebbe via appena il dispositivo risponde.
+    if not args.solo or "avvio" in args.solo:
+        avvio = (PAGINA.parent / "avvio.html").read_text(encoding="utf-8")
+        avvio = avvio.replace("fetch(PRONTO", "fetch('data:,'")
+        ritrai(browser, avvio, fuori / "avvio.png", args)
+
+    for nome in [n for n in (args.solo or SCENE) if n != "avvio"]:
         pagina = sorgente.replace(
             '<script>\n"use strict";',
             FINTA.replace("__MESSAGGI__",
                           json.dumps(SCENE[nome], ensure_ascii=False))
+                 .replace("__DOPO__", DOPO.get(nome, "0"))
             + '<script>\n"use strict";')
-        with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False,
-                                         encoding="utf-8") as f:
-            f.write(pagina)
-            temporaneo = f.name
-        uscita = fuori / f"{nome}.png"
-        subprocess.run([
-            browser, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-            "--force-device-scale-factor=1", "--no-sandbox",
-            f"--window-size={args.larghezza},{args.altezza}",
-            # Il tempo virtuale deve coprire la dissolvenza fra le viste (0,4 s)
-            # e i temporizzatori: con meno si fotografa la scena precedente.
-            "--virtual-time-budget=4000",
-            f"--screenshot={uscita}", f"file://{temporaneo}",
-        ], check=False, capture_output=True)
-        print(f"  {nome}: {'ok' if uscita.exists() else 'FALLITO'}")
+        ritrai(browser, pagina, fuori / f"{nome}.png", args)
 
 
 if __name__ == "__main__":

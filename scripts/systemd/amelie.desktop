@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Amelie
+Comment=Il dispositivo, e nient'altro
+Exec=/usr/local/bin/amelie-sessione.sh
+TryExec=/usr/local/bin/amelie-sessione.sh
+Type=Application
+DesktopNames=Amelie

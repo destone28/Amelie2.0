@@ -8,7 +8,8 @@ Type=simple
 User=arduino
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/arduino/.Xauthority
-ExecStartPre=/bin/sleep 8
+# Niente attesa: la schermata d'avvio e' un file e non ha bisogno del server.
+# Ogni secondo speso qui e' un secondo in cui si vede qualcos'altro sullo schermo.
 ExecStart=/usr/local/bin/amelie-kiosk.sh
 Restart=always
 RestartSec=8

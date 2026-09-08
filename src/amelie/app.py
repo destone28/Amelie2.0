@@ -34,6 +34,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -48,7 +49,9 @@ from .capture import Camera, CameraNonDisponibile, blocca_esposizione
 from .matcher import Fatti, Livello, Matcher
 from .narrator import Narratore, spezza_in_frasi
 from .ocr import Lettore, OCRNonDisponibile
-from .speech import ImpostazioniVoce, Riproduttore, Voce, VoceNonDisponibile
+from .speech import (
+    VOLUME_PREDEFINITO, ImpostazioniVoce, Riproduttore, Voce, VoceNonDisponibile,
+)
 from .state import DURATE_S, Effetto, Evento, Macchina, Stato
 
 log = logging.getLogger("amelie")
@@ -80,6 +83,18 @@ SALTO_S = 5.0
 # tavola: la bottiglia tolta lo chiude subito, ma se nessuno la toglie il
 # dispositivo non puo' restare occupato per sempre.
 TETTO_RACCONTO_S = 900.0
+
+# Il volume regolato a schermo sopravvive allo spegnimento: chi apre il
+# ristorante non deve ritararlo ogni sera. Sta in `var`, che e' l'unica cartella
+# del progetto che l'unita' systemd lascia scrivibile.
+PERCORSO_VOLUME = RADICE / "var" / "volume"
+# Di quanto sale e scende a ogni tocco. Dieci passi da un capo all'altro: meno
+# non si sente, di piu' non si regola.
+PASSO_VOLUME = 10
+# Quanto si aspetta prima di far sentire il colpetto di ritorno. Chi tara il
+# volume preme piu' volte di fila, e un colpetto per pressione sarebbe un
+# tambureggiamento: si suona quando la mano si e' fermata.
+RIPOSO_VOLUME_S = 0.35
 
 # Il tono di ogni schermata, per tenere schermo e anello d'accordo. Prima erano
 # tutti dello stesso oro: un guasto aveva l'aria di un invito.
@@ -121,6 +136,9 @@ class Configurazione:
     # dispositivo torna a questa quando la bottiglia viene tolta: il tavolo
     # dopo trova il dispositivo come lo trova sempre.
     lingua: str = "it"
+    # Il volume di partenza, che il file in `var` sovrascrive se c'e'. 100 e'
+    # il fondo scala del PCM: sopra non si puo' andare, vedi speech.guadagno_di.
+    volume: int = VOLUME_PREDEFINITO
 
 
 class Amelie:
@@ -162,6 +180,17 @@ class Amelie:
         self._lucchetto_annuncio = threading.Lock()
         self._lingua_da_annunciare: str | None = None
         self._annunciatore_vivo = False
+        # Il colpetto di ritorno del volume, rimandato finche' la mano si ferma.
+        self._lucchetto_volume = threading.Lock()
+        self._rinvio_colpetto: threading.Timer | None = None
+        # Vero quando il dispositivo ha finito di prepararsi. La schermata
+        # d'avvio guarda questo per sapere quando lasciare il posto: prima le
+        # voci non sono caricate, e la prima frase uscirebbe con quindici
+        # secondi di ritardo proprio davanti al primo ospite.
+        self._pronta = False
+        self.volume = self._volume_salvato(cfg.volume)
+        if self.voce is not None:
+            self.voce.volume = self.volume
 
     # --------------------------------------------------------- comunicazione
 
@@ -244,6 +273,97 @@ class Amelie:
             "avviso_muto": self.lex.frase("schermo", "voce_assente",
                                           lingua=self.lingua),
         })
+
+    # -------------------------------------------------------------- volume
+
+    def _volume_salvato(self, ripiego: int) -> int:
+        """Il volume dell'ultima volta, se c'e' ed e' un numero sensato.
+
+        Non solleva mai: un file illeggibile deve costare il volume
+        predefinito, non un dispositivo che non si accende.
+        """
+        try:
+            valore = int(PERCORSO_VOLUME.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            return max(0, min(100, int(ripiego)))
+        return max(0, min(100, valore))
+
+    def _salva_volume(self, valore: int) -> None:
+        """Scrive il volume in modo che sopravviva alla spina staccata.
+
+        Questo dispositivo non si spegne con un comando: si toglie corrente a
+        fine servizio. Fra la `rename` e il disco possono passare secondi, e in
+        quei secondi il valore appena regolato non esiste da nessuna parte -
+        chi ha appena tarato il volume e ha spento lo ritroverebbe com'era. Da
+        qui i due `fsync`: uno per il contenuto, uno per la cartella, che e'
+        cio' che rende durevole il nome nuovo.
+        """
+        try:
+            PERCORSO_VOLUME.parent.mkdir(parents=True, exist_ok=True)
+            # Scrittura atomica: un file troncato da uno spegnimento tornerebbe
+            # come volume illeggibile, e il dispositivo ripartirebbe al massimo.
+            tmp = PERCORSO_VOLUME.with_suffix(".parziale")
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(f"{valore}\n")
+                f.flush()
+                os.fsync(f.fileno())
+            tmp.replace(PERCORSO_VOLUME)
+            cartella = os.open(PERCORSO_VOLUME.parent, os.O_RDONLY)
+            try:
+                os.fsync(cartella)
+            finally:
+                os.close(cartella)
+        except OSError as e:
+            log.warning("volume non salvato: %s", e)
+
+    def imposta_volume(self, valore: int) -> int:
+        """Il tocco sui due pulsanti del volume. Restituisce quello effettivo."""
+        nuovo = max(0, min(100, int(valore)))
+        if nuovo == self.volume:
+            # Toccare oltre il fondo o oltre il massimo non cambia niente, ma il
+            # colpetto si fa lo stesso: senza, il pulsante estremo sembrerebbe
+            # rotto invece che arrivato in fondo.
+            self._programma_colpetto()
+            return self.volume
+        self.volume = nuovo
+        if self.voce is not None:
+            self.voce.volume = nuovo
+        self._salva_volume(nuovo)
+        self._manda_volume()
+        self._programma_colpetto()
+        return nuovo
+
+    def _manda_volume(self) -> None:
+        self._pubblica({"tipo": "volume", "valore": self.volume,
+                        "passo": PASSO_VOLUME,
+                        # Senza voce del tutto il comando non si mostra: un
+                        # livello che non muove niente e' peggio di nessun
+                        # livello.
+                        "attivo": self.voce is not None})
+
+    def _programma_colpetto(self) -> None:
+        """Fa sentire il livello, ma solo quando la mano si e' fermata."""
+        with self._lucchetto_volume:
+            if self._rinvio_colpetto is not None:
+                self._rinvio_colpetto.cancel()
+            t = threading.Timer(RIPOSO_VOLUME_S, self._colpetto)
+            t.daemon = True
+            self._rinvio_colpetto = t
+            t.start()
+
+    def _colpetto(self) -> None:
+        """Il ritorno sonoro del volume, se non c'e' gia' qualcosa da sentire.
+
+        Mentre il dispositivo racconta o annuncia una lingua il livello si sente
+        gia' da solo, e un colpetto in mezzo a una frase sarebbe un disturbo.
+        """
+        if self.voce is None or self._annunciatore_vivo:
+            return
+        with self._lucchetto_lettore:
+            occupato = self._lettore is not None
+        if occupato:
+            return
+        self.voce.colpetto()
 
     def _voce_disponibile(self) -> bool:
         """C'e' una voce per la lingua a schermo?
@@ -341,6 +461,19 @@ class Amelie:
         self._attendi_lavoro(5.0)
         self.macchina.invia(Evento.RIPETI)
 
+    def _prepara(self) -> None:
+        """Scalda le voci, e in ogni caso dichiara finita la preparazione.
+
+        La rete di sicurezza sotto la schermata d'avvio: se il caricamento va
+        storto - un modello mancante, il disco pieno - il dispositivo deve
+        arrivare comunque alla sua schermata e dire li' cosa non va, invece di
+        restare sul marchio a tempo indeterminato senza spiegare niente.
+        """
+        try:
+            self._scalda_voci()
+        finally:
+            self._pronta = True
+
     def _scalda_voci(self) -> None:
         """Carica le voci e pre-sintetizza le frasi che si dicono sempre.
 
@@ -349,6 +482,7 @@ class Amelie:
         cache all'avvio, dove il tempo non lo vede nessuno.
         """
         if self.voce is None:
+            self._pronta = True
             return
         # Il flusso audio si apre ADESSO e non si chiude piu'. Il DSP di questa
         # board impiega circa due secondi a cominciare a rendere il suono dopo
@@ -368,6 +502,12 @@ class Amelie:
             except Exception as e:                          # noqa: BLE001
                 log.warning("frase fissa non pre-sintetizzata (%s): %s", lingua, e)
         self.voce.per_lingua(self.lingua)      # si torna alla lingua a schermo
+        # Da adesso il dispositivo e' pronto davvero: le voci sono in memoria e
+        # la prima frase esce subito. La schermata d'avvio aspetta questo, non
+        # il server che risponde: fra le due cose ci sono trenta secondi di
+        # caricamento, e sono esattamente quelli in cui il dispositivo sembra
+        # pronto e non lo e'.
+        self._pronta = True
 
     def _annuncia_lingua(self, lingua: str | None = None) -> None:
         lingua = lingua or self.lingua
@@ -715,9 +855,12 @@ def crea_app(amelie: Amelie):
         # l'una mentre nessuno guarda non li vede nessuno, gli stessi quindici
         # secondi dopo che un ospite ha toccato la bandierina sono un guasto.
         if amelie.voce is not None:
-            threading.Thread(target=amelie._scalda_voci, daemon=True).start()
+            threading.Thread(target=amelie._prepara, daemon=True).start()
+        else:
+            amelie._pronta = True
         amelie._mostra(amelie.macchina.stato)
         amelie._manda_lingua()
+        amelie._manda_volume()
         try:
             yield
         finally:
@@ -761,6 +904,7 @@ def crea_app(amelie: Amelie):
                 # si e' riavviato a meta' racconto, deve ritrovare la scena.
                 amelie._mostra(amelie.macchina.stato)
                 amelie._manda_lingua()
+                amelie._manda_volume()
                 while True:
                     dati = await coda.get()
                     if dati is None:        # il servizio sta chiudendo
@@ -787,6 +931,20 @@ def crea_app(amelie: Amelie):
         cambiata = amelie.cambia_lingua(codice)
         return JSONResponse({"ok": cambiata, "lingua": amelie.lingua})
 
+    @app.post("/volume/{valore}")
+    async def volume(valore: int):
+        return JSONResponse({"ok": True, "valore": amelie.imposta_volume(valore),
+                             "passo": PASSO_VOLUME})
+
+    @app.get("/pronto")
+    async def pronto():
+        # La schermata d'avvio e' un file, quindi la sua origine e' `null`: senza
+        # questa intestazione il browser le impedisce di LEGGERE la risposta, e
+        # resterebbe accesa per sempre davanti a un dispositivo gia' pronto.
+        # Si apre solo questo, che dice una parola sola e non tocca niente.
+        return JSONResponse({"pronta": amelie._pronta},
+                            headers={"Access-Control-Allow-Origin": "*"})
+
     @app.get("/lingue")
     async def lingue():
         return JSONResponse({"lingua": amelie.lingua,
@@ -799,6 +957,8 @@ def crea_app(amelie: Amelie):
             "mcu": amelie.ponte.disponibile,
             "camera": amelie.camera is not None,
             "voce": bool(amelie.voce and amelie.voce.disponibile),
+            "volume": amelie.volume,
+            "pronta": amelie._pronta,
             "ultimo_livello": amelie._fatti.livello.value,
             "sicurezza": amelie._fatti.sicurezza,
             "transizioni": [f"{t.da.value}->{t.a.value}"
@@ -818,6 +978,8 @@ def main() -> None:
                          "(lento e di qualita' incerta: vedi docs/04-QUALITA.md)")
     ap.add_argument("--porta", type=int, default=8080)
     ap.add_argument("--audio", default="plughw:0,3")
+    ap.add_argument("--volume", type=int, default=VOLUME_PREDEFINITO,
+                    help="volume iniziale 0-100, se non ce n'e' gia' uno salvato")
     ap.add_argument("-v", "--verboso", action="store_true")
     args = ap.parse_args()
 
@@ -828,7 +990,7 @@ def main() -> None:
     cfg = Configurazione(
         simula_mcu=args.simula_mcu, senza_camera=args.senza_camera,
         senza_voce=args.senza_voce, senza_modello=not args.con_modello,
-        device_audio=args.audio, porta=args.porta)
+        device_audio=args.audio, porta=args.porta, volume=args.volume)
 
     import uvicorn
     # Il tetto sullo spegnimento e' una rete di sicurezza, non la soluzione:

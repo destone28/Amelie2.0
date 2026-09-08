@@ -28,9 +28,11 @@ agisce su ciò che il motore legge davvero.
 
 from __future__ import annotations
 
+import array
 import bisect
 import hashlib
 import logging
+import math
 import re
 import shutil
 import subprocess
@@ -76,6 +78,86 @@ MARGINE_CHIUSURA_S = 0.5
 
 def silenzio(secondi: float, frequenza: int = 22050) -> bytes:
     return b"\x00\x00" * int(frequenza * secondi)
+
+
+# ------------------------------------------------------------------- volume
+
+# Questa catena audio NON HA un controllo di volume hardware. Il suono esce da
+# SEC_MI2S_RX, attraversa l'I2S, il ponte ANX7625 e l'HDMI, e arriva allo
+# schermo: i controlli «Volume» che il mixer ALSA espone - HPHL, HPHR, RX_RX*
+# - appartengono al codec delle cuffie del SoC, che sta su un altro percorso e
+# non tocca questo. L'unico posto dove il volume si puo' cambiare e' il PCM,
+# prima di consegnarlo ad aplay.
+VOLUME_PREDEFINITO = 100
+
+# Il volume e' un numero da 0 a 100, e diventa guadagno col QUADRATO. Una scala
+# lineare sull'AMPIEZZA non sembra lineare all'orecchio: da 100 a 50 non si
+# sente quasi niente, e sotto 20 crolla di colpo. Col quadrato, meta' corsa fa
+# un quarto di ampiezza, cioe' -12 dB, che e' circa cio' che si chiama «meta'
+# volume»; e un decimo di corsa fa -40 dB, cioe' un filo di voce.
+def guadagno_di(volume: int) -> float:
+    """Da 0-100 a un fattore fra 0 e 1. Non si sale MAI sopra 1.
+
+    Amplificare oltre il fondo scala non e' una scelta disponibile: il PCM e'
+    gia' al massimo che 16 bit possono dire, e moltiplicarlo taglierebbe le
+    creste. Chi ha bisogno di piu' volume alza l'amplificatore, che e' fatto
+    per quello.
+    """
+    v = max(0, min(100, int(volume)))
+    return (v / 100.0) ** 2
+
+
+def scala_pcm(dati: bytes, guadagno: float) -> bytes:
+    """Moltiplica del PCM a 16 bit per un guadagno fra 0 e 1.
+
+    Con numpy costa una decina di microsecondi ogni ottanta millisecondi di
+    suono. Senza, si ricade su `array`, che su questi pezzi e' comunque
+    trascurabile: serve solo a non rendere numpy obbligatorio per parlare.
+    """
+    if guadagno >= 1.0 or not dati:
+        return dati
+    if guadagno <= 0.0:
+        return bytes(len(dati))
+    # Un byte spaiato NON si butta via: toglierlo sfaserebbe di mezzo campione
+    # tutto cio' che viene dopo, e il parlato diventerebbe fruscio. Si lascia
+    # passare com'e' - nel flusso vero non capita mai, i pezzi sono pari.
+    coda = dati[len(dati) - len(dati) % 2:]
+    corpo = dati[:len(dati) - len(dati) % 2]
+    try:
+        import numpy as np
+    except ImportError:
+        a = array.array("h")
+        a.frombytes(corpo)
+        for i, c in enumerate(a):
+            a[i] = int(c * guadagno)
+        if a.itemsize != 2:                                 # pragma: no cover
+            raise RuntimeError("array 'h' non e' a 16 bit su questa macchina")
+        return a.tobytes() + coda
+    campioni = np.frombuffer(corpo, dtype="<i2")
+    return (campioni * guadagno).astype("<i2").tobytes() + coda
+
+
+def tocco(frequenza_hz: float = 660.0, durata_s: float = 0.22,
+          frequenza: int = 22050, ampiezza: float = 0.30) -> bytes:
+    """Un colpetto su un calice: e' il ritorno del comando del volume.
+
+    Serve perche' il volume si regola anche a dispositivo fermo, e senza un
+    suono non si saprebbe a che livello lo si sta mettendo finche' non arriva
+    una bottiglia. Ha l'attacco corto e la coda che si spegne da sola: un seno
+    troncato di netto fa un click a tutte e due le estremita', e su un
+    amplificatore quel click e' piu' forte della nota.
+    """
+    n = int(frequenza * durata_s)
+    if n <= 0:
+        return b""
+    attacco = max(1, int(frequenza * 0.004))
+    onda = array.array("h", bytes(2 * n))
+    for i in range(n):
+        inviluppo = min(1.0, i / attacco) * math.exp(-4.0 * i / n)
+        v = ampiezza * inviluppo * math.sin(2 * math.pi * frequenza_hz * i / frequenza)
+        onda[i] = int(max(-1.0, min(1.0, v)) * 32767)
+    return onda.tobytes()
+
 
 
 class Uscita:
@@ -228,8 +310,15 @@ class Uscita:
                 return
             if not dati:
                 # Silenzio quando non c'e' niente da dire: e' cio' che tiene
-                # sveglio il DSP e fa parlare tutto il resto all'istante.
+                # sveglio il DSP e fa parlare tutto il resto all'istante. Il
+                # volume non lo tocca: il silenzio moltiplicato resta silenzio.
                 dati = muto
+            else:
+                # Il volume si applica QUI e non quando si accoda, perche' qui
+                # ci passa tutto - il racconto, gli annunci, il colpetto - e
+                # perche' cosi' cambiarlo si sente entro il tempo della riserva,
+                # tre decimi di secondo, invece che alla frase dopo.
+                dati = scala_pcm(dati, self.voce.guadagno)
 
             atteso = inizio + self._versati / self._bps - self.VANTAGGIO_S
             ritardo = atteso - time.monotonic()
@@ -361,6 +450,11 @@ class Voce:
         # Il flusso verso lo schermo si apre una volta e resta aperto: vedi
         # `Uscita` per il perche'.
         self._uscita: Uscita | None = None
+        # Il volume sta QUI, non nell'uscita: si regola anche a flusso ancora
+        # chiuso - all'avvio, prima che qualcuno parli - e l'uscita lo legge a
+        # ogni pezzo. Una sola verita', nessuna copia da tenere allineata.
+        self._volume = VOLUME_PREDEFINITO
+        self.guadagno = guadagno_di(self._volume)
         self.cache = CARTELLA_CACHE
         self.cache.mkdir(parents=True, exist_ok=True)
 
@@ -392,6 +486,32 @@ class Voce:
         if not self._uscita.aperta:
             self._uscita.avvia()
         return self._uscita
+
+    # -------------------------------------------------------------- volume
+
+    @property
+    def volume(self) -> int:
+        """Da 0 a 100. A 0 il dispositivo continua a raccontare, in silenzio."""
+        return self._volume
+
+    @volume.setter
+    def volume(self, valore: int) -> None:
+        self._volume = max(0, min(100, int(valore)))
+        self.guadagno = guadagno_di(self._volume)
+        log.info("volume: %d", self._volume)
+
+    def colpetto(self) -> None:
+        """Fa sentire il volume adesso, senza aspettare una bottiglia.
+
+        Non passa dalla sintesi: e' un'onda calcolata, quindi non costa niente
+        e non dipende dalla voce caricata, che potrebbe non esserci.
+        """
+        if self._volume <= 0:
+            return
+        try:
+            self.uscita().scrivi(tocco(frequenza=self.imp.frequenza))
+        except Exception as e:                              # noqa: BLE001
+            log.warning("colpetto non riuscito: %s", e)
 
     def scalda(self, lingue: Iterable[str] = ()) -> None:
         """Carica in anticipo le voci delle lingue indicate.

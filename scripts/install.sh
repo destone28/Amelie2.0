@@ -26,7 +26,7 @@ SALTA_MODELLO=0
 G=$'\033[32m'; N=$'\033[0m'
 passo() { echo; echo "${G}==>${N} $*"; }
 
-passo "1/8  Pacchetti di sistema"
+passo "1/9  Pacchetti di sistema"
 sudo apt-get update -qq
 # fonts-ebgaramond: l'interfaccia lo DICHIARA, e finche' non era installato il
 # testo usciva col serif generico della distribuzione. Non e' la stessa cosa: un
@@ -40,7 +40,7 @@ sudo apt-get install -y -qq \
     libcurl4-openssl-dev \
     fonts-ebgaramond
 
-passo "2/8  Correzione della corsa all'avvio dell'audio"
+passo "2/9  Correzione della corsa all'avvio dell'audio"
 # Mitigazione proposta upstream da Loic Poulain (Linaro) per la UNO Q:
 # MODULE_SOFTDEP("pre: qcom_pd_mapper"). Una riga softdep qui e' equivalente,
 # quindi il fix si applica senza ricompilare il kernel.
@@ -52,7 +52,7 @@ softdep qcom_common pre: qcom_pd_mapper
 EOF
 sudo update-initramfs -u >/dev/null 2>&1 || true
 
-passo "3/8  Ambiente Python"
+passo "3/9  Ambiente Python"
 mkdir -p "$RADICE"
 cd "$RADICE"
 [ -d venv ] || python3 -m venv venv
@@ -61,7 +61,7 @@ cd "$RADICE"
     numpy opencv-python-headless onnxruntime rapidocr rapidfuzz msgpack \
     fastapi "uvicorn[standard]" piper-tts
 
-passo "4/8  llama.cpp"
+passo "4/9  llama.cpp"
 if [ ! -x "$RADICE/llama.cpp/build/bin/llama-server" ]; then
     [ -d llama.cpp ] || git clone --depth 1 https://github.com/ggml-org/llama.cpp
     cd llama.cpp
@@ -70,7 +70,7 @@ if [ ! -x "$RADICE/llama.cpp/build/bin/llama-server" ]; then
     cd "$RADICE"
 fi
 
-passo "5/8  Modelli"
+passo "5/9  Modelli"
 mkdir -p models
 if [ "$SALTA_MODELLO" = 0 ] && [ ! -f "models/$MODELLO_LLM" ]; then
     echo "    scarico il modello linguistico (~700 MB)"
@@ -91,17 +91,20 @@ for percorso in $VOCI; do
     done
 done
 
-passo "6/8  Database dei vini"
+passo "6/9  Database dei vini"
 [ -f data/amelie.db ] || ./venv/bin/python data/build_db.py
 
-passo "7/8  Servizi"
+passo "7/9  Servizi"
 sudo install -m755 scripts/systemd/amelie-*.sh scripts/systemd/azzera-*.sh /usr/local/bin/
 sudo install -m644 scripts/systemd/amelie-*.service /etc/systemd/system/
-sudo mkdir -p /var/lib/amelie
+sudo mkdir -p /var/lib/amelie /usr/share/xsessions
+# La sessione grafica del dispositivo: vedi il passo 8 per come la si sceglie.
+sudo install -m644 scripts/systemd/amelie.desktop /usr/share/xsessions/
 sudo systemctl daemon-reload
-sudo systemctl enable amelie-llm amelie-audio-guard amelie-display amelie amelie-kiosk
+sudo systemctl enable amelie-llm amelie-audio-guard amelie-audio-rotta \
+    amelie-sipario amelie-display amelie amelie-kiosk amelie-scrivania
 
-passo "8/8  Avvio automatico della sessione grafica"
+passo "8/9  Avvio automatico della sessione grafica"
 # Senza autologin il server X appartiene al greeter e Chromium non riesce ad
 # aprirlo: fallisce con "The platform failed to initialize", che non dice quale
 # sia il problema. Con l'autologin la sessione e' di arduino e ~/.Xauthority
@@ -111,6 +114,50 @@ sudo tee /etc/lightdm/lightdm.conf.d/50-amelie-autologin.conf >/dev/null <<'EOF'
 [Seat:*]
 autologin-user=arduino
 autologin-user-timeout=0
+EOF
+
+# E la sessione e' quella di Amelie, non XFCE. L'immagine della UNO Q avvia una
+# scrivania completa - sfondo, barra, icone, App Lab - e per una decina di
+# secondi a ogni accensione e' quella che si vede sul pannello. Spegnerne i
+# pezzi uno per uno era una rincorsa: qui la scrivania non parte proprio.
+#
+# Per riaverla, in sviluppo:
+#     sudo rm /etc/lightdm/lightdm.conf.d/60-amelie-sessione.conf
+#     sudo systemctl restart lightdm
+sudo tee /etc/lightdm/lightdm.conf.d/60-amelie-sessione.conf >/dev/null <<'EOF'
+[Seat:*]
+user-session=amelie
+autologin-session=amelie
+EOF
+
+passo "9/9  Silenzio sulla console"
+# Niente testo sul pannello durante l'avvio. Il `quiet` del kernel starebbe
+# sulla riga di comando, che qui vive dentro un'immagine unificata: rifarla per
+# dodici secondi di testo non vale il rischio di una board che non riparte. Il
+# resto si toglie senza toccare l'avvio.
+sudo mkdir -p /etc/systemd/system.conf.d
+sudo tee /etc/systemd/system.conf.d/50-amelie-silenzio.conf >/dev/null <<'EOF'
+# Niente righe «[ OK ] Started ...» sul pannello. Restano tutte nel journal:
+# `journalctl -b` le mostra esattamente come prima.
+[Manager]
+ShowStatus=no
+EOF
+sudo tee /etc/sysctl.d/50-amelie-silenzio.conf >/dev/null <<'EOF'
+# Solo le emergenze sulla console. Se il dispositivo sta per morire e' giusto
+# che lo dica; tutto il resto e' nel journal.
+kernel.printk = 1 4 1 3
+EOF
+
+# E la console di testo non si raggiunge nemmeno da tastiera. Sul tavolo di un
+# ristorante le porte USB sono raggiungibili, e Ctrl+Alt+F2 su una tastiera
+# infilata porta a un prompt di login a schermo intero. Ha effetto dal riavvio
+# successivo, perche' il server X legge questa cartella all'avvio.
+sudo mkdir -p /etc/X11/xorg.conf.d
+sudo tee /etc/X11/xorg.conf.d/10-amelie-kiosk.conf >/dev/null <<'EOF'
+Section "ServerFlags"
+    Option "DontVTSwitch" "true"
+    Option "DontZap"      "true"
+EndSection
 EOF
 
 echo

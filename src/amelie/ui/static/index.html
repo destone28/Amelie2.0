@@ -401,6 +401,73 @@ svg { display: block; }
 .lingua.premuto { transform: scale(.94); }
 
 /* ===========================================================================
+   VOLUME — in alto a sinistra, dov'e' speculare alle lingue.
+
+   Questa catena audio non ha un volume hardware: il suono esce dall'HDMI verso
+   lo schermo, e i controlli del mixer appartengono a un altro percorso. Quello
+   che si regola qui e' il PCM, prima di consegnarlo (vedi speech.scala_pcm).
+
+   Si vede solo l'altoparlante; il resto esce al tocco e si richiude da solo.
+   Un dispositivo da tavolo non deve mostrare una manopola a chi voleva sapere
+   che vino ha in mano — ma chi apre il locale la deve trovare al primo colpo
+   d'occhio, senza istruzioni.
+   =========================================================================== */
+#volume {
+  position: absolute; left: 0; top: 0; z-index: 6;
+  padding: var(--passo) calc(var(--passo) * 1.5);
+}
+#v-piatto {
+  display: flex; align-items: center; gap: calc(var(--passo) * 1.5);
+  padding: calc(var(--passo) * .5);
+  /* Il bordo c'e' sempre, trasparente: se comparisse insieme al fondo,
+     l'altoparlante si sposterebbe di due pixel a ogni apertura. */
+  border: 1px solid transparent; border-radius: var(--raggio-grande);
+  background: transparent;
+  transition: background-color .25s var(--curva), border-color .25s var(--curva);
+}
+/* Aperto, il gruppo diventa una targa: sotto ci puo' essere il titolo del vino,
+   e un comando che si legge a meta' e' peggio di un comando che copre.
+
+   OPACA, non al 94%: su un fondo quasi nero il sei per cento di un titolo in
+   oro si legge ancora benissimo, e si vedeva il nome del vino passare dentro
+   ai pulsanti. Sui fondi scuri la trasparenza non perdona. */
+#volume.aperto #v-piatto {
+  background: #2A0F0C; border-color: var(--oro-scuro);
+  box-shadow: 0 12px 44px rgba(0,0,0,.55);
+}
+#v-barra {
+  display: flex; align-items: center; gap: calc(var(--passo) * 1.5);
+  max-width: 0; opacity: 0; overflow: hidden;
+  pointer-events: none;
+  transition: max-width .32s var(--curva), opacity .22s var(--curva);
+}
+#volume.aperto #v-barra { max-width: 640px; opacity: 1; pointer-events: auto; }
+
+/* La scala sale da sinistra a destra anche in ALTEZZA: si legge di sbieco, da
+   mezzo metro, senza contare le tacche. */
+#v-livello { display: flex; align-items: flex-end; gap: 7px; height: 56px; }
+#v-livello i {
+  width: 16px; border-radius: 3px;
+  height: calc(18px + var(--i) * 4px);
+  background: rgba(138,107,48,.34);
+  transition: background-color .18s var(--curva);
+}
+#v-livello i.acceso { background: var(--oro); }
+/* A zero il dispositivo racconta lo stesso, in silenzio: la scala si spegne
+   tutta e l'altoparlante prende la barra.
+
+   Le due onde dell'icona non sono decorazione: sotto meta' corsa ne resta una,
+   a zero nessuna e compare il taglio. Cosi' il livello si sa anche a comando
+   chiuso, che e' come sta per tutta la sera. */
+#volume.muto #v-apri { color: var(--avorio-fioco); border-color: var(--oro-scuro); }
+.altoparlante .onda { transition: opacity .2s; }
+#volume.piano .altoparlante .onda.lontana { opacity: 0; }
+#volume.muto .altoparlante .onda { opacity: 0; }
+.altoparlante .taglio { opacity: 0; transition: opacity .2s; }
+#volume.muto .altoparlante .taglio { opacity: 1; }
+#volume[hidden] { display: none; }
+
+/* ===========================================================================
    DIDASCALIA — che cosa il dispositivo sta dicendo, adesso.
 
    Sta in basso, come un sottotitolo, e cambia quando cambia la VOCE: il server
@@ -481,6 +548,30 @@ svg { display: block; }
 <div id="scena">
 
   <div id="lingue"></div>
+
+  <!-- VOLUME -->
+  <div id="volume" hidden>
+    <div id="v-piatto">
+      <button class="cmd" id="v-apri" aria-label="Volume">
+        <svg class="altoparlante" viewBox="0 0 24 24">
+          <path d="M4 9v6h4l5 4V5L8 9H4z"/>
+          <path class="onda" d="M16.5 8.5a5 5 0 0 1 0 7v-1.9a3.2 3.2 0 0 0 0-3.2V8.5z"/>
+          <path class="onda lontana" d="M19 6a8.5 8.5 0 0 1 0 12v-1.9a6.6 6.6 0 0 0 0-8.2V6z"/>
+          <path class="taglio" d="M3.5 3.5 L20.5 20.5" fill="none"
+                stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div id="v-barra">
+        <button class="cmd" id="v-giu" aria-label="Piu' piano">
+          <svg viewBox="0 0 24 24"><path d="M5 11h14v2H5z"/></svg>
+        </button>
+        <div id="v-livello"></div>
+        <button class="cmd" id="v-su" aria-label="Piu' forte">
+          <svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- ATTESA -->
   <section id="attesa" class="vista attiva">
@@ -735,6 +826,74 @@ document.querySelectorAll("#r-comandi .cmd").forEach(b => {
   rendiToccabile(b, () => comanda(b.dataset.azione));
 });
 
+/* --------------------------------------------------------------- volume */
+
+/* Quanto resta aperto senza che nessuno lo tocchi. Quattro secondi e mezzo:
+   il tempo di due pressioni e un'occhiata, non tanto da restare in mezzo alla
+   schermata dopo che ci si è dimenticati di lui. */
+const VOLUME_RIPOSO_MS = 4500;
+const TACCHE = 10;
+
+let volume = 100;
+let passoVolume = 10;
+let chiusuraVolume = null;
+
+/* La scala si costruisce una volta sola: dieci tacche che crescono in altezza,
+   così il livello si legge di sbieco senza contarle. */
+(function costruisciScala() {
+  const box = $("v-livello");
+  for (let i = 0; i < TACCHE; i++) {
+    const t = document.createElement("i");
+    t.style.setProperty("--i", i);
+    box.appendChild(t);
+  }
+})();
+
+function disegnaVolume(valore) {
+  volume = Math.max(0, Math.min(100, valore));
+  const accese = Math.round(volume / 100 * TACCHE);
+  $("v-livello").querySelectorAll("i").forEach((t, i) => {
+    t.classList.toggle("acceso", i < accese);
+  });
+  $("volume").classList.toggle("muto", volume <= 0);
+  $("volume").classList.toggle("piano", volume > 0 && volume < 50);
+  $("v-giu").disabled = volume <= 0;
+  $("v-su").disabled = volume >= 100;
+}
+
+function rinviaChiusura() {
+  clearTimeout(chiusuraVolume);
+  chiusuraVolume = setTimeout(chiudiVolume, VOLUME_RIPOSO_MS);
+}
+
+function chiudiVolume() {
+  clearTimeout(chiusuraVolume);
+  $("volume").classList.remove("aperto");
+}
+
+function alternaVolume() {
+  const aperto = $("volume").classList.toggle("aperto");
+  if (aperto) rinviaChiusura(); else clearTimeout(chiusuraVolume);
+}
+
+function regolaVolume(delta) {
+  rinviaChiusura();
+  /* Il livello si muove SUBITO e la risposta conferma: il colpetto che fa
+     sentire il volume arriva un terzo di secondo dopo, di proposito, e nel
+     frattempo la scala deve già aver risposto al dito. */
+  const chiesto = Math.max(0, Math.min(100, volume + delta));
+  if (chiesto === volume) return;
+  disegnaVolume(chiesto);
+  fetch("/volume/" + chiesto, { method: "POST" })
+    .then(r => r.json())
+    .then(d => { if (typeof d.valore === "number") disegnaVolume(d.valore); })
+    .catch(() => {});
+}
+
+rendiToccabile($("v-apri"), alternaVolume);
+rendiToccabile($("v-giu"), () => regolaVolume(-passoVolume));
+rendiToccabile($("v-su"),  () => regolaVolume(+passoVolume));
+
 /* --------------------------------------------------------------- lingue */
 
 /* L'elenco lo disegna il server: sa quali lingue esistono e come si chiamano
@@ -791,6 +950,9 @@ eventi.onmessage = (e) => {
       /* Cambiando scena si tace: una didascalia rimasta accesa parlerebbe di
          una bottiglia che non c'è più. */
       didascalia("");
+      /* E il comando del volume si richiude: aperto sopra il titolo di un vino
+         appena riconosciuto non ci deve restare. */
+      chiudiVolume();
       mostra(m.vista);
       break;
 
@@ -825,6 +987,15 @@ eventi.onmessage = (e) => {
 
     case "lingua":
       disegnaLingue(m);
+      break;
+
+    case "volume":
+      /* Senza voce del tutto — il dispositivo avviato con --senza-voce — il
+         comando non c'è: un livello che non muove niente è peggio di nessun
+         livello. */
+      $("volume").hidden = m.attivo === false;
+      if (typeof m.passo === "number") passoVolume = m.passo;
+      if (typeof m.valore === "number") disegnaVolume(m.valore);
       break;
 
     case "salute":

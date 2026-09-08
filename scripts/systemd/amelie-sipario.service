@@ -1,0 +1,18 @@
+[Unit]
+Description=Amelie - cala il sipario sulla console di testo
+# Prima della sessione grafica, e prima di tutto cio' che potrebbe voler
+# scrivere sulla console: da qui in avanti il pannello e' di Amelie.
+After=systemd-vconsole-setup.service
+Before=display-manager.service
+DefaultDependencies=no
+After=sysinit.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/amelie-sipario.sh
+
+[Install]
+WantedBy=multi-user.target
