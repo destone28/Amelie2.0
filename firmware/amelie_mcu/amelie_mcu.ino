@@ -182,7 +182,27 @@ static int ultima_mm = -1;
 static bool presente = false;
 static uint32_t ultimo_invio = 0;
 
-/* ─── il bus, con transazioni che finiscono sempre ─────────────────────────── */
+/* ─── il bus: transazioni che finiscono sempre, e non si accavallano ──────── */
+
+/* UN SOLO PADRONE PER VOLTA SUL BUS.
+ *
+ * I gestori registrati con `Bridge.provide()` NON girano nel `loop()`: la
+ * libreria crea un thread suo, chiamato "bridge", ed e' li' che vengono
+ * chiamati. Finche' i gestori si limitavano a scrivere in una variabile non
+ * importava - ed e' la ragione per cui questo sketch lo faceva. Da quando
+ * `scansiona()` e `registro_tof()` LEGGONO il bus, due thread ci parlano
+ * insieme.
+ *
+ * Il risultato si e' visto nei dati, e non si dimentica: le letture tornavano
+ * con i byte di un ALTRO registro. 2313 e' 0x0909, cioe' il byte di stato
+ * ripetuto; 4354 e' 0x1102, un byte del registro della polarita' seguito da un
+ * altro. Non erano misure sbagliate: erano risposte di una transazione
+ * consegnate a chi ne aveva chiesta un'altra.
+ *
+ * Da qui in giu' ogni transazione prende questo lucchetto. Il mutex di Zephyr
+ * e' ricorsivo per chi lo possiede gia', quindi annidarli e' sicuro. */
+static K_MUTEX_DEFINE(lucchetto_bus);
+
 
 /* Sblocca il bus, se qualcuno lo sta tenendo fermo.
  *
@@ -216,20 +236,28 @@ static void libera_il_bus() {
 }
 
 static bool risponde(uint8_t indirizzo) {
+  k_mutex_lock(&lucchetto_bus, K_FOREVER);
   Wire1.beginTransmission(indirizzo);
-  return Wire1.endTransmission() == 0;
+  bool ok = Wire1.endTransmission() == 0;
+  k_mutex_unlock(&lucchetto_bus);
+  return ok;
 }
 
 /* Lettura e scrittura di registri a 16 bit. Ognuna riesce o fallisce: è tutta
  * la differenza con la libreria, ed è il motivo per cui questo codice esiste. */
 static bool tof_leggi(uint16_t reg, uint8_t *fuori, uint8_t quanti) {
+  k_mutex_lock(&lucchetto_bus, K_FOREVER);
+  bool ok = false;
   Wire1.beginTransmission(IND_TOF);
   Wire1.write((uint8_t)(reg >> 8));
   Wire1.write((uint8_t)(reg & 0xFF));
-  if (Wire1.endTransmission() != 0) return false;
-  if ((int)Wire1.requestFrom((int)IND_TOF, (int)quanti) != (int)quanti) return false;
-  for (uint8_t i = 0; i < quanti; i++) fuori[i] = (uint8_t)Wire1.read();
-  return true;
+  if (Wire1.endTransmission() == 0 &&
+      (int)Wire1.requestFrom((int)IND_TOF, (int)quanti) == (int)quanti) {
+    for (uint8_t i = 0; i < quanti; i++) fuori[i] = (uint8_t)Wire1.read();
+    ok = true;
+  }
+  k_mutex_unlock(&lucchetto_bus);
+  return ok;
 }
 
 static bool tof_leggi8(uint16_t reg, uint8_t *v) {
@@ -244,11 +272,14 @@ static bool tof_leggi16(uint16_t reg, uint16_t *v) {
 }
 
 static bool tof_scrivi(uint16_t reg, const uint8_t *dati, uint8_t quanti) {
+  k_mutex_lock(&lucchetto_bus, K_FOREVER);
   Wire1.beginTransmission(IND_TOF);
   Wire1.write((uint8_t)(reg >> 8));
   Wire1.write((uint8_t)(reg & 0xFF));
   for (uint8_t i = 0; i < quanti; i++) Wire1.write(dati[i]);
-  return Wire1.endTransmission() == 0;
+  bool ok = Wire1.endTransmission() == 0;
+  k_mutex_unlock(&lucchetto_bus);
+  return ok;
 }
 
 static bool tof_scrivi8(uint16_t reg, uint8_t v) {
@@ -270,9 +301,12 @@ static bool tof_scrivi32(uint16_t reg, uint32_t v) {
  * come fa la libreria. */
 static bool tof_misura_pronta(bool *pronta) {
   uint8_t t;
-  if (!tof_leggi8(R_MUX_GPIO, &t)) return false;
+  k_mutex_lock(&lucchetto_bus, K_FOREVER);
+  bool ok = tof_leggi8(R_MUX_GPIO, &t);
   uint8_t polarita = ((t & 0x10) >> 4) == 1 ? 0 : 1;
-  if (!tof_leggi8(R_STATO_GPIO, &t)) return false;
+  ok = ok && tof_leggi8(R_STATO_GPIO, &t);
+  k_mutex_unlock(&lucchetto_bus);
+  if (!ok) return false;
   *pronta = ((t & 0x01) == polarita);
   return true;
 }
@@ -367,12 +401,17 @@ static int tof_misura() {
   /* L'interrupt si azzera PRIMA di leggere il risultato. E' l'ordine che usa la
    * libreria Modulino, che funziona; leggendo prima e azzerando dopo si legge
    * un risultato che il sensore non ha ancora finito di consegnare. */
+  /* Le quattro transazioni di una misura si tengono INSIEME: fra lo stato e la
+   * distanza non deve infilarsi la lettura di qualcun altro, o si mettono
+   * insieme pezzi di due misure diverse. */
   uint8_t stato;
   uint16_t spad, mm;
+  k_mutex_lock(&lucchetto_bus, K_FOREVER);
   tof_scrivi8(R_AZZERA_INT, 0x01);
   bool ok = tof_leggi8(R_STATO_MISURA, &stato)
          && tof_leggi16(R_SPAD, &spad)
          && tof_leggi16(R_DISTANZA, &mm);
+  k_mutex_unlock(&lucchetto_bus);
   if (!ok) return -2;
   /* Lo stato 0 e' "misura buona"; la libreria rimappa i codici, a noi basta
    * distinguere buono da non buono. E zero SPAD attivi vuol dire niente
@@ -461,6 +500,7 @@ int scansiona(int blocco) {
  * vedere un anello che non aveva mai acceso. */
 static bool anello_grezzo(uint8_t r, uint8_t g, uint8_t b, uint8_t l5) {
   if (l5 > 31) l5 = 31;
+  k_mutex_lock(&lucchetto_bus, K_FOREVER);
   Wire1.beginTransmission(IND_ANELLO);
   for (uint8_t i = 0; i < N_LED; i++) {
     Wire1.write((uint8_t)(0xE0 | l5));
@@ -468,7 +508,9 @@ static bool anello_grezzo(uint8_t r, uint8_t g, uint8_t b, uint8_t l5) {
     Wire1.write(g);
     Wire1.write(r);
   }
-  return Wire1.endTransmission() == 0;
+  bool ok = Wire1.endTransmission() == 0;
+  k_mutex_unlock(&lucchetto_bus);
+  return ok;
 }
 
 /* Con la luminosità in centesimi, come la manda Linux. */
