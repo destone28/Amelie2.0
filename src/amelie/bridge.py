@@ -284,6 +284,25 @@ class Ponte:
         except (ErroreMCU, PonteNonDisponibile, OSError, TypeError, ValueError):
             return None
 
+    # I registri che `registro_tof` sa mostrare, nell'ordine in cui li chiede.
+    REGISTRI_TOF = ("misura pronta", "stato della misura", "SPAD attivi",
+                    "distanza mm", "polarita' interrupt", "piedino interrupt")
+
+    def registri_sensore(self) -> dict[str, int] | None:
+        """I registri grezzi del sensore, per quando la distanza non torna.
+
+        `distanza_mm()` dice quanti millimetri; quando quel numero e' assurdo —
+        zero fisso, per esempio — non dice **perche'**. Questi sono i numeri che
+        il sensore risponde davvero.
+        """
+        fuori: dict[str, int] = {}
+        for i, nome in enumerate(self.REGISTRI_TOF):
+            try:
+                fuori[nome] = int(self.chiama("registro_tof", i))
+            except (ErroreMCU, PonteNonDisponibile, OSError, TypeError, ValueError):
+                return None
+        return fuori
+
     def distanza_mm(self) -> int | None:
         """Distanza letta dal sensore, o None se la misura non è valida.
 

@@ -75,11 +75,29 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--guarda", action="store_true",
                     help="resta in ascolto e stampa quando cambia")
+    ap.add_argument("--sensore", action="store_true",
+                    help="apre il sensore e mostra i registri grezzi")
     args = ap.parse_args()
 
     from amelie.bridge import Ponte
 
     p = Ponte(timeout=3.0)
+
+    if args.sensore:
+        import time as t
+        print("  Muovi una mano sopra il sensore mentre scorre.\n")
+        intestazione = " ".join(f"{n[:12]:>13}" for n in Ponte.REGISTRI_TOF)
+        print(f"  {'distanza':>9} {intestazione}")
+        for _ in range(20):
+            r = p.registri_sensore()
+            if r is None:
+                print("  il firmware non sa mostrare i registri: ricaricalo")
+                return
+            valori = " ".join(f"{v:>13}" for v in r.values())
+            print(f"  {str(p.distanza_mm()):>9} {valori}", flush=True)
+            t.sleep(0.5)
+        return
+
     if not args.guarda:
         print(racconta(p))
         return

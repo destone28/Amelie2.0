@@ -364,12 +364,15 @@ static int tof_misura() {
   if (!tof_misura_pronta(&pronta)) return -2;   /* il sensore non risponde */
   if (!pronta) return -3;                       /* nessuna misura nuova */
 
+  /* L'interrupt si azzera PRIMA di leggere il risultato. E' l'ordine che usa la
+   * libreria Modulino, che funziona; leggendo prima e azzerando dopo si legge
+   * un risultato che il sensore non ha ancora finito di consegnare. */
   uint8_t stato;
   uint16_t spad, mm;
+  tof_scrivi8(R_AZZERA_INT, 0x01);
   bool ok = tof_leggi8(R_STATO_MISURA, &stato)
          && tof_leggi16(R_SPAD, &spad)
          && tof_leggi16(R_DISTANZA, &mm);
-  tof_scrivi8(R_AZZERA_INT, 0x01);              /* sempre, anche se sopra e' andata male */
   if (!ok) return -2;
   /* Lo stato 0 e' "misura buona"; la libreria rimappa i codici, a noi basta
    * distinguere buono da non buono. E zero SPAD attivi vuol dire niente
@@ -394,6 +397,31 @@ int versione() { return PROTOCOLLO; }
  * non ha finito di avviarsi, 3 la configurazione, 4 la calibrazione, 5 i tempi
  * di misura, 6 l'avvio della misura continua. */
 int stato_tof() { return passo_tof; }
+
+/* I registri del sensore, grezzi, uno per chiamata.
+ *
+ * `distanza()` dice quanti millimetri; quando quel numero non torna - zero
+ * fisso, per esempio - non dice PERCHE'. Questo apre il sensore e mostra cosa
+ * risponde davvero, senza ricaricare il firmware con delle stampe dentro.
+ *
+ *   0 misura pronta (0/1)      3 distanza in mm
+ *   1 stato della misura       4 registro della polarita' dell'interrupt
+ *   2 numero di SPAD attivi    5 stato del piedino di interrupt
+ *
+ * -1 vuol dire che il sensore non ha risposto alla lettura. */
+int registro_tof(int quale) {
+  if (!c_tof) return -2;
+  uint8_t b8; uint16_t b16;
+  switch (quale) {
+    case 0: { bool p = false; return tof_misura_pronta(&p) ? (p ? 1 : 0) : -1; }
+    case 1: return tof_leggi8(R_STATO_MISURA, &b8) ? (int)b8 : -1;
+    case 2: return tof_leggi16(R_SPAD, &b16) ? (int)b16 : -1;
+    case 3: return tof_leggi16(R_DISTANZA, &b16) ? (int)b16 : -1;
+    case 4: return tof_leggi8(R_MUX_GPIO, &b8) ? (int)b8 : -1;
+    case 5: return tof_leggi8(R_STATO_GPIO, &b8) ? (int)b8 : -1;
+  }
+  return -3;
+}
 
 /* Quali moduli si vedono, come somma di bit: 1 anello, 2 sensore. */
 int moduli() {
@@ -548,6 +576,7 @@ void setup() {
   Bridge.provide("versione", versione);
   Bridge.provide("scansiona", scansiona);
   Bridge.provide("stato_tof", stato_tof);
+  Bridge.provide("registro_tof", registro_tof);
 }
 
 void loop() {
