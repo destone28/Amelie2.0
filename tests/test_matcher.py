@@ -359,3 +359,124 @@ class TestDueLingue:
         if not f.abbinamenti:
             pytest.skip("questo vino non ha abbinamenti propri")
         assert len(f.abbinamenti_in("en")) == len(f.abbinamenti)
+
+
+class TestProduttoreLetto:
+    """Un produttore non si nomina se non lo si e' letto.
+
+    E' la regola che questo dispositivo deve piu' di ogni altra a chi sta
+    seduto al tavolo. Su una bottiglia c'e' scritto «Primitivo di Manduria» e
+    basta: quel vino lo fanno centinaia di aziende, e sceglierne una vuol dire
+    inventare un nome davanti a un ospite. Cio' che il dispositivo puo' dire e'
+    che cos'e' - e lo dice benissimo, perche' la descrizione della tipologia
+    parla del vitigno, del disciplinare e della zona, ed e' vera per tutte
+    quelle bottiglie.
+
+    Misurato su 1200 etichette costruite dalle tipologie del database, lunghe
+    abbastanza da non essere protette dal tetto sulle parole:
+
+        prima    1179 generiche, 21 attribuite a un produttore, 1 CERTA
+        dopo     1200 generiche,  0 attribuite,                  0 certe
+
+    La certa era «Brunello di Montalcino» dato a «Vigna Italia» con 100, da
+    un'etichetta dove la parola «vigna» era quella del disciplinare.
+    """
+
+    def test_una_denominazione_da_sola_non_si_attribuisce_a_nessuno(self, m):
+        """Il caso raccontato: «Primitivo di Manduria» e nient'altro."""
+        f = m.cerca(["PRIMITIVO DI MANDURIA", "DENOMINAZIONE DI ORIGINE CONTROLLATA",
+                     "2019", "14% VOL", "CONTIENE SOLFITI"], anno_massimo=2026)
+        assert not f.cantina, f"attribuito a {f.cantina!r} senza averlo letto"
+        assert "manduria" in (f.tipologia or f.denominazione or "").lower()
+
+    def test_il_produttore_non_si_fa_confermare_dalle_parole_del_vino(self, m):
+        """«Barolo del Comune di Serralunga d'Alba», dato a «Terre del Barolo».
+
+        Il produttore prendeva 88 e si dichiarava certo perche' il suo nome
+        contiene «Barolo», che sull'etichetta c'e' - ma come denominazione, non
+        come firma. Due conferme indipendenti che erano la stessa parola.
+        """
+        f = m.cerca(["BAROLO DEL COMUNE DI SERRALUNGA D'ALBA",
+                     "DENOMINAZIONE DI ORIGINE CONTROLLATA E GARANTITA",
+                     "2019", "13,5% VOL"], anno_massimo=2026)
+        assert not f.cantina, f"attribuito a {f.cantina!r}"
+
+    def test_una_parola_del_disciplinare_non_fa_una_cantina(self, m):
+        """«Vigna» sull'etichetta non e' l'azienda «Vigna Italia»."""
+        f = m.cerca(["BRUNELLO DI MONTALCINO", "VIGNA",
+                     "DENOMINAZIONE DI ORIGINE PROTETTA", "2019",
+                     "IMBOTTIGLIATO ALL'ORIGINE", "13,5% VOL",
+                     "CONTIENE SOLFITI"], anno_massimo=2026)
+        assert not (f.certo and f.cantina), \
+            f"dichiarato certo {f.cantina!r} con {f.sicurezza:.0f}"
+
+    def test_quando_il_produttore_c_e_il_vino_si_riconosce(self, m):
+        """L'altro lato: la regola non deve rendere il dispositivo cieco.
+
+        Misurato su 500 etichette complete: 498 col produttore giusto, 461
+        dichiarate certe, nessuna attribuita al produttore sbagliato - dove
+        prima ce n'era una, per giunta dichiarata certa con 93.
+        """
+        f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI",
+                     "DENOMINAZIONE DI ORIGINE CONTROLLATA E GARANTITA", "2016"],
+                    anno_massimo=2026)
+        assert "barolo" in (f.cantina or "").lower(), \
+            f"non riconosciuto: {f.cantina!r} / {f.nome!r}"
+        assert f.certo
+
+    def test_scendendo_al_generico_il_racconto_resta_pieno(self, m):
+        """Generico non vuol dire povero: sotto c'e' ancora tutto da dire."""
+        f = m.cerca(["PRIMITIVO DI MANDURIA", "DENOMINAZIONE DI ORIGINE CONTROLLATA",
+                     "2019", "14% VOL", "CONTIENE SOLFITI"], anno_massimo=2026)
+        assert f.livello is not Livello.NULLA
+        assert f.vitigni or f.note_vitigno, "nessun fatto da raccontare"
+        assert f.origine is not None and f.ripiego
+
+    def test_le_parole_della_denominazione_non_provano_il_produttore(self):
+        """L'unita' della regola, senza database."""
+        prova = Matcher._prova_del_produttore
+        assert prova("terre del barolo", "barolo") == ["terre", "del"]
+        assert prova("antinori", "chianti classico") == ["antinori"]
+        # `tenuta` sta su ogni etichetta: e' in PAROLE_VUOTE, non prova nulla.
+        assert prova("tenuta san guido", "bolgheri sassicaia") == ["san", "guido"]
+
+    def test_una_cooperativa_chiamata_come_la_sua_denominazione(self):
+        """Non ha una parola sua: dalle parole non e' riconoscibile.
+
+        Sono 31 cantine su 5998 - «Cantina di Soave», «Cantina di Montalcino»,
+        «Cantina Valpolicella». Le loro bottiglie si raccontano come generiche,
+        ed e' l'unica cosa onesta da fare: da «SOAVE» stampato non si distingue
+        la cooperativa che si chiama Soave da chiunque altro faccia Soave.
+        """
+        assert Matcher._prova_del_produttore("cantina di soave", "soave") == []
+
+    def test_la_gradazione_alcolica_non_e_una_firma(self, m):
+        """«VOL» confermava il produttore «Volpi».
+
+        Cinque lettere contro tre, due terzi in comune: `fuzz.ratio` da' 75, e
+        75 bastava a dire «il produttore l'ho letto». Cosi' «Cantine Volpi»
+        finiva su un Piemonte Cortese che non la nominava affatto - bastava che
+        sull'etichetta ci fosse la gradazione, cioe' su ogni etichetta.
+
+        La prova del produttore si misura sulle parole UTILI: quelle che stanno
+        su ogni bottiglia non identificano una cantina piu' di quanto
+        identifichino un vino.
+        """
+        f = m.cerca(["PIEMONTE CORTESE", "PIEMONTE",
+                     "DENOMINAZIONE DI ORIGINE PROTETTA", "2019",
+                     "IMBOTTIGLIATO ALL'ORIGINE", "13,5% VOL",
+                     "CONTIENE SOLFITI", "750 ml", "PRODOTTO IN ITALIA"],
+                    anno_massimo=2026)
+        assert not f.cantina, f"attribuito a {f.cantina!r} dalla gradazione"
+
+    def test_una_parola_assente_non_vale_un_riscontro_parziale(self):
+        """`fuzz.ratio` fra parole che non c'entrano vale trenta o quaranta.
+
+        Contarlo regalava a ogni produttore di tre parole una quarantina di
+        punti che sull'etichetta non c'erano. Un refuso, invece, vale ottanta
+        e passa, e deve continuare a contare.
+        """
+        assente = Matcher._copertura("terre", "comune serralunga alba".split())
+        assert assente == 0.0, f"una parola assente ha preso {assente}"
+        refuso = Matcher._copertura("tenuta rocca", "tinuta rocca barolo".split())
+        assert refuso > 80, f"un refuso e' costato troppo: {refuso}"

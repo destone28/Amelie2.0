@@ -29,12 +29,41 @@ Due stadi, perché fanno cose diverse:
    sbaglia una lettera.
 
 Le soglie sono empiriche e vanno ritarate sulle catture reali.
+
+## La regola del produttore
+
+Il primo gradino della cascata e' l'unico che nomini qualcuno, ed e' per questo
+il piu' pericoloso. Su una bottiglia c'e' scritto «Primitivo di Manduria» e
+basta: quel vino lo fanno centinaia di aziende, e sceglierne una vuol dire
+inventare un nome davanti a un ospite seduto. Il dispositivo non lo fa. Cio'
+che puo' dire e' *che cosa* e' - e lo dice bene, perche' la descrizione della
+tipologia parla del vitigno, del disciplinare e della zona, ed e' vera per
+tutte quelle bottiglie.
+
+Percio': **un vino si attribuisce a un produttore solo se il produttore si e'
+letto.** Non basta che il suo punteggio sia alto. Le sue parole devono essere
+sull'etichetta, e devono essere parole SUE - non quelle della denominazione,
+che stanno sulla bottiglia di chiunque. Senza quella prova la cascata scende
+di un gradino e il nome non si pronuncia.
+
+Il caso che l'ha imposta, misurato su 1200 etichette costruite dalle tipologie
+del database e lunghe abbastanza da non essere protette dal tetto sulle parole:
+
+    prima    1179 generiche, 21 attribuite a un produttore, 1 dichiarata CERTA
+    dopo     1200 generiche,  0 attribuite,                  0 certe
+
+La certa era «Brunello di Montalcino» dato all'azienda «Vigna Italia» con 100,
+perche' la parola «vigna» - che sull'etichetta e' del disciplinare - le faceva
+da firma. E su 500 etichette complete, dove il produttore c'e' davvero, il
+prezzo e' piccolo: 498 riconosciute sul produttore giusto, e nessuna sul
+produttore sbagliato - dove prima ce n'era una, per giunta dichiarata certa.
 """
 
 from __future__ import annotations
 
 import functools
 import logging
+import math
 import sqlite3
 import threading
 from dataclasses import dataclass, field
@@ -57,6 +86,12 @@ SOGLIA_DUBBIA = 75
 MARGINE_PRODUTTORE = 3.0
 # Fra quanti dei primi cercare quel rivale.
 RIVALI = 6
+# Sotto questa somiglianza una parola del record NON si considera letta.
+# `fuzz.ratio` fra due parole che non c'entrano nulla vale trenta o quaranta -
+# "terre" contro "comune" fa 36 - e contarlo come credito parziale regalava a
+# ogni produttore di tre parole una quarantina di punti che sull'etichetta non
+# c'erano. Un refuso vale ottanta e passa, quindi la soglia non lo taglia.
+RISCONTRO_PAROLA = 70.0
 
 # Quanti candidati chiedere a FTS5 prima di riordinarli col fuzzy.
 CANDIDATI = 200
@@ -92,6 +127,10 @@ class Candidato:
     somiglianza: float
     peso: int
     esatto: bool = False
+    # Il nome del PRODUTTORE si e' ritrovato fra le parole lette? Solo se e'
+    # vero il dispositivo puo' dire «questo e' il vino tale di tal altro»:
+    # vedi `_prova_del_produttore`.
+    produttore_letto: bool = True
 
     @property
     def punteggio(self) -> float:
@@ -317,20 +356,24 @@ class Matcher:
         if not token:
             return Fatti()
 
-        candidati = self._candidati(token, normalizza(testo))
+        testo_norm = normalizza(testo)
+        candidati = self._candidati(token, testo_norm)
         if not candidati:
             return Fatti()
 
         # Il tetto si applica DOPO la scelta: serve a dire quanto ci si puo'
         # fidare, non a cambiare quale record e' il piu' somigliante.
-        if len(token) < len(TETTO_PER_PAROLE):
-            tetto = TETTO_PER_PAROLE[len(token)]
-            for c in candidati:
-                c.somiglianza = min(c.somiglianza, tetto)
+        tetto = (TETTO_PER_PAROLE[len(token)] if len(token) < len(TETTO_PER_PAROLE)
+                 else math.inf)      # da quattro parole in su nessun tetto
+        for c in candidati:
+            c.somiglianza = min(c.somiglianza, tetto)
 
         migliore = candidati[0]
         fatti = self._componi(migliore)
         fatti.sicurezza = migliore.somiglianza
+        # La garanzia: un produttore non si nomina se non lo si e' letto.
+        if not migliore.produttore_letto:
+            fatti = self._senza_produttore(fatti, testo_norm, tetto)
         if self._c_e_un_altro_produttore(candidati):
             fatti.sicurezza = min(fatti.sicurezza, SOGLIA_CERTA - 0.5)
         fatti.annata = annata
@@ -371,7 +414,7 @@ class Matcher:
             return False
         norme = self._norme_vino([c.ambito_id for c in candidati[:RIVALI]
                                   if c.ambito == "vino"])
-        cantina_primo = norme.get(primo.ambito_id, ("", ""))[1]
+        cantina_primo = norme.get(primo.ambito_id, ("", "", ""))[1]
         if not cantina_primo:
             return False
         for c in candidati[1:RIVALI]:
@@ -379,12 +422,52 @@ class Matcher:
                 break
             if c.ambito != "vino":
                 continue
-            altra = norme.get(c.ambito_id, ("", ""))[1]
+            altra = norme.get(c.ambito_id, ("", "", ""))[1]
             if altra and altra != cantina_primo:
                 log.info("due produttori a pari evidenza (%r / %r): chiedo",
                          cantina_primo, altra)
                 return True
         return False
+
+    @sotto_lucchetto
+    def _senza_produttore(self, f: Fatti, testo_norm: str, tetto: float) -> Fatti:
+        """Scende al vino generico quando il produttore non si e' letto.
+
+        E' la traduzione in codice di una regola sola: **se sulla bottiglia
+        c'e' scritto "Primitivo di Manduria" e basta, il dispositivo non puo'
+        dire di chi e'.** Puo' dire che cos'e', e quello lo dice benissimo -
+        la descrizione della tipologia parla del vitigno, del disciplinare,
+        della zona, e vale per ogni Primitivo di Manduria in commercio.
+        Attribuirlo al viticoltore A invece che al B sarebbe inventare, e
+        davanti a un ospite seduto e' esattamente cio' che non si fa.
+
+        Il punteggio si rifa' sul record generico, che e' un'affermazione
+        diversa e piu' facile da sostenere: "questo e' un Primitivo di
+        Manduria" chiede molto meno di "questo e' il Primitivo di Manduria di
+        tal produttore".
+        """
+        for ambito, ident in self.catena_di_ripiego(f)[1:]:
+            generico = self._componi(Candidato(ambito=ambito, ambito_id=ident,
+                                               testo="", somiglianza=0.0, peso=0))
+            if generico.livello is Livello.NULLA:
+                continue
+            r = self.con.execute(
+                "SELECT testo, peso FROM ricerca WHERE ambito = ? AND ambito_id = ?",
+                (ambito, ident)).fetchone()
+            if r is None:
+                continue
+            generico.sicurezza = min(tetto, self._sicurezza_verificata(
+                Candidato(ambito=ambito, ambito_id=ident, testo=r["testo"],
+                          somiglianza=0.0, peso=r["peso"]), testo_norm))
+            log.info("produttore non letto: da %r si scende a %s", f.cantina, ambito)
+            return generico
+        # Sotto non c'e' nulla su cui ripiegare. Si tiene il record, ma il
+        # produttore esce dai fatti: il narratore non ha altre fonti, e cio'
+        # che non gli si passa non lo puo' dire.
+        log.info("produttore non letto e nessun ripiego: %r resta senza nome", f.nome)
+        f.cantina = None
+        f.sicurezza = min(f.sicurezza, SOGLIA_CERTA - 0.5)
+        return f
 
     @sotto_lucchetto
     def fatti_di(self, ambito: str, ambito_id: int) -> Fatti:
@@ -506,19 +589,62 @@ class Matcher:
             if not libere:
                 break
             i = max(range(len(libere)), key=lambda k: fuzz.ratio(p, libere[k]))
-            totale += fuzz.ratio(p, libere.pop(i))
+            punti = fuzz.ratio(p, libere[i])
+            # Sotto la soglia non e' un riscontro debole: e' un NON riscontro, e
+            # vale zero. La parola letta resta libera, perche' non ha confermato
+            # niente e potra' confermare qualcos'altro.
+            if punti < RISCONTRO_PAROLA:
+                continue
+            totale += punti
+            libere.pop(i)
         return totale / len(parole)
 
+    @staticmethod
+    def _prova_del_produttore(cantina: str, denominazione: str) -> list[str]:
+        """Le parole del produttore che possono davvero provarlo.
+
+        Non tutte lo fanno. «Terre del Barolo» e' un produttore vero, ma una
+        delle sue parole e' la denominazione, e quella sta sull'etichetta di
+        chiunque faccia Barolo. Contarla come prova vuol dire farsi confermare
+        il produttore dalle parole del vino, ed e' successo: «Barolo del Comune
+        di Serralunga d'Alba» veniva dichiarato CERTO come Barolo di Terre del
+        Barolo con 88, da un'etichetta che il produttore non lo nominava.
+
+        Restano le parole che il produttore ha di suo: via quelle della
+        denominazione e via quelle che stanno su ogni bottiglia (`tenuta`,
+        `cantina`, `azienda`, `podere`... - la lista e' `PAROLE_VUOTE`).
+
+        La denominazione, e NON il nome del vino. Sembra equivalente e non lo
+        e': in archivio moltissimi nomi contengono gia' il produttore -
+        «Giovanni Allegrini Recioto della Valpolicella» - e togliere le parole
+        del nome cancellava proprio quelle che identificano la cantina.
+        Misurato: escludendo il nome restavano senza prova 164 cantine, fra
+        cui Antinori, Allegrini e Bertani; escludendo la denominazione ne
+        restano 31, e sono quelle che davvero si chiamano come il proprio vino.
+
+        Un produttore senza nemmeno una parola propria - le cooperative
+        battezzate come la denominazione - non e' riconoscibile dalle parole.
+        Allora il dispositivo non lo afferma: racconta il vino generico.
+        """
+        della_zona = set(denominazione.split())
+        return [p for p in parole_utili(cantina) if p not in della_zona]
+
     @sotto_lucchetto
-    def _norme_vino(self, ids: list[int]) -> dict[int, tuple[str, str]]:
-        """nome_norm e cantina_norm di tutti i vini candidati, in una query."""
+    def _norme_vino(self, ids: list[int]) -> dict[int, tuple[str, str, str]]:
+        """nome, cantina e denominazione normalizzati, in una query sola.
+
+        La denominazione serve a sapere quali parole del produttore sono sue e
+        quali sono di tutti: vedi `_prova_del_produttore`.
+        """
         if not ids:
             return {}
         with self._db:
             righe = self.con.execute(
-                "SELECT id, nome_norm, COALESCE(cantina_norm,'') FROM vino"
-                f" WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()
-        return {r[0]: (r[1] or "", r[2]) for r in righe}
+                "SELECT v.id, v.nome_norm, COALESCE(v.cantina_norm,''),"
+                " COALESCE(d.nome_norm,'')"
+                " FROM vino v LEFT JOIN denominazione d ON d.id = v.denominazione_id"
+                f" WHERE v.id IN ({','.join('?' * len(ids))})", ids).fetchall()
+        return {r[0]: (r[1] or "", r[2], r[3]) for r in righe}
 
     @sotto_lucchetto
     def _sicurezza_verificata(self, c: Candidato, testo_norm: str,
@@ -528,6 +654,13 @@ class Matcher:
         Per un vino commerciale servono DUE conferme indipendenti, cantina e
         nome, e vale la piu' debole delle due: un nome giusto con un produttore
         sbagliato e' un vino sbagliato.
+
+        **Indipendenti davvero.** La conferma del produttore non puo' venire da
+        parole che sono del vino: «BAROLO» stampato sull'etichetta provava
+        insieme il vino «Barolo» e il produttore «Terre del Barolo», due
+        conferme che ne erano una sola. Il produttore si misura solo sulle
+        parole che ha di suo - `_prova_del_produttore` - e se nessuna di quelle
+        e' sull'etichetta, non lo si e' letto e non lo si nomina.
         """
         from rapidfuzz import fuzz
 
@@ -536,11 +669,30 @@ class Matcher:
                 norme = self._norme_vino([c.ambito_id])
             if c.ambito_id not in norme:
                 return 0.0
-            nome, cantina = norme[c.ambito_id]
+            nome, cantina, denominazione = norme[c.ambito_id]
             parole_ocr = testo_norm.split()
             s_nome = self._copertura(nome, parole_ocr) if nome else 0
             if not cantina:
                 return s_nome * 0.8      # senza produttore non si e' mai certi
+            # Prima la domanda di identita': il produttore lo si e' LETTO?
+            # Si guardano solo le parole che sono sue, perche' sono le uniche
+            # che possano provarlo. Se nessuna e' sull'etichetta, questa
+            # bottiglia puo' essere di chiunque e va raccontata come generica.
+            # Il confronto e' con le parole UTILI dell'etichetta, non con
+            # tutte: quelle che stanno su ogni bottiglia non identificano un
+            # produttore piu' di quanto identifichino un vino. «Volpi» si
+            # faceva confermare da «VOL» della gradazione alcolica - 75 su 100
+            # per pura aritmetica delle lettere - e «Cantine Volpi» finiva
+            # sull'etichetta di un Piemonte Cortese che non la nominava.
+            prova = self._prova_del_produttore(cantina, denominazione)
+            if not prova or self._copertura(
+                    " ".join(prova), parole_utili(testo_norm)) < RISCONTRO_PAROLA:
+                c.produttore_letto = False
+                return s_nome * 0.8
+            # Poi la domanda di grado, e quella si misura sul nome INTERO. Le
+            # parole deboli devono continuare a diluire: filtrandole si finiva
+            # per premiare i nomi poveri, e «Ca'Stella» tornava a dichiararsi
+            # certo con 92 sulla «Stella Polare» di una retroetichetta altrui.
             s_cantina = self._copertura(cantina, parole_ocr)
             # La media pesata premia chi ha entrambe le conferme; il tetto sul
             # minimo impedisce che una sola, fortissima, basti da sola.
