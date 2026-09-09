@@ -38,10 +38,12 @@
  *
  * ── LA MISURA ────────────────────────────────────────────────────────────────
  *
- * Compilato con `arduino-cli` per il core arduino:zephyr, <Modulino.h>
- * compreso: 33.000 byte di programma su 1.966.080 e 3.772 di RAM su 523.624.
- * L'1%. Il tetto dei 131.072 byte che App Lab impone caricando in SRAM riguarda
- * un'altra via di caricamento, non questa.
+ * Il tetto dei 131.072 byte che App Lab impone caricando in SRAM riguarda
+ * un'altra via di caricamento, non `arduino-cli --upload`. Ma la dimensione
+ * dipende dalla catena di compilazione, e parecchio: 33.000 byte compilando
+ * sulla board, 115.864 compilando su PC col core arduino:zephyr 1.0.0 — e
+ * cambia anche il tetto dichiarato, 1.966.080 contro 786.432. Il numero si
+ * misura, non si ricorda: vedi la tabella in README.md.
  */
 
 #include <Arduino_RouterBridge.h>

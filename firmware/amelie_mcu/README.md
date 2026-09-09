@@ -56,6 +56,19 @@ rete può chiedere la password dell'utente `arduino`, e da uno script
 non interattivo fallisce con *«user input not supported in non interactive
 mode»*.
 
+## Compilarlo senza la board
+
+Serve più spesso di quanto sembri: la board è un pezzo solo, si stacca, e un
+firmware che non compila non lo si scopre volentieri con i Modulino già in mano.
+
+```bash
+arduino-cli core install arduino:zephyr          # ~1,2 GB, una volta sola
+arduino-cli lib install Arduino_RouterBridge Arduino_Modulino
+arduino-cli compile -b arduino:zephyr:unoq firmware/amelie_mcu
+```
+
+Il caricamento, quello sì, vuole la board.
+
 ## Il tetto che non è quello che sembra
 
 App Lab carica il binario in SRAM con un limite di **131.072 byte**, e oltre
@@ -66,10 +79,22 @@ Da lì era nata l'idea di includere solo gli header dei Modulino usati invece di
 `<Modulino.h>`, che ne tira dentro sette. **L'idea era sbagliata due volte.**
 Primo: `Arduino_Modulino` 0.9.0 non espone `ModulinoPixels.h` né
 `ModulinoDistance.h`, quindi lo sketch non compilava affatto — e non se ne era
-accorto nessuno, perché non era mai stato compilato. Secondo: **misurato** con
-`arduino-cli` sul core `arduino:zephyr`, `<Modulino.h>` compreso, il binario
-occupa 33.000 byte di programma su 1.966.080 e 3.772 di RAM su 523.624. L'uno
-per cento. Il tetto dei 131 KB riguarda un'altra via di caricamento, non questa.
+accorto nessuno, perché non era mai stato compilato. Secondo: il tetto dei
+131 KB riguarda la via di caricamento di App Lab, non `arduino-cli --upload`,
+che scrive la memoria dello STM32U585.
+
+**Ma la dimensione dipende dalla catena di compilazione, e parecchio.** Misurata
+due volte sullo stesso sorgente:
+
+| dove | programma | RAM | tetto dichiarato |
+|---|---|---|---|
+| sulla board | 33.000 | 3.772 | 1.966.080 / 523.624 |
+| su PC, core `arduino:zephyr` 1.0.0, Modulino 0.9.0, RouterBridge 0.4.3 | 115.864 (14 %) | 47.272 (18 %) | 786.432 / 262.144 |
+
+Non è un errore di misura: cambia anche il **tetto**, quindi le due catene
+partizionano diversamente. La conseguenza pratica è una sola: **il numero va
+misurato, non ricordato**, e se un domani si torna a caricare da App Lab i
+115.864 byte sono già vicini ai 131.072 — con `arduino-cli` non lo sono affatto.
 
 ## I metodi esposti a Linux
 
