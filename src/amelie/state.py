@@ -105,7 +105,15 @@ DURATE_S: dict[Stato, float | None] = {
     Stato.RACCONTO: None,
     Stato.RIPOSIZIONA: 4.0,
     Stato.GUASTO: 6.0,
-    Stato.CONCLUSO: None,
+    # Il racconto e' finito. Si resta qualche secondo sull'ultima schermata -
+    # perche' l'ultima frase si posi, e perche' sparire nell'istante in cui la
+    # voce tace e' brusco - e poi si torna in attesa.
+    #
+    # Prima era `None`: si restava li' per sempre, con il riproduttore in vista e
+    # tutti i pulsanti inerti, finche' qualcuno non toglieva la bottiglia. A
+    # tavola quella schermata non dice niente e non fa niente: e' il dispositivo
+    # che sembra piantato.
+    Stato.CONCLUSO: 4.0,
     Stato.ATTESA: None,
 }
 
@@ -155,6 +163,11 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
     (Stato.RACCONTO, Evento.RACCONTO_FINITO): Stato.CONCLUSO,
 
     (Stato.CONCLUSO, Evento.RIPETI): Stato.RACCONTO,
+    # Passati i quattro secondi si torna alla schermata d'invito, anche se la
+    # bottiglia e' ancora sul piatto. Non riparte una seconda lettura: quella la
+    # governa l'orchestratore, che ricomincia solo quando la bottiglia viene
+    # tolta e rimessa.
+    (Stato.CONCLUSO, Evento.SCADENZA): Stato.ATTESA,
     # Anche a racconto in corso: succede quando l'ospite cambia lingua mentre
     # il dispositivo sta parlando. Rientrare in RACCONTO rifa' partire gli
     # effetti d'ingresso, e la storia riparte da capo nella lingua nuova.

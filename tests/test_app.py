@@ -6,6 +6,7 @@ flusso verso lo schermo siano coerenti fra loro, senza dipendere da una
 bottiglia vera.
 """
 
+import time
 from pathlib import Path
 
 import pytest
@@ -614,6 +615,120 @@ class TestPonteOnesto:
         p.chiama = lambda *a, **k: (_ for _ in ()).throw(
             PonteNonDisponibile("niente socket"))
         assert not p.disponibile
+
+
+class TestLaSchermataNonResta:
+    """A racconto finito il dispositivo torna all'invito, da solo.
+
+    Prima restava sulla schermata del racconto per sempre, con il riproduttore
+    in vista e tutti i pulsanti inerti, finché qualcuno non toglieva la
+    bottiglia. A tavola quella schermata non dice niente e non fa niente: è il
+    dispositivo che sembra piantato.
+    """
+
+    @pytest.fixture
+    def amelie(self):
+        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                  senza_voce=True, senza_modello=True))
+        yield a
+        a.matcher.chiudi()
+        a.narratore.chiudi()
+
+    def test_concluso_scade_e_torna_in_attesa(self, amelie):
+        from amelie.state import DURATE_S
+
+        assert DURATE_S[Stato.CONCLUSO] is not None, \
+            "senza un tetto si resta li' per sempre"
+        amelie.macchina.stato = Stato.CONCLUSO
+        t = amelie.macchina.invia(Evento.SCADENZA)
+        assert t.a is Stato.ATTESA
+
+    def test_non_si_racconta_due_volte_la_stessa_bottiglia(self, amelie):
+        """Il difetto che nasce dalla correzione, se non ci si pensa.
+
+        Tornando in attesa con la bottiglia ancora sul piatto, il rilancio che
+        serve a riprendersi da un guasto farebbe ripartire una seconda lettura,
+        e poi una terza: lo stesso vino raccontato all'infinito finché qualcuno
+        non toglie la bottiglia.
+        """
+        import asyncio
+
+        amelie._distanza_finta = 20          # una bottiglia c'e', e resta
+        # E il filtro l'ha gia' vista: quando un racconto finisce, la presenza
+        # e' vera da un pezzo. Senza questo si proverebbe un fronte di salita
+        # che nella realta' e' gia' passato.
+        amelie.presenza.presente = True
+        # Dal percorso vero: e' la transizione a segnare che si e' raccontato,
+        # non l'assegnazione dello stato.
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.macchina.invia(Evento.RACCONTO_FINITO)
+        assert amelie.macchina.stato is Stato.CONCLUSO
+        assert amelie._gia_raccontato
+        amelie.macchina.invia(Evento.SCADENZA)
+        assert amelie.macchina.stato is Stato.ATTESA
+
+        for _ in range(6):                   # sei battiti: il filtro è sazio
+            asyncio.run(amelie._un_battito())
+        assert amelie.macchina.stato is Stato.ATTESA, \
+            "la stessa bottiglia non deve far ripartire una lettura"
+
+    def test_ma_una_bottiglia_nuova_si(self, amelie):
+        """Tolta e rimessa, è un'altra storia."""
+        import asyncio
+
+        amelie._gia_raccontato = True
+        amelie.macchina.stato = Stato.ATTESA
+        amelie.presenza.presente = True      # la bottiglia c'era
+        amelie._distanza_finta = None        # e adesso e' tolta
+        for _ in range(6):
+            asyncio.run(amelie._un_battito())
+        assert not amelie.presenza.presente
+        assert not amelie._gia_raccontato
+
+        amelie._distanza_finta = 20          # rimessa
+        for _ in range(4):
+            asyncio.run(amelie._un_battito())
+        assert amelie.macchina.stato is not Stato.ATTESA, \
+            "una bottiglia nuova deve far ripartire il giro"
+
+
+class TestLaCodaAudioNonSiTronca:
+    """Il racconto si tagliava tre quarti di secondo prima della fine.
+
+    Non era la voce: era la coda. `_suona` esce quando l'ultimo pezzo è stato
+    CONSEGNATO all'uscita, ma fra la consegna e l'orecchio ci sono la riserva
+    della coda e la latenza di ALSA — e `ferma()`, chiamato subito dopo, li
+    buttava via. In tutte e due le lingue, perché non dipendeva dalla lingua.
+    """
+
+    def test_il_riproduttore_sa_aspettare_la_propria_coda(self):
+        from amelie.speech import Riproduttore, Uscita
+
+        assert hasattr(Riproduttore, "attendi_la_coda")
+        assert hasattr(Uscita, "attendi_fine")
+
+    def test_si_aspetta_solo_se_e_finito_da_solo(self):
+        """Bottiglia tolta a metà: lì si tronca eccome, ed è quello che serve."""
+        radice = Path(__file__).resolve().parents[1]
+        app = (radice / "src" / "amelie" / "app.py").read_text(encoding="utf-8")
+        pezzo = app[app.index("finito = lettore.attendi"):]
+        pezzo = pezzo[:pezzo.index("lettore.ferma()")]
+        assert "attendi_la_coda" in pezzo
+        assert "if finito and not self._ferma_voce.is_set():" in pezzo
+
+    def test_l_attesa_finisce_anche_se_qualcuno_zittisce(self):
+        """Altrimenti togliere la bottiglia lascerebbe il thread appeso."""
+        from amelie.speech import ImpostazioniVoce, Uscita
+
+        class FintaVoce:
+            imp = ImpostazioniVoce()
+            guadagno = 1.0
+
+        u = Uscita(FintaVoce())
+        u._fermo.set()                       # come dopo un `ferma()`
+        t = time.monotonic()
+        u.attendi_fine(tetto_s=5.0)
+        assert time.monotonic() - t < 0.5, "non deve aspettare a vuoto"
 
 
 class TestLaLinguaTornaACasa:

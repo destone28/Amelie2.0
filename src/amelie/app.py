@@ -191,6 +191,12 @@ class Amelie:
         # Una distanza finta, per il banco: vedi l'endpoint /prova. Quando c'e',
         # prende il posto del sensore e passa per l'isteresi vera.
         self._distanza_finta: int | None = None
+        # Questa bottiglia e' gia' stata raccontata. Serve da quando la
+        # schermata conclusa torna da sola all'invito: in attesa, con la
+        # bottiglia ancora sul piatto, il rilancio qui sotto farebbe ripartire
+        # una seconda lettura, e poi una terza. Si azzera quando la bottiglia
+        # viene tolta - che e' il modo in cui l'ospite dice "ho finito".
+        self._gia_raccontato = False
         self.volume = self._volume_salvato(cfg.volume)
         if self.voce is not None:
             self.voce.volume = self.volume
@@ -219,6 +225,8 @@ class Amelie:
             # giusta invece di cambiare sotto gli occhi di chi arriva.
             if t.cambia_stato and t.a is Stato.ATTESA:
                 self._torna_alla_lingua_di_casa()
+            if t.a is Stato.CONCLUSO:
+                self._gia_raccontato = True
             self._mostra(t.a)
         for e in t.effetti:
             self._esegui(e)
@@ -770,6 +778,16 @@ class Amelie:
             self._lettore = lettore
         lettore.avvia()
         finito = lettore.attendi(timeout=TETTO_RACCONTO_S)
+        # Se e' finito da solo, si aspetta che l'ULTIMO SUONO sia uscito davvero
+        # prima di fermare: `ferma()` svuota la coda, e fra l'ultimo pezzo
+        # consegnato e l'orecchio ci sono la riserva dell'uscita e la latenza di
+        # ALSA. Erano i tre quarti di secondo che si perdevano in fondo a ogni
+        # racconto, in tutte e due le lingue.
+        #
+        # Se invece l'hanno fermato - bottiglia tolta - si tronca eccome: e'
+        # esattamente quello che serve.
+        if finito and not self._ferma_voce.is_set():
+            lettore.attendi_la_coda()
         with self._lucchetto_lettore:
             if self._lettore is lettore:
                 self._lettore = None
@@ -878,11 +896,18 @@ class Amelie:
         if ora != c_era:
             if ora:
                 self._tentativi = 0     # bottiglia nuova, si riparte da capo
+            else:
+                # Tolta la bottiglia, la prossima e' un'altra storia.
+                self._gia_raccontato = False
             self.macchina.invia(
                 Evento.BOTTIGLIA_PRESENTE if ora else Evento.BOTTIGLIA_ASSENTE)
-        elif ora and self.macchina.stato is Stato.ATTESA and self._tentativi < TENTATIVI_MAX:
+        elif (ora and self.macchina.stato is Stato.ATTESA
+                and not self._gia_raccontato
+                and self._tentativi < TENTATIVI_MAX):
             # La bottiglia c'e' ma siamo tornati in attesa: succede dopo un
-            # guasto. Il fronte di salita non si ripresenta mai piu', e senza
+            # guasto. NON dopo un racconto finito - quello ci torna apposta, e
+            # rilanciare li' vorrebbe dire raccontare lo stesso vino all'infinito
+            # finche' qualcuno non toglie la bottiglia. Il fronte di salita non si ripresenta mai piu', e senza
             # questo rilancio il dispositivo resterebbe fermo per sempre con una
             # bottiglia davanti. Il contatore NON si azzera qui: se il guasto si
             # ripete, dopo TENTATIVI_MAX si smette, invece di riaccendere

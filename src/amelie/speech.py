@@ -243,6 +243,23 @@ class Uscita:
             if self._fermo.wait(0.02):
                 return
 
+    def attendi_fine(self, tetto_s: float = 120.0) -> None:
+        """Aspetta che TUTTO il consegnato sia stato davvero sentito.
+
+        «Consegnato» e «sentito» non sono la stessa cosa: in mezzo ci sono la
+        riserva di questa coda, la pipe del sistema e il buffer di ALSA. Chi
+        scrive l'ultimo pezzo di una frase ha finito il suo lavoro, ma
+        l'orecchio deve ancora ricevere mezzo secondo abbondante di suono.
+        """
+        scadenza = time.monotonic() + tetto_s
+        while (self.in_pancia_s() > self.latenza_s + 0.02
+               and time.monotonic() < scadenza):
+            if self._fermo.wait(0.02):
+                return
+        # E poi la latenza vera e propria: l'ultimo byte consegnato deve ancora
+        # attraversare la pipe e il buffer di ALSA.
+        self._fermo.wait(min(self.latenza_s, max(0.0, scadenza - time.monotonic())))
+
     def svuota(self) -> None:
         """Butta via cio' che non e' ancora uscito. E' il "taci adesso"."""
         with self._spazio:
@@ -638,20 +655,8 @@ class Voce:
 
     @staticmethod
     def _attendi_uscita(uscita: "Uscita", tetto_s: float = 120.0) -> None:
-        """Aspetta che tutto il consegnato sia stato davvero SENTITO.
-
-        `in_pancia_s` conta anche cio' che e' gia' passato ad aplay e non e'
-        ancora uscito, quindi qui si aspetta fino in fondo. Aspettare solo che
-        la coda si svuotasse faceva credere di aver finito con un secondo e
-        mezzo di anticipo.
-        """
-        scadenza = time.monotonic() + tetto_s
-        while (uscita.in_pancia_s() > uscita.latenza_s + 0.02
-               and time.monotonic() < scadenza):
-            time.sleep(0.02)
-        # E poi la latenza vera e propria: quello che e' stato consegnato per
-        # ultimo deve ancora attraversare la pipe e il buffer di ALSA.
-        time.sleep(min(uscita.latenza_s, max(0.0, scadenza - time.monotonic())))
+        """Il nome vecchio. L'attesa vera sta su `Uscita`, dove sono i numeri."""
+        uscita.attendi_fine(tetto_s)
 
     def per_lingua(self, codice: str) -> bool:
         """Passa alla voce di quella lingua, se ce n'e' una.
@@ -861,6 +866,18 @@ class Riproduttore:
             self._taci()
             self._sveglia.notify_all()
         self._avvisa()
+
+    def attendi_la_coda(self, tetto_s: float = 10.0) -> None:
+        """Aspetta che l'ultimo suono consegnato sia stato davvero sentito.
+
+        Va chiamata prima di `ferma()` quando il racconto e' finito da solo.
+        `_suona` esce quando l'ultimo pezzo e' stato CONSEGNATO all'uscita, ma
+        fra la consegna e l'orecchio ci sono la riserva della coda e la latenza
+        di ALSA: tre quarti di secondo abbondanti. `ferma()` li buttava via, e
+        il racconto si troncava mezza parola prima della fine - in tutte e due
+        le lingue, perche' non era la voce, era la coda.
+        """
+        self._uscita.attendi_fine(tetto_s)
 
     def ferma(self) -> None:
         """Basta, e subito: la bottiglia e' stata tolta dal tavolo."""
