@@ -49,11 +49,21 @@ class TestRitaglio:
         with pytest.raises(ValueError):
             ritaglia_centro(immagine(), frazione)
 
-    def test_default_conserva_piu_di_meta_lato(self):
-        # 0.58 del lato = 34% dell'area: è la finestra dove la distorsione
-        # a barile resta sotto l'1%
+    def test_il_ritaglio_lascia_passare_abbastanza_etichetta(self):
+        """Il compromesso va nella direzione opposta a quella che verrebbe da
+        pensare.
+
+        Stringere migliora ogni singolo carattere — meno distorsione a barile,
+        niente vignettatura — ma toglie righe intere, e il riconoscimento lavora
+        su PAROLE, non su caratteri: una riga un po' storta vale molto più di
+        una riga assente. A 0,58 del lato passava il 34% dell'area, e sul banco
+        le etichette non venivano riconosciute anche quando erano nitide e ben
+        illuminate. A 0,80 passa il 64%.
+        """
         imp = ImpostazioniCamera()
-        assert 0.5 < imp.ritaglio < 0.65
+        assert 0.7 <= imp.ritaglio <= 0.9
+        area = imp.ritaglio ** 2
+        assert area > 0.5, "sotto meta' area si perdono righe intere di etichetta"
 
 
 class TestNitidezza:

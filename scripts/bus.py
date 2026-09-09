@@ -43,6 +43,22 @@ def racconta(p) -> str:
 
     nomi = p.nomi_noti(trovati)
     righe = [f"  {a:#04x}  {nomi[a]}" for a in trovati]
+
+    # Un sensore che risponde all'indirizzo ma non e' partito e' il caso che
+    # confonde di piu': c'e' sul bus e non misura. Qui si dice a che punto si e'
+    # fermato, invece di lasciarlo dedurre.
+    if 0x29 in trovati:
+        passi = {0: None,
+                 -1: "l'avvio non e' mai stato tentato",
+                 2: "il chip non ha finito di avviarsi in tempo",
+                 3: "la scrittura della configurazione di fabbrica",
+                 4: "la calibrazione VHV",
+                 5: "il calcolo dei tempi di misura",
+                 6: "l'avvio della misura continua"}
+        stato = p.stato_sensore()
+        if stato is not None and stato != 0:
+            righe.append("        sensore NON avviato: "
+                         + passi.get(stato, f"passo {stato}"))
     atteso = {0x36, 0x29}
     manca = atteso - set(trovati)
     coda = []

@@ -267,6 +267,23 @@ class Ponte:
             return dict.fromkeys(NOMI_MODULI, False)
         return {nome: bool(v & (1 << i)) for i, nome in enumerate(NOMI_MODULI)}
 
+    def stato_sensore(self) -> int | None:
+        """Dove si è fermato l'avvio del sensore sull'MCU.
+
+        0 riuscito, -1 mai tentato, e da 2 a 6 il passo che non è andato: il
+        chip che non finisce di avviarsi, la configurazione, la calibrazione, i
+        tempi di misura, l'avvio della misura continua. `None` se il firmware è
+        troppo vecchio per saperlo dire.
+
+        Senza questo, un sensore che non parte dice soltanto «non ci sono», e
+        per sapere perché si ricarica il firmware con delle stampe dentro —
+        mezz'ora ogni volta, e la password da digitare a mano.
+        """
+        try:
+            return int(self.chiama("stato_tof"))
+        except (ErroreMCU, PonteNonDisponibile, OSError, TypeError, ValueError):
+            return None
+
     def distanza_mm(self) -> int | None:
         """Distanza letta dal sensore, o None se la misura non è valida.
 
@@ -329,8 +346,8 @@ class Presenza:
 
     def __init__(
         self,
-        vicino_mm: int = 40,
-        lontano_mm: int = 70,
+        vicino_mm: int = 100,
+        lontano_mm: int = 140,
         letture_per_arrivare: int = 3,
         letture_per_andarsene: int = 5,
     ) -> None:

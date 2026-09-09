@@ -1021,7 +1021,7 @@ def crea_app(amelie: Amelie):
         accorge da solo, come farebbe con una bottiglia tolta dal piatto.
         """
         if cosa == "bottiglia":
-            amelie._distanza_finta = 20      # sotto la soglia dei 40 mm
+            amelie._distanza_finta = 20      # ben sotto la soglia del vicino
         elif cosa == "via":
             amelie._distanza_finta = None    # torna a leggere il sensore vero
         else:

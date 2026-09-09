@@ -95,13 +95,27 @@ class TestPresenza:
         assert not p.presente
 
     def test_la_zona_morta_non_fa_tremolare(self):
-        p = Presenza(vicino_mm=40, lontano_mm=70)
+        p = Presenza(vicino_mm=100, lontano_mm=140)
         for _ in range(5):
             p.aggiorna(20)
         assert p.presente
         for _ in range(20):
-            p.aggiorna(55)      # in mezzo: non deve cambiare idea
+            p.aggiorna(120)     # fra le due soglie: non deve cambiare idea
         assert p.presente
+
+    def test_le_soglie_predefinite_sono_quelle_del_dispositivo(self):
+        """Dieci centimetri, non quattro.
+
+        Il fondo di una bottiglia sul piatto sta a pochi millimetri dal sensore,
+        ma il valore che arriva dipende da quanto e' speculare il vetro e da
+        come e' centrata: una soglia stretta fa perdere bottiglie appoggiate
+        storte, e sul tavolo di un ristorante sono la norma.
+        """
+        p = Presenza()
+        assert (p.vicino, p.lontano) == (100, 140)
+        for _ in range(3):
+            p.aggiorna(90)
+        assert p.presente, "una bottiglia a nove centimetri deve essere vista"
 
     def test_misura_non_valida_conta_come_assente(self):
         p = Presenza(letture_per_andarsene=2)

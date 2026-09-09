@@ -29,8 +29,11 @@ Tre accorgimenti valgono più di qualunque scelta di libreria:
 3. **Raffica e varianza del laplaciano.** Cinque fotogrammi, si tiene il più
    nitido. Costa 200 ms e salva dai casi in cui la bottiglia oscilla ancora.
 
-Il ritaglio centrale al 55-60% porta la distorsione a barile sotto l'1% e
-rimuove la vignettatura, che sta agli angoli: nessuna calibrazione necessaria.
+Il ritaglio centrale limita la distorsione a barile e la vignettatura, che
+stanno agli angoli. La frazione è un compromesso, e va nella direzione opposta a
+quella che verrebbe da pensare: stringere migliora ogni singolo carattere ma
+toglie righe intere, e il riconoscimento lavora su parole, non su caratteri. Vedi
+`ImpostazioniCamera.ritaglio`.
 """
 
 from __future__ import annotations
@@ -74,7 +77,23 @@ class ImpostazioniCamera:
     fotogrammi_raffica: int = 5
 
     # Ritaglio centrale, frazione del fotogramma tenuta per lato.
-    ritaglio: float = 0.58
+    #
+    # Era 0,58, scelto per tenere la distorsione a barile sotto l'1% e togliere
+    # la vignettatura. Ma sul banco le etichette non venivano riconosciute
+    # ANCHE quando erano nitide, illuminate e ben visibili dentro al riquadro:
+    # il collo di bottiglia non era la qualità dell'immagine, era la quantità
+    # di testo che entrava nel ritaglio. Un'etichetta commerciale distribuisce
+    # produttore, denominazione e annata su tutta la sua altezza, e a 0,58 ne
+    # entrava la fascia centrale — spesso proprio quella con meno parole utili.
+    #
+    # A 0,80 l'area utile quasi raddoppia. La distorsione ai bordi cresce, ma
+    # l'OCR sbaglia qualche carattere su una riga in più, mentre prima quella
+    # riga non la vedeva affatto: e il riconoscimento lavora su parole intere,
+    # non su singoli caratteri, quindi una riga storta vale molto più di una
+    # riga assente.
+    #
+    # Si regola dal mirino senza toccare il codice: `--ritaglio 0.9`.
+    ritaglio: float = 0.80
 
     # Attesa fra accensione della luce dello scatto e primo fotogramma utile.
     assestamento_luce_s: float = 0.15

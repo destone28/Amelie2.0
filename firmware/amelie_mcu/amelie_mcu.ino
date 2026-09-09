@@ -92,6 +92,11 @@ static const uint8_t IND_ANELLO   = 0x36;   /* indirizzo hardware, non 0x6C */
 static const uint8_t IND_TOF      = 0x29;   /* VL53L4CD, fisso */
 static const uint8_t N_LED = 8;
 
+/* Sotto questa distanza c'e' qualcosa sul piatto. Dieci centimetri: la
+ * decisione vera la prende Linux con la sua isteresi, questa serve solo alla
+ * notifica del cambiamento. */
+static const int VICINO_MM = 100;
+
 /* Registri del VL53L4CD che servono qui. Sono a 16 bit. */
 static const uint16_t R_IDENTITA        = 0x010F;   /* deve valere 0xEBAA */
 static const uint16_t R_STATO_FIRMWARE  = 0x00E5;   /* 0x03 = avviato */
@@ -135,14 +140,23 @@ static const uint32_t PASSO_RICERCA_MS = 200;
  *
  * Si spegne da solo al primo comando da Linux: da lì il colore lo decide la
  * macchina a stati, e la luce diventa l'oro fisso dell'attesa. */
-static const uint8_t  RESPIRO_MIN = 3;
-static const uint8_t  RESPIRO_MAX = 26;
-static const uint32_t RESPIRO_MS = 50;      /* 20 aggiornamenti al secondo */
-static const uint8_t  RESPIRO_PASSO = 4;    /* 256/4 x 50 ms = 3,2 s a ciclo */
+/* La luminosità resta ferma e si modula il colore: vedi `respira()`. Sette su
+ * trentuno è circa il 22 su cento dell'ambra dell'attesa, quindi il colmo del
+ * respiro e la luce fissa che gli succede hanno la stessa intensità. */
+static const uint8_t  RESPIRO_LUM = 7;
+static const uint8_t  RESPIRO_FONDO = 26;   /* il minimo, su 255: mai spento */
+static const uint32_t RESPIRO_MS = 25;      /* 40 aggiornamenti al secondo */
+static const uint8_t  RESPIRO_PASSO = 2;    /* 256/2 x 25 ms = 3,2 s a ciclo */
 
 static bool c_anello = false, c_tof = false;
 static bool ricerca_finita = false;
 static uint32_t ultima_ricerca = 0;
+
+/* Dove si e' fermato l'avvio del sensore. 0 = riuscito, -1 = mai tentato,
+ * altrimenti il numero del passo che non e' andato. Senza questo, un sensore che
+ * non parte dice solo "non ci sono", e per capire perche' si ricarica il
+ * firmware con delle stampe - mezz'ora ogni volta. */
+static int passo_tof = -1;
 
 static bool respiro = true;
 static uint8_t fase = 0;
@@ -261,21 +275,24 @@ static bool tof_misura_pronta(bool *pronta) {
 static bool tof_avvia() {
   uint8_t t;
   uint16_t v16;
+  passo_tof = 1;
 
   /* 1. Il chip ha finito di avviarsi? Fino a 200 ms, non "per sempre". */
   for (uint16_t i = 0; ; i++) {
     if (!tof_leggi8(R_STATO_FIRMWARE, &t)) return false;
     if (t == 0x03) break;
-    if (i >= 200) return false;
+    if (i >= 200) { passo_tof = 2; return false; }
     delay(1);
   }
 
   /* 2. La configurazione di fabbrica, un registro per volta. */
+  passo_tof = 3;
   for (uint8_t i = 0; i < sizeof(CONFIG_TOF); i++) {
     if (!tof_scrivi8((uint16_t)(0x2D + i), CONFIG_TOF[i])) return false;
   }
 
   /* 3. La calibrazione VHV: si avvia, si aspetta la prima misura, si azzera. */
+  passo_tof = 4;
   if (!tof_scrivi8(R_AVVIO, 0x40)) return false;
   for (uint16_t i = 0; ; i++) {
     bool pronta = false;
@@ -295,6 +312,7 @@ static bool tof_avvia() {
    *    dalla frequenza dell'oscillatore, e i due registri di intervallo vogliono
    *    un valore in virgola mobile ridotto a mantissa piu' esponente. Non c'e'
    *    niente da capire e niente da migliorare — c'e' solo da non sbagliarlo. */
+  passo_tof = 5;
   if (!tof_leggi16(0x0006, &v16)) return false;      /* frequenza oscillatore */
   if (v16 == 0) return false;
   {
@@ -317,6 +335,7 @@ static bool tof_avvia() {
 
   /* 5. Via alla misura continua, e si aspetta la prima per lasciare il sensore
    *    in uno stato pulito. */
+  passo_tof = 6;
   if (!tof_scrivi8(R_AVVIO, 0x21)) return false;
   for (uint16_t i = 0; ; i++) {
     bool pronta = false;
@@ -326,6 +345,7 @@ static bool tof_avvia() {
     delay(1);
   }
   if (!tof_scrivi8(R_AZZERA_INT, 0x01)) return false;
+  passo_tof = 0;                       /* 0 = tutto riuscito */
   return true;
 }
 
@@ -363,6 +383,11 @@ int distanza() { return ultima_mm; }
 
 int versione() { return PROTOCOLLO; }
 
+/* Dove si e' fermato l'avvio del sensore: 0 riuscito, -1 mai tentato, 2 il chip
+ * non ha finito di avviarsi, 3 la configurazione, 4 la calibrazione, 5 i tempi
+ * di misura, 6 l'avvio della misura continua. */
+int stato_tof() { return passo_tof; }
+
 /* Quali moduli si vedono, come somma di bit: 1 anello, 2 sensore. */
 int moduli() {
   return (c_anello ? 1 : 0) | (c_tof ? 2 : 0);
@@ -399,8 +424,7 @@ int scansiona(int blocco) {
  * Restituisce se il trasferimento è riuscito. `Module::write()` della libreria
  * ritornava `true` sempre, e quel `true` è ciò che faceva dire al dispositivo di
  * vedere un anello che non aveva mai acceso. */
-static bool anello_scrivi(uint8_t r, uint8_t g, uint8_t b, uint8_t lum) {
-  uint8_t l5 = (uint8_t)((uint16_t)lum * 31U / 100U);
+static bool anello_grezzo(uint8_t r, uint8_t g, uint8_t b, uint8_t l5) {
   if (l5 > 31) l5 = 31;
   Wire1.beginTransmission(IND_ANELLO);
   for (uint8_t i = 0; i < N_LED; i++) {
@@ -412,19 +436,41 @@ static bool anello_scrivi(uint8_t r, uint8_t g, uint8_t b, uint8_t lum) {
   return Wire1.endTransmission() == 0;
 }
 
+/* Con la luminosità in centesimi, come la manda Linux. */
+static bool anello_scrivi(uint8_t r, uint8_t g, uint8_t b, uint8_t lum) {
+  return anello_grezzo(r, g, b, (uint8_t)((uint16_t)lum * 31U / 100U));
+}
+
 static void applica(StatoLed &s) {
   if (!s.da_applicare) return;
   if (anello_scrivi(s.r, s.g, s.b, s.lum)) s.da_applicare = false;
 }
 
-/* Un respiro, non una rampa: la luminosità cresce col quadrato, così indugia in
- * basso e sale piena verso il colmo. Tutto in interi. */
+/* Un respiro, e si modula il COLORE, non la luminosità.
+ *
+ * Il registro di luminosità del modulo è a CINQUE BIT: da 0 a 31. Facendo
+ * respirare quello, fra il minimo e il massimo di un'attesa discreta — 3 e 26
+ * su cento — restano **nove gradini in tutto**, e a venti aggiornamenti al
+ * secondo si vedono uno per uno: la luce non respira, scatta.
+ *
+ * I canali di colore sono invece a otto bit. Tenendo la luminosità ferma e
+ * scalando ambra su 0-255 si hanno 256 passi al posto di nove, e il respiro
+ * torna continuo. Il colore non cambia: cambiano insieme e in proporzione,
+ * quindi resta lo stesso ambra, più o meno acceso.
+ *
+ * La curva è quadratica: indugia in basso e sale piena verso il colmo, che è
+ * come respira una cosa viva. Tutto in interi — qui non serve virgola mobile. */
 static void respira() {
   uint8_t x = (fase < 128) ? (uint8_t)(fase * 2) : (uint8_t)((255 - fase) * 2);
   uint16_t curva = ((uint16_t)x * x) >> 8;                     /* 0..254 */
-  uint8_t lum = RESPIRO_MIN +
-                (uint8_t)(((uint32_t)curva * (RESPIRO_MAX - RESPIRO_MIN)) / 254);
-  anello_scrivi(255, 150, 40, lum);
+  /* Un fondo che non si spegne mai del tutto: a zero l'anello sparirebbe, e
+   * "sparito" e "guasto" a colpo d'occhio sono la stessa cosa. */
+  uint16_t q = RESPIRO_FONDO + (uint16_t)(((uint32_t)curva *
+                                           (255 - RESPIRO_FONDO)) / 254);
+  uint8_t r = (uint8_t)((255U * q) / 255U);
+  uint8_t g = (uint8_t)((150U * q) / 255U);
+  uint8_t b = (uint8_t)(( 40U * q) / 255U);
+  anello_grezzo(r, g, b, RESPIRO_LUM);
   fase += RESPIRO_PASSO;
 }
 
@@ -439,6 +485,7 @@ void setup() {
   Bridge.provide("moduli", moduli);
   Bridge.provide("versione", versione);
   Bridge.provide("scansiona", scansiona);
+  Bridge.provide("stato_tof", stato_tof);
 
   /* Su UNO Q i Modulino stanno su Wire1, che e' l'i2c4 dello STM32.
    *
@@ -487,7 +534,7 @@ void loop() {
 
   /* Notifica solo i cambiamenti, e non più di dieci volte al secondo: il
    * trasporto è una seriale a 115200 baud condivisa con tutto il resto. */
-  bool ora = (ultima_mm >= 0 && ultima_mm < 40);
+  bool ora = (ultima_mm >= 0 && ultima_mm < VICINO_MM);
   if (ora != presente && (ora_ms - ultimo_invio) > 100) {
     presente = ora;
     ultimo_invio = ora_ms;
