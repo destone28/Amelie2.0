@@ -7,34 +7,53 @@
  *
  * ── SI COLLEGA TUTTO, SI ACCENDE, FUNZIONA ───────────────────────────────────
  *
- * È il requisito, e per rispettarlo il sensore NON usa la sua libreria.
+ * È il requisito, e per rispettarlo qui non si usa la libreria Arduino_Modulino:
+ * né per il sensore né per l'anello. Ogni transazione I2C è scritta qui sotto,
+ * e ognuna o riesce o fallisce.
  *
- * `ModulinoDistance` poggia su STM32duino_VL53L4CD, e in `platform.cpp` di
- * quella libreria ogni trasferimento I2C sta dentro:
+ * ── PERCHE': UN PUNTATORE NULLO, NON QUELLO CHE SEMBRAVA ─────────────────────
  *
- *     do { ...trasferimento... } while (status != 0);
+ * Per tre giri di banco il blocco è stato attribuito al driver del VL53L4CD, che
+ * in `platform.cpp` ritenta i trasferimenti I2C con un `do {...} while (status)`
+ * senza uscita. È vero che quel ciclo esiste. NON era la causa: riscrivere il
+ * sensore da capo e aggiungere il recupero del bus non ha cambiato niente, e
+ * quello avrebbe dovuto far sospettare la diagnosi molto prima.
  *
- * Un ciclo di ritentativi SENZA USCITA. La sola scappatoia prevista è chiusa in
- * `#ifdef ARDUINO_ARCH_STM32`, che sul core Zephyr della UNO Q non è definito:
- * qui non c'è nemmeno quella. Se un trasferimento fallisce in modo persistente,
- * il `loop()` non ritorna mai più — e allora il Bridge non risponde a NIENTE,
- * nemmeno a `versione()`, e da Linux il dispositivo sembra senza firmware.
+ * La causa vera sta in `Arduino_Modulino`, ed è dimostrabile leggendo il binario:
  *
- * Al banco è successo tre volte. Due tentativi di difendersi dall'esterno sono
- * falliti: prima scandendo l'indirizzo (è la difesa che usa la stessa libreria
- * Modulino, "the library contains a while(true) on begin()" c'è scritto nel suo
- * sorgente), poi leggendo il registro d'identità — che PASSAVA, e `begin()` si
- * bloccava lo stesso. Un connettore che entra rimbalza, e un chip alimentato a
- * singhiozzo risponde a una lettura e alla successiva no.
+ *   · `ModulinoClass` non ha costruttore. Il suo unico campo, `HardwareI2C*
+ *     _wire`, è scritto SOLO da `ModulinoClass::begin()`. L'oggetto globale
+ *     `Modulino` finisce quindi in `.bss`, che l'avvio azzera: `_wire == nullptr`
+ *     a ogni accensione, garantito.
+ *   · Questo sketch non ha mai chiamato `Modulino.begin()`. Tutti gli esempi
+ *     della libreria lo fanno come prima riga di `setup()`; qui mancava.
+ *   · `Module::write()` — cioè ogni `show()` sull'anello — fa
+ *     `Modulino._wire->beginTransmission(...)`, e `HardwareI2C` ha i metodi
+ *     tutti virtuali. Nel binario compilato sono tre istruzioni:
  *
- * Non si può rendere sicura dall'esterno una funzione che non torna. Quindi il
- * VL53L4CD lo si pilota qui sotto, direttamente: la sequenza è la stessa della
- * libreria — la tabella di configurazione è copiata da lì — ma OGNI
- * trasferimento è nostro, e ognuno o riesce o fallisce. Nessuno aspetta per
- * sempre. Se il sensore non parte, il dispositivo parte lo stesso e lo dice.
+ *         ldr.w r0, [r8]     r0 = Modulino._wire, cioè 0
+ *         ldr   r3, [r0, #N] la vtable, letta dall'indirizzo 0
+ *         blx   r3           si salta lì
  *
- * L'anello continua a usare `ModulinoPixels`, che non ha cicli del genere: fa
- * scritture semplici e ritorna sempre.
+ *   · Il variant compila con `CONFIG_ARM_MPU=n`: nessuna trappola sul puntatore
+ *     nullo. Sullo STM32U585 l'indirizzo 0 è l'alias di boot della flash, quindi
+ *     si legge il valore iniziale dello stack pointer e lo si usa come vtable.
+ *     Si salta a un indirizzo che cambia di istante in istante: a volte torna, e
+ *     prima o poi è un hard fault. Il gestore fatale di Zephyr ferma tutto, il
+ *     thread del Bridge compreso — ed ecco perché da Linux andavano in timeout
+ *     TUTTI i metodi, `versione()` compreso, e perché si riprendeva solo
+ *     togliendo corrente.
+ *
+ * Due dettagli della libreria hanno tenuto nascosta la causa per giorni:
+ *
+ *   · `Module::begin()` con un indirizzo esplicito ritorna `true` SENZA toccare
+ *     il bus. Quindi `moduli()` rispondeva «anello presente» a un anello che non
+ *     era mai stato scritto una sola volta.
+ *   · `Module::write()` ritorna `true` sempre, comunque vada.
+ *
+ * Per questo qui sotto l'anello si scrive a mano e `c_anello` diventa vero solo
+ * dopo una scrittura ANDATA A BUON FINE: una cosa presente è una cosa che ha
+ * risposto, non una che non ha protestato.
  *
  * ── DUE MODULI, NON TRE ──────────────────────────────────────────────────────
  *
@@ -58,7 +77,7 @@
  */
 
 #include <Arduino_RouterBridge.h>
-#include <Modulino.h>
+#include <Wire.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/i2c.h>
 
@@ -120,8 +139,6 @@ static const uint8_t  RESPIRO_MIN = 3;
 static const uint8_t  RESPIRO_MAX = 26;
 static const uint32_t RESPIRO_MS = 50;      /* 20 aggiornamenti al secondo */
 static const uint8_t  RESPIRO_PASSO = 4;    /* 256/4 x 50 ms = 3,2 s a ciclo */
-
-ModulinoPixels anello(IND_ANELLO);
 
 static bool c_anello = false, c_tof = false;
 static bool ricerca_finita = false;
@@ -375,11 +392,29 @@ int scansiona(int blocco) {
 
 /* ─── ciclo ────────────────────────────────────────────────────────────────── */
 
-static void applica(ModulinoPixels &p, StatoLed &s) {
+/* Gli otto LED, scritti a mano. Il formato è quello del modulo: quattro byte per
+ * LED, nell'ordine 0xE0|luminosità, blu, verde, rosso — la luminosità è a
+ * cinque bit, cioè 0-31, e arriva qui in centesimi.
+ *
+ * Restituisce se il trasferimento è riuscito. `Module::write()` della libreria
+ * ritornava `true` sempre, e quel `true` è ciò che faceva dire al dispositivo di
+ * vedere un anello che non aveva mai acceso. */
+static bool anello_scrivi(uint8_t r, uint8_t g, uint8_t b, uint8_t lum) {
+  uint8_t l5 = (uint8_t)((uint16_t)lum * 31U / 100U);
+  if (l5 > 31) l5 = 31;
+  Wire1.beginTransmission(IND_ANELLO);
+  for (uint8_t i = 0; i < N_LED; i++) {
+    Wire1.write((uint8_t)(0xE0 | l5));
+    Wire1.write(b);
+    Wire1.write(g);
+    Wire1.write(r);
+  }
+  return Wire1.endTransmission() == 0;
+}
+
+static void applica(StatoLed &s) {
   if (!s.da_applicare) return;
-  for (uint8_t i = 0; i < N_LED; i++) p.set(i, s.r, s.g, s.b, s.lum);
-  p.show();
-  s.da_applicare = false;
+  if (anello_scrivi(s.r, s.g, s.b, s.lum)) s.da_applicare = false;
 }
 
 /* Un respiro, non una rampa: la luminosità cresce col quadrato, così indugia in
@@ -389,8 +424,7 @@ static void respira() {
   uint16_t curva = ((uint16_t)x * x) >> 8;                     /* 0..254 */
   uint8_t lum = RESPIRO_MIN +
                 (uint8_t)(((uint32_t)curva * (RESPIRO_MAX - RESPIRO_MIN)) / 254);
-  for (uint8_t i = 0; i < N_LED; i++) anello.set(i, 255, 150, 40, lum);
-  anello.show();
+  anello_scrivi(255, 150, 40, lum);
   fase += RESPIRO_PASSO;
 }
 
@@ -416,6 +450,9 @@ void setup() {
    * subito e l'anello puo' respirare mentre il sensore finisce di avviarsi. */
   libera_il_bus();
   Wire1.begin();
+  /* 100 kHz: e' cio' che faceva `ModulinoClass::begin()`, e i Modulino sono
+   * tarati su quello. Toltala di mezzo, il clock va rimesso a mano. */
+  Wire1.setClock(100000);
 }
 
 void loop() {
@@ -424,7 +461,8 @@ void loop() {
   /* ── la ricerca, solo nella finestra d'accensione ─────────────────────── */
   if (!ricerca_finita && ora_ms - ultima_ricerca >= PASSO_RICERCA_MS) {
     ultima_ricerca = ora_ms;
-    if (!c_anello && risponde(IND_ANELLO)) c_anello = anello.begin();
+    /* Presente = ha risposto a una scrittura vera, non = non ha protestato. */
+    if (!c_anello && risponde(IND_ANELLO)) c_anello = anello_scrivi(0, 0, 0, 0);
     if (!c_tof && risponde(IND_TOF)) {
       uint16_t id = 0;
       if (tof_leggi16(R_IDENTITA, &id) && id == 0xEBAA) c_tof = tof_avvia();
@@ -456,7 +494,7 @@ void loop() {
     Bridge.notify("bottiglia", presente, ultima_mm);
   }
 
-  if (c_anello && !respiro) applica(anello, rich_anello);
+  if (c_anello && !respiro) applica(rich_anello);
 
   delay(20);
 }
