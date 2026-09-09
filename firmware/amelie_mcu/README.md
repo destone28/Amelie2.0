@@ -78,8 +78,18 @@ per cento. Il tetto dei 131 KB riguarda un'altra via di caricamento, non questa.
 | `set_anello` | r, g, b, luminosità | `true` |
 | `distanza` | — | millimetri, oppure `-1` se la misura non è valida |
 | `moduli` | — | somma di bit: **1** anello, **2** sensore |
+| `versione` | — | la versione del **protocollo**: oggi `2` |
 
 E una notifica: `bottiglia(presente, mm)` a ogni cambiamento.
+
+`versione` non dice quale build gira, dice **che cosa significano le risposte**.
+Si alza quando cambia un significato, non il codice. Alla 2 il secondo Pixels è
+stato tolto e il bit 2 di `moduli()` è passato da «flash» a «sensore», mentre il
+sensore lasciava il bit 4: un Linux alla 2 che legge un MCU alla 1 direbbe
+«sensore presente» con il flash collegato e «sensore assente» con il sensore.
+Perciò `Ponte.moduli()` chiede prima la versione, e se non è quella attesa
+risponde «non vedo niente» e lo scrive nel log — meglio «non lo so» che una
+risposta rovesciata a chi ha i cavetti in mano.
 
 `moduli` è lo strumento del montaggio: si collega un pezzo per volta e si chiede
 al dispositivo se lo vede, invece di dedurlo da un LED che resta spento per una

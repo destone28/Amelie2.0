@@ -698,6 +698,19 @@ class TestFirmwareEPythonDAccordo:
             f"lo sketch somma {bit}, NOMI_MODULI ne prevede {atteso} "
             f"({NOMI_MODULI}): uno dei due lati è rimasto indietro")
 
+    def test_la_versione_del_protocollo_e_la_stessa_nei_due_linguaggi(self):
+        """È il numero che impedisce di leggere a rovescio i bit di un MCU
+        vecchio: se i due lati non concordano, non protegge da niente."""
+        import re
+
+        from amelie.bridge import PROTOCOLLO_ATTESO
+
+        m = re.search(r"PROTOCOLLO\s*=\s*(\d+)", self._sketch())
+        assert m, "lo sketch non dichiara PROTOCOLLO"
+        assert int(m.group(1)) == PROTOCOLLO_ATTESO, (
+            f"sketch {m.group(1)}, bridge.py {PROTOCOLLO_ATTESO}: "
+            f"il controllo di versione non protegge piu' da niente")
+
     def test_gli_indirizzi_sono_gli_stessi_nei_due_linguaggi(self):
         import re
 
@@ -908,13 +921,27 @@ class TestModuliVisti:
     che non conosce il metodo, che è uno dei guasti che si stanno cercando.
     """
 
-    def _ponte(self, risposta):
-        from amelie.bridge import Ponte
+    def _ponte(self, risposta, versione=None):
+        """Un Ponte che risponde `risposta` a `moduli` e `versione` a `versione`.
+
+        La versione va finta insieme ai bit: da quando il significato dei bit è
+        cambiato, `moduli()` chiede prima con chi sta parlando.
+        """
+        from amelie.bridge import PROTOCOLLO_ATTESO, Ponte
+
+        v = PROTOCOLLO_ATTESO if versione is None else versione
+
+        def chiama(metodo, *a, **k):
+            if metodo == "versione":
+                if isinstance(v, Exception):
+                    raise v
+                return v
+            if isinstance(risposta, Exception):
+                raise risposta
+            return risposta
 
         p = Ponte()
-        p.chiama = lambda *a, **k: (
-            (_ for _ in ()).throw(risposta)
-            if isinstance(risposta, Exception) else risposta)
+        p.chiama = chiama
         return p
 
     def test_i_bit_stanno_nell_ordine_dello_sketch(self):
@@ -952,6 +979,27 @@ class TestModuliVisti:
 
     def test_una_risposta_senza_senso_non_fa_saltare_niente(self):
         assert self._ponte(None).moduli() == {"anello": False, "distanza": False}
+
+    def test_un_firmware_di_prima_non_viene_letto_a_rovescio(self):
+        """Il guasto peggiore che si possa avere montando.
+
+        Quando il secondo Pixels è stato tolto, il bit 2 è passato da «flash» a
+        «sensore» e il sensore ha lasciato il bit 4. Un Linux nuovo che legge un
+        MCU vecchio direbbe «sensore presente» col flash collegato, e «sensore
+        assente» col sensore: il montaggio è giusto e il dispositivo dice di no,
+        in silenzio. Meglio «non lo so» che una risposta rovesciata.
+        """
+        # 0b011: per il firmware vecchio è anello + flash, sensore ASSENTE.
+        vecchio = self._ponte(0b011, versione=1)
+        assert vecchio.moduli() == {"anello": False, "distanza": False}, \
+            "i bit di un protocollo diverso non vanno interpretati"
+
+    def test_un_firmware_che_non_dichiara_la_versione_e_troppo_vecchio(self):
+        from amelie.bridge import ErroreMCU
+
+        muto = self._ponte(0b111, versione=ErroreMCU("versione: method not available"))
+        assert muto.versione() is None
+        assert muto.moduli() == {"anello": False, "distanza": False}
 
     def test_il_banco_simulato_ha_tutto_collegato(self):
         from amelie.bridge import PonteSimulato

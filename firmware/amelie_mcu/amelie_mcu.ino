@@ -55,6 +55,17 @@
  *
  * Un solo Pixels, quindi l'indirizzo di fabbrica va bene com'è: non c'è niente
  * da riprogrammare prima di montare. */
+/* Versione del protocollo fra questo firmware e Linux. Si alza ogni volta che
+ * cambia il SIGNIFICATO di qualcosa, non il codice.
+ *
+ * Alla 2 il secondo Pixels e' stato tolto, e il bit 2 di moduli() e' passato da
+ * "flash" a "sensore" mentre il sensore lasciava il bit 4. Un Linux nuovo che
+ * interroga un MCU alla versione 1 leggerebbe "sensore presente" quando c'e' il
+ * flash, e "sensore assente" con il sensore collegato: il guasto peggiore che
+ * si possa avere montando, perche' e' silenzioso e dice il contrario del vero.
+ * Con questo numero il lato Linux se ne accorge e lo dice. */
+static const int PROTOCOLLO = 2;
+
 static const uint8_t IND_ANELLO   = 0x36;
 static const uint8_t IND_DISTANZA = 0x29;   /* VL53L4CD, fisso */
 static const uint8_t N_LED = 8;
@@ -113,6 +124,9 @@ bool set_anello(int r, int g, int b, int lum) {
  * ed è esattamente ciò che succede con il piatto vuoto. */
 int distanza() { return ultima_mm; }
 
+/* La versione del protocollo, non del firmware: vedi PROTOCOLLO in cima. */
+int versione() { return PROTOCOLLO; }
+
 /* Quali moduli il microcontrollore vede in questo momento, come somma di bit:
  * 1 anello, 2 sensore. Serve a montare - si collega un pezzo per volta e si
  * chiede al dispositivo se lo vede - e a capire un guasto senza smontare
@@ -148,6 +162,7 @@ void setup() {
   Bridge.provide("set_anello", set_anello);
   Bridge.provide("distanza", distanza);
   Bridge.provide("moduli", moduli);
+  Bridge.provide("versione", versione);
 
   /* Su UNO Q i Modulino stanno su Wire1. Si cercano, non si danno per presenti. */
   Wire1.begin();

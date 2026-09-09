@@ -45,6 +45,18 @@ DISTANZA = 0x29   # VL53L4CD, indirizzo fisso
 # L'ordine è quello dei bit che lo sketch somma in `moduli()`: 1, 2.
 NOMI_MODULI = ("anello", "distanza")
 
+# La versione del PROTOCOLLO, non del firmware: si alza quando cambia il
+# significato di qualcosa. Alla 2 il secondo Pixels è stato tolto e il bit 2 di
+# `moduli()` è passato da «flash» a «sensore», mentre il sensore lasciava il
+# bit 4.
+#
+# Serve perché quel cambiamento è **silenzioso e rovesciato**: un Linux alla 2
+# che interroga un MCU alla 1 legge «sensore presente» quando c'è il flash, e
+# «sensore assente» con il sensore collegato. È il guasto peggiore che si possa
+# avere montando — il montaggio è giusto e il dispositivo dice di no — e senza
+# questo numero non c'è modo di accorgersene.
+PROTOCOLLO_ATTESO = 2
+
 
 @dataclass(frozen=True)
 class Colore:
@@ -159,6 +171,17 @@ class Ponte:
     def anello(self, c: Colore) -> None:
         self.chiama("set_anello", c.r, c.g, c.b, c.luminosita)
 
+    def versione(self) -> int | None:
+        """La versione del protocollo dichiarata dall'MCU, o None se non la dice.
+
+        `None` significa firmware anteriore alla 2, cioè di quando c'erano due
+        Modulino Pixels: i bit di `moduli()` avevano un altro significato.
+        """
+        try:
+            return int(self.chiama("versione"))
+        except (ErroreMCU, PonteNonDisponibile, OSError, TypeError, ValueError):
+            return None
+
     def moduli(self) -> dict[str, bool]:
         """Quali Modulino il microcontrollore vede in questo momento.
 
@@ -168,7 +191,21 @@ class Ponte:
         Non solleva mai. Chi chiede questo sta cercando un guasto, e un firmware
         vecchio che non conosce il metodo è uno dei guasti possibili: rispondere
         «non vedo niente» lo racconta meglio di un'eccezione.
+
+        E **prima chiede la versione**. I bit di `moduli()` hanno cambiato
+        significato quando il secondo Pixels è stato tolto: interpretarli senza
+        sapere con chi si sta parlando vuol dire dire il contrario del vero
+        proprio a chi sta montando. Meglio «non lo so» che una risposta
+        rovesciata.
         """
+        v_mcu = self.versione()
+        if v_mcu != PROTOCOLLO_ATTESO:
+            log.warning(
+                "l'MCU parla il protocollo %s, qui si aspetta il %d: i bit dei "
+                "moduli avrebbero un altro significato. Ricarica "
+                "firmware/amelie_mcu prima di fidarti di questa risposta.",
+                "1 o precedente" if v_mcu is None else v_mcu, PROTOCOLLO_ATTESO)
+            return dict.fromkeys(NOMI_MODULI, False)
         try:
             v = int(self.chiama("moduli"))
         except (ErroreMCU, PonteNonDisponibile, OSError, TypeError, ValueError):
@@ -210,6 +247,8 @@ class PonteSimulato(Ponte):
             # 1, cioè «vedo solo l'anello», e la simulazione racconterebbe un
             # guasto che non c'è.
             return (1 << len(NOMI_MODULI)) - 1
+        if metodo == "versione":
+            return PROTOCOLLO_ATTESO
         return True
 
 

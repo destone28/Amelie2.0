@@ -24,15 +24,13 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from contextlib import contextmanager
 from pathlib import Path
 
 RADICE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RADICE / "src"))
 
 
-@contextmanager
-def luce_dello_scatto():
+class LuceDelloScatto:
     """Accende l'anello a bianco per la raffica, come fa il dispositivo vero.
 
     **Non è un abbellimento: senza, questo strumento misura la scena sbagliata.**
@@ -50,28 +48,49 @@ def luce_dello_scatto():
     sostituito.
 
     Se l'MCU non risponde lo **dice**, invece di misurare in silenzio una cosa
-    diversa da quella che si crede di misurare.
-    """
-    from amelie.bridge import AMBRA, BIANCO_SCATTO, Ponte, PonteNonDisponibile
+    diversa da quella che si crede di misurare — e lo dice una volta sola, anche
+    se la si riusa per sei pose di seguito.
 
-    ponte = Ponte()
-    acceso = False
-    try:
-        ponte.anello(BIANCO_SCATTO)
-        acceso = True
-    except Exception as e:                                  # noqa: BLE001
-        print(f"  ATTENZIONE: anello non acceso ({e.__class__.__name__}).")
-        print("  La misura vale MENO di quella vera: nel giro reale l'anello")
-        print("  sale a bianco per la raffica. Collega il Modulino Pixels e")
-        print("  verifica il firmware prima di tarare la posa.")
-    try:
-        yield acceso
-    finally:
-        if acceso:
-            try:
-                ponte.anello(AMBRA)
-            except PonteNonDisponibile:
-                pass
+    Si accende e si spegne **a ogni scatto**, non una volta per tutta la prova:
+    fra una posa e l'altra c'e' l'OCR, cinque secondi in cui otto LED a bianco
+    pieno su un cavetto Qwiic da 28 AWG starebbero accesi per niente. E' la
+    stessa cadenza del dispositivo vero.
+    """
+
+    def __init__(self) -> None:
+        from amelie.bridge import Ponte
+
+        self.ponte = Ponte()
+        self.acceso = False
+        self._gia_lamentato = False
+
+    def __enter__(self) -> bool:
+        from amelie.bridge import BIANCO_SCATTO
+
+        try:
+            self.ponte.anello(BIANCO_SCATTO)
+            self.acceso = True
+        except Exception as e:                              # noqa: BLE001
+            self.acceso = False
+            if not self._gia_lamentato:
+                self._gia_lamentato = True
+                print(f"  ATTENZIONE: anello non acceso ({e.__class__.__name__}).")
+                print("  La misura vale MENO di quella vera: nel giro reale")
+                print("  l'anello sale a bianco per la raffica. Collega il")
+                print("  Modulino Pixels e verifica il firmware prima di tarare.")
+        return self.acceso
+
+    def __exit__(self, *_) -> None:
+        from amelie.bridge import AMBRA
+
+        if not self.acceso:
+            return
+        try:
+            self.ponte.anello(AMBRA)
+        except Exception:                                   # noqa: BLE001
+            # Simmetrico all'accensione: se l'MCU muore a meta' prova, il
+            # ripristino non deve mascherare l'errore vero con il suo.
+            pass
 
 
 def main() -> None:
@@ -123,7 +142,7 @@ def main() -> None:
         cam = Camera(imp)
         print(f"  camera: {cam.percorso}")
         blocca_esposizione(cam.imp, cam.percorso)
-        with luce_dello_scatto():
+        with LuceDelloScatto():
             scatto = passo("scatto", cam.scatta)
         immagine = scatto.immagine
         print(f"  {'':22} nitidezza {scatto.nitidezza:.0f}"
@@ -202,37 +221,37 @@ def scala_pose(args) -> None:
 
     migliore, migliori_righe = None, -1
     misurate: list[float] = []
-    # La luce resta accesa per TUTTA la scala, non una volta per posa: la scena
-    # dev'essere identica fra una riga e l'altra della tabella, ed e' la stessa
-    # luce che il dispositivo accende per la raffica. Senza, si tarerebbe la
-    # posa su un quarto della luce vera.
-    with luce_dello_scatto() as luce:
-        if luce:
-            print("  Anello a bianco, come durante la raffica vera.")
-        print()
-        print(f"  {'posa':>8}  {'ms':>6}  {'nitidezza':>10}  {'righe':>6}  primo testo")
-        print("  " + "─" * 68)
-        for posa in pose:
-            imp = replace(base, esposizione=posa)
-            cam = Camera(imp)
-            blocca_esposizione(imp, cam.percorso)
-            try:
+    # La stessa luce che il dispositivo accende per la raffica, accesa e spenta
+    # a ogni scatto: la scena dev'essere identica fra una riga e l'altra della
+    # tabella, ma non ha senso tenere otto LED a bianco pieno per i cinque
+    # secondi di OCR che stanno in mezzo.
+    luce = LuceDelloScatto()
+    print("  L'anello va a bianco a ogni scatto, come nella raffica vera.")
+    print()
+    print(f"  {'posa':>8}  {'ms':>6}  {'nitidezza':>10}  {'righe':>6}  primo testo")
+    print("  " + "─" * 68)
+    for posa in pose:
+        imp = replace(base, esposizione=posa)
+        cam = Camera(imp)
+        blocca_esposizione(imp, cam.percorso)
+        try:
+            with luce:
                 scatto = cam.scatta()
-            except Exception as e:                          # noqa: BLE001
-                print(f"  {posa:>8}  {posa / 10:>6.0f}  scatto fallito: {e}")
-                continue
-            righe = [r.testo for r in lettore.leggi(scatto.immagine).righe]
-            primo = righe[0][:28] if righe else "—"
-            segno = " ←" if len(righe) > migliori_righe else ""
-            if len(righe) > migliori_righe:
-                migliore, migliori_righe = posa, len(righe)
-            misurate.append(scatto.nitidezza)
-            print(f"  {posa:>8}  {posa / 10:>6.0f}  {scatto.nitidezza:>10.0f}"
-                  f"  {len(righe):>6}  {primo}{segno}")
-            if args.salva:
-                from amelie.capture import salva
-                salva(scatto, args.salva.with_name(
-                    f"{args.salva.stem}-{posa}{args.salva.suffix}"))
+        except Exception as e:                              # noqa: BLE001
+            print(f"  {posa:>8}  {posa / 10:>6.0f}  scatto fallito: {e}")
+            continue
+        righe = [r.testo for r in lettore.leggi(scatto.immagine).righe]
+        primo = righe[0][:28] if righe else "—"
+        segno = " ←" if len(righe) > migliori_righe else ""
+        if len(righe) > migliori_righe:
+            migliore, migliori_righe = posa, len(righe)
+        misurate.append(scatto.nitidezza)
+        print(f"  {posa:>8}  {posa / 10:>6.0f}  {scatto.nitidezza:>10.0f}"
+              f"  {len(righe):>6}  {primo}{segno}")
+        if args.salva:
+            from amelie.capture import salva
+            salva(scatto, args.salva.with_name(
+                f"{args.salva.stem}-{posa}{args.salva.suffix}"))
 
     print()
     if migliore is None:

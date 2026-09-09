@@ -131,8 +131,9 @@ nella scocca: [`docs/06-ASSEMBLAGGIO-BANCO.md`](docs/06-ASSEMBLAGGIO-BANCO.md).
 
 ```bash
 bash scripts/00_diagnostica.sh    # sistema, video, camera, audio, CPU, spazio
-bash scripts/01_audio.sh          # la catena della voce, fino al jack
-bash scripts/suona.sh             # fa suonare qualcosa, subito
+# le prove d'audio vogliono il servizio fermo: tiene il device aperto per sempre
+sudo systemctl stop amelie && bash scripts/01_audio.sh && sudo systemctl start amelie
+bash scripts/suona.sh             # fa suonare qualcosa, subito (idem)
 ```
 
 Guida completa alle prove: [`docs/03-COLLAUDO.md`](docs/03-COLLAUDO.md).
