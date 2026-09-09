@@ -413,10 +413,32 @@ static int tof_misura() {
          && tof_leggi16(R_DISTANZA, &mm);
   k_mutex_unlock(&lucchetto_bus);
   if (!ok) return -2;
-  /* Lo stato 0 e' "misura buona"; la libreria rimappa i codici, a noi basta
-   * distinguere buono da non buono. E zero SPAD attivi vuol dire niente
-   * davanti. */
+
+  /* Lo stato 9 e' "misura buona": la libreria rimappa i codici, e 9 e' quello
+   * che diventa "valida". */
   if ((stato & 0x1F) != 0x09 || spad == 0) return -1;
+
+  /* E ZERO NON E' UNA DISTANZA: e' il modo in cui questo sensore dice "non c'e'
+   * niente davanti".
+   *
+   * Lo dicono i dati, raccolti al banco con la mano che entra ed esce dal cono:
+   *
+   *     niente davanti    distanza 0     SPAD 52368, sempre lo stesso
+   *     mano davanti      25..176 mm     SPAD 392..51528, variabili
+   *
+   * Lo stato resta 9 in tutti e due i casi e gli SPAD non sono mai zero, quindi
+   * nessuno dei due controlli qui sopra se ne accorge. E fisicamente uno zero
+   * non puo' essere vero: il VL53L4CD non misura sotto il centimetro, e un
+   * oggetto appoggiato sulla finestrella darebbe qualche millimetro e uno stato
+   * di errore, non zero con stato buono.
+   *
+   * Prenderlo per buono aveva una conseguenza che sembrava un guasto diverso:
+   * zero e' sotto la soglia del vicino, quindi per Linux c'era SEMPRE una
+   * bottiglia. Non la vedeva mai arrivare - manca il fronte di salita - e dopo
+   * il primo racconto restava in attesa che venisse tolta, cosa che non
+   * succedeva mai. Un solo numero mal interpretato, due sintomi. */
+  if (mm == 0) return -1;
+
   return (int)mm;
 }
 

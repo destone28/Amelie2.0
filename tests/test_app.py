@@ -127,6 +127,48 @@ class TestPresenza:
         assert not p.presente
 
 
+class TestLoZeroNonEUnaDistanza:
+    """Il sensore dice «non c'è niente» restituendo zero, e zero è sotto ogni
+    soglia: preso per buono, il dispositivo crede di avere sempre una bottiglia
+    davanti.
+
+    Misurato al banco, con la mano che entra ed esce dal cono:
+
+        niente davanti    distanza 0     SPAD 52368, sempre lo stesso
+        mano davanti      25..176 mm     SPAD 392..51528, variabili
+
+    Lo stato resta «misura buona» in tutti e due i casi. Il firmware ora
+    restituisce -1 per lo zero, che il ponte traduce in `None`; qui si verifica
+    che da lì in poi la catena si comporti come deve.
+    """
+
+    def test_none_conta_come_niente_davanti(self):
+        p = Presenza()
+        for _ in range(5):
+            p.aggiorna(30)
+        assert p.presente
+        for _ in range(6):
+            p.aggiorna(None)
+        assert not p.presente, "senza misura non c'è nessuna bottiglia"
+
+    def test_il_ponte_traduce_il_meno_uno(self):
+        from amelie.bridge import Ponte
+
+        p = Ponte()
+        p.chiama = lambda *a, **k: -1
+        assert p.distanza_mm() is None
+
+    def test_una_bottiglia_vera_si_vede_arrivare(self):
+        """Il fronte di salita: è quello che mancava quando lo zero passava per
+        una misura, ed è quello che fa partire la lettura."""
+        p = Presenza()
+        for _ in range(8):
+            p.aggiorna(None)          # piatto vuoto
+        assert not p.presente
+        arrivi = [p.aggiorna(45) for _ in range(4)]
+        assert arrivi[-1] and not arrivi[0], "deve esserci un fronte, non uno stato"
+
+
 class TestColore:
     def test_rifiuta_valori_fuori_scala(self):
         with pytest.raises(ValueError):
