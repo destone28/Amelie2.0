@@ -160,10 +160,30 @@ sudo tee /etc/systemd/system.conf.d/50-amelie-silenzio.conf >/dev/null <<'EOF'
 [Manager]
 ShowStatus=no
 EOF
-sudo tee /etc/sysctl.d/50-amelie-silenzio.conf >/dev/null <<'EOF'
+# 99, non 50: i file di sysctl.d si applicano in ordine ALFABETICO, e Debian
+# mette il suo `kernel.sysrq = 0x01b6` in 50-default.conf. Con un 50-amelie-*
+# il nostro valore viene scritto per primo e poi sovrascritto dal loro - il file
+# c'e', sembra giusto, e non fa niente.
+sudo rm -f /etc/sysctl.d/50-amelie-silenzio.conf
+sudo tee /etc/sysctl.d/99-amelie-silenzio.conf >/dev/null <<'EOF'
 # Solo le emergenze sulla console. Se il dispositivo sta per morire e' giusto
 # che lo dica; tutto il resto e' nel journal.
 kernel.printk = 1 4 1 3
+
+# NIENTE MAGIC SYSRQ. Non e' irrigidimento generico: e' successo.
+#
+# Debian lascia `kernel.sysrq = 438`, che include il bit 32 - "rimonta tutti i
+# filesystem in sola lettura". La console del kernel di questa board sta su
+# ttyMSM0, la UART di debug, che sul dispositivo finito non ha niente attaccato
+# e resta flottante. Il rumore su quella linea viene letto come tasti SysRq: nel
+# log si vedono decine di `sysrq: HELP` (tasto non riconosciuto), due `Changing
+# Loglevel`, e a un certo punto e' arrivata una `u` - unmount. Root e /home sono
+# passati in sola lettura a dispositivo acceso e in servizio.
+#
+# Con lo stesso meccanismo si poteva prendere una `b` (riavvia), una `o` (spegni)
+# o una `i` (uccidi tutti i processi). Su un tavolo di ristorante non e' una
+# possibilita' accettabile, e SysRq qui non serve a niente: si spegne.
+kernel.sysrq = 0
 EOF
 
 # E la console di testo non si raggiunge nemmeno da tastiera. Sul tavolo di un

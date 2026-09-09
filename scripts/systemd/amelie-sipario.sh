@@ -36,6 +36,13 @@ FONDO="${AMELIE_FONDO:-3D1512}"
 #    le emergenze: se il dispositivo sta per morire, e' giusto che lo dica.
 echo "1 4 1 3" > /proc/sys/kernel/printk 2>/dev/null || true
 
+# 1b. E niente Magic SysRq. Lo imposta anche sysctl.d, ma qui si e' certi che
+#     valga PRIMA che la sessione grafica parta - e soprattutto prima che la
+#     UART di debug flottante abbia il tempo di inventarsi un comando.
+#     E' successo: root e /home sono passati in sola lettura in servizio,
+#     perche' il rumore su ttyMSM0 e' stato letto come SysRq-u (unmount).
+echo 0 > /proc/sys/kernel/sysrq 2>/dev/null || true
+
 # 2. La console di testo: pulita, senza cursore, e che non si spenga mai da
 #    sola - un pannello che va in powerdown si porta via anche l'audio.
 for tty in /dev/tty1 /dev/console; do
