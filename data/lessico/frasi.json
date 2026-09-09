@@ -124,6 +124,10 @@
       "it": "Quale di questi?",
       "en": "Which one is it?"
     },
+    "nessuno_di_questi": {
+      "it": "Nessuno di questi",
+      "en": "None of these"
+    },
     "appoggia_bottiglia": {
       "it": "Appoggi una bottiglia",
       "en": "Place a bottle"

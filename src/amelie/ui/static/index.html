@@ -367,6 +367,14 @@ svg { display: block; }
   transform: scale(.985);
   background: rgba(200,134,13,.2); border-color: var(--oro-chiaro);
 }
+/* «Nessuno di questi» non è una scelta come le altre: non è un vino. Si
+   distingue senza gridare — nessun fondo, un bordo appena accennato, il testo
+   piu' tenue — così l'occhio la trova quando serve e la scavalca quando no. */
+#c-scelte .scelta.nessuno {
+  background: transparent; border-color: rgba(138,107,48,.45);
+  color: var(--avorio-tenue); font-size: var(--t-sottotit);
+  min-height: calc(var(--tocco) * .82);
+}
 
 /* ===========================================================================
    AVVISO
@@ -978,6 +986,17 @@ eventi.onmessage = (e) => {
         rendiToccabile(b, () => fetch("/scegli/" + i, { method: "POST" }).catch(() => {}));
         box.appendChild(b);
       });
+      /* «Nessuno di questi». È l'unico caso che il dispositivo non può
+         risolvere da solo — un'etichetta letta male, un vino che nel database
+         non c'è — e senza questo bottone quel caso sparisce: l'ospite tocca a
+         caso o aspetta, e chi deve correggere non sa nemmeno che è successo.
+         Toccandolo si mette da parte lo scatto per guardarlo dopo, e il
+         racconto va avanti lo stesso col più generico che si sa dire. */
+      const n = document.createElement("div");
+      n.className = "scelta nessuno";
+      n.textContent = m.nessuno || "Nessuno di questi";
+      rendiToccabile(n, () => fetch("/segnala", { method: "POST" }).catch(() => {}));
+      box.appendChild(n);
       break;
     }
 

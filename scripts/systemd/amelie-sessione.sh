@@ -39,8 +39,26 @@ xset s off 2>/dev/null || true
 xset s noblank 2>/dev/null || true
 xset -dpms 2>/dev/null || true
 
-# Nessun puntatore. Su un vetro capacitivo il cursore non ha significato, e
-# resta fermo dove l'ultimo tocco l'ha lasciato.
+# NESSUN PUNTATORE, MAI, nemmeno per un fotogramma.
+#
+# `unclutter` nasconde il cursore dopo un tempo di inattivita', e con -idle 0
+# quel tempo e' zero - ma zero non e' "mai": il cursore esiste, viene disegnato,
+# e poi sparisce. Nell'istante in cui X apre lo schermo, prima che unclutter sia
+# partito, si vede la X bianca al centro del bordeaux. Dura un attimo ed e'
+# esattamente il tipo di dettaglio che si nota su un oggetto da tavolo.
+#
+# Qui il cursore della finestra radice viene proprio SOSTITUITO con un disegno
+# vuoto: 1x1 pixel trasparente. Non c'e' niente da nascondere perche' non c'e'
+# niente. Si fa prima di ogni altra cosa, e unclutter resta come seconda rete
+# per le finestre che si portano un cursore proprio.
+VUOTO="${XDG_RUNTIME_DIR:-/tmp}/amelie-cursore-vuoto.xbm"
+cat > "$VUOTO" <<'XBM'
+#define vuoto_width 1
+#define vuoto_height 1
+static unsigned char vuoto_bits[] = { 0x00 };
+XBM
+xsetroot -cursor "$VUOTO" "$VUOTO" 2>/dev/null || true
+
 command -v unclutter >/dev/null 2>&1 && (unclutter -idle 0 -root &) 2>/dev/null
 
 # Un gestore di finestre serve: senza, la finestra a schermo intero di Chromium

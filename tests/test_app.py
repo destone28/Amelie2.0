@@ -693,6 +693,66 @@ class TestLaSchermataNonResta:
             "una bottiglia nuova deve far ripartire il giro"
 
 
+class TestSegnalazione:
+    """«Nessuno di questi»: l'unico caso che il dispositivo non risolve da solo.
+
+    Un OCR che legge male, un vino che nel database non c'è, un'etichetta con un
+    carattere che il modello non conosce. Senza un bottone, quel caso sparisce:
+    l'ospite tocca a caso o aspetta, e chi deve correggere non sa nemmeno che è
+    successo.
+    """
+
+    @pytest.fixture
+    def amelie(self, tmp_path, monkeypatch):
+        from amelie import app as modulo
+
+        monkeypatch.setattr(modulo, "CARTELLA_SEGNALAZIONI", tmp_path / "segn")
+        a = modulo.Amelie(modulo.Configurazione(
+            simula_mcu=True, senza_camera=True, senza_voce=True,
+            senza_modello=True))
+        yield a
+        a.matcher.chiudi()
+        a.narratore.chiudi()
+
+    def test_salva_cosa_serve_a_rifare_il_caso(self, amelie, tmp_path):
+        import json as j
+
+        amelie._righe = ["NERO D'AV", "SICILIA"]
+        amelie._candidati = ["Sicilia Nero d'Avola", "Nero d'Avola Spumante"]
+        amelie.macchina.stato = Stato.CONFERMA
+
+        esito = amelie.segnala()
+        assert esito["ok"]
+
+        cartella = (tmp_path / "segn") / esito["cartella"]
+        rapporto = j.loads((cartella / "segnalazione.json").read_text(encoding="utf-8"))
+        assert rapporto["righe_lette"] == ["NERO D'AV", "SICILIA"]
+        assert rapporto["proposte"] == ["Sicilia Nero d'Avola",
+                                        "Nero d'Avola Spumante"]
+        assert rapporto["quando"] and rapporto["lingua"] == "it"
+
+    def test_il_tavolo_non_resta_fermo(self, amelie):
+        """Segnalare non deve lasciare l'ospite su una schermata di scelta: si
+        racconta comunque il più generico che si sa dire."""
+        amelie.macchina.stato = Stato.CONFERMA
+        amelie.segnala()
+        assert amelie.macchina.stato is Stato.RACCONTO
+
+    def test_un_disco_pieno_non_blocca_il_racconto(self, amelie, monkeypatch):
+        """La segnalazione è un di più: se non si può scrivere, pazienza."""
+        from amelie import app as modulo
+
+        monkeypatch.setattr(modulo, "CARTELLA_SEGNALAZIONI",
+                            Path("/proc/non-si-puo-scrivere-qui"))
+        amelie.macchina.stato = Stato.CONFERMA
+        assert amelie.segnala() == {"ok": False}
+
+    def test_la_voce_e_nel_lessico_in_tutte_le_lingue(self, amelie):
+        for lingua in amelie.lex.lingue:
+            testo = amelie.lex.frase("schermo", "nessuno_di_questi", lingua=lingua)
+            assert testo and testo.strip()
+
+
 class TestIlCambioLinguaEImmediato:
     """Toccare una bandierina mentre parla l'altra vuol dire aver cambiato idea.
 

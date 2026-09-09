@@ -55,15 +55,29 @@ class TestRitaglio:
 
         Stringere migliora ogni singolo carattere — meno distorsione a barile,
         niente vignettatura — ma toglie righe intere, e il riconoscimento lavora
-        su PAROLE, non su caratteri: una riga un po' storta vale molto più di
-        una riga assente. A 0,58 del lato passava il 34% dell'area, e sul banco
-        le etichette non venivano riconosciute anche quando erano nitide e ben
-        illuminate. A 0,80 passa il 64%.
+        su PAROLE, non su caratteri. Misurato tre volte, sempre nella stessa
+        direzione: 0,58 dava `'AVO`, 0,80 dava `NERO D'AV`, il fotogramma intero
+        dà `NERO D'AVOL`. Una bottiglia in piedi occupa il fotogramma per il
+        lungo, e tagliarne i bordi taglia le parole.
         """
         imp = ImpostazioniCamera()
-        assert 0.7 <= imp.ritaglio <= 0.9
-        area = imp.ritaglio ** 2
-        assert area > 0.5, "sotto meta' area si perdono righe intere di etichetta"
+        assert imp.ritaglio >= 0.8
+        assert imp.ritaglio ** 2 > 0.6, "sotto questa area si perdono parole"
+
+    def test_il_fotogramma_si_raddrizza(self):
+        """La camera è montata ruotata di 90°, ed è la sua posizione giusta:
+        una bottiglia è alta e stretta, e un sensore 16:9 girato di lato la
+        inquadra per il lungo. Ma il testo dell'etichetta arriva coricato, e un
+        riconoscitore di testo lavora su righe orizzontali."""
+        assert ImpostazioniCamera().rotazione in (0, 90, 180, 270)
+        assert ImpostazioniCamera().rotazione == 90
+
+    def test_raddrizzare_scambia_i_lati(self):
+        from amelie.capture import Camera
+
+        c = Camera()
+        alto = c._raddrizza(immagine(40, 90))
+        assert alto.shape[:2] == (90, 40), "novanta gradi scambiano i lati"
 
 
 class TestNitidezza:
@@ -96,10 +110,15 @@ class TestScatto:
 
 class TestImpostazioni:
     def test_scarta_prima_di_tenere(self):
-        # il buffer UVC contiene fotogrammi precedenti alla luce: se non se ne
-        # scartano abbastanza si legge un'immagine al buio
+        """Il buffer UVC contiene fotogrammi precedenti alla luce: senza scarto
+        si legge un'immagine al buio.
+
+        Erano cinque, scelti quando un fotogramma costava 30 ms. A 90 ms
+        costavano un secondo intero, e la scena è ferma: lo scarto serve a
+        svuotare il buffer, non a mediare, e tre bastano.
+        """
         imp = ImpostazioniCamera()
-        assert imp.fotogrammi_da_scartare >= 4
+        assert imp.fotogrammi_da_scartare >= 3
 
     def test_immutabile(self):
         with pytest.raises(Exception):

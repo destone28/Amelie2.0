@@ -66,15 +66,38 @@ class ImpostazioniCamera:
     altezza: int = 1080
     fourcc: str = "MJPG"
 
-    # Esposizione fissa. `exposure_time_absolute` è in unità da 100 µs:
-    # 300 = 30 ms. Va tarato sul campo con l'anello di luce acceso.
-    esposizione: int = 300
+    # Esposizione fissa, in unità da 100 µs: 900 = 90 ms.
+    #
+    # Era 300, e **misurato sul banco** in una stanza in penombra quella posa
+    # non leggeva NIENTE: luminosità media 11 su 255, e l'OCR restituiva zero
+    # righe. A 900 la media sale a 30 e l'etichetta si legge; a 2000 sale a 55.
+    #
+    # E la luce dell'anello non c'entra quasi niente. Misurato, sempre lì:
+    #
+    #     anello spento          6,5
+    #     anello ambra           7,5
+    #     anello bianco          11,3
+    #     anello bianco pieno    11,7
+    #
+    # Cinque livelli su 255 fra spento e acceso al massimo. La posa, invece,
+    # triplica il segnale triplicandola. È quello che questo modulo dichiarava
+    # fin dall'inizio — «un tempo di posa lungo dà molto più segnale di quanto
+    # possano darne i LED» — e che aver tolto il flash ha reso decisivo.
+    #
+    # Costa: 90 ms per fotogramma, per i fotogrammi della raffica. Ed è il primo
+    # valore da alzare se il locale è buio: dal mirino, con `--esposizione`,
+    # senza toccare il codice.
+    esposizione: int = 900
     guadagno: int = 0
     temperatura_colore: int = 4600
 
-    # Raffica
-    fotogrammi_da_scartare: int = 5
-    fotogrammi_raffica: int = 5
+    # Raffica. Erano cinque e cinque, scelti quando un fotogramma costava 30 ms.
+    # A 90 ms costavano un secondo intero, e la scena è FERMA: bottiglia e
+    # camera non si muovono, quindi i fotogrammi si somigliano tutti e tenerne
+    # tre invece di cinque non cambia quale si sceglie. Lo scarto serve a
+    # buttare via il buffer USB, non a mediare.
+    fotogrammi_da_scartare: int = 3
+    fotogrammi_raffica: int = 3
 
     # Ritaglio centrale, frazione del fotogramma tenuta per lato.
     #
@@ -98,7 +121,24 @@ class ImpostazioniCamera:
     # riconoscimento lavora su parole.
     #
     # Si regola dal mirino senza toccare il codice: `--ritaglio 0.9`.
-    ritaglio: float = 0.80
+    #
+    # Ora è 1,0, cioè non si ritaglia. Misurato dopo aver introdotto la
+    # rotazione: a fotogramma intero l'etichetta si legge meglio (`NERO D'AVOL |
+    # SICILIA`, sicurezza 87) che ritagliata a 0,80 (`NERO D'AV | SICILIA`, 78).
+    # La distorsione ai bordi c'è, ma l'etichetta di una bottiglia in piedi
+    # occupa il fotogramma per il lungo, e tagliare i bordi taglia le parole.
+    ritaglio: float = 1.0
+
+    # Di quanto ruotare il fotogramma prima di guardarlo, in gradi orari.
+    #
+    # La camera è montata ruotata di 90°, ed è la sua posizione GIUSTA: una
+    # bottiglia è alta e stretta, e un sensore 16:9 girato di lato la inquadra
+    # per il lungo. Il fotogramma che ne esce, però, ha il testo dell'etichetta
+    # coricato, e un riconoscitore di testo lavora su righe orizzontali.
+    #
+    # Raddrizzare qui costa una trasposizione di memoria e fa la differenza fra
+    # `AVOLA | SILIA | NER` e `NERO D'AVOLA | SICILIA`.
+    rotazione: int = 90
 
     # Attesa fra accensione della luce dello scatto e primo fotogramma utile.
     assestamento_luce_s: float = 0.15
@@ -253,6 +293,16 @@ class Camera:
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         return cap
 
+    def _raddrizza(self, frame):
+        """Rimette il fotogramma per il verso in cui si legge."""
+        if self.imp.rotazione == 90:
+            return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        if self.imp.rotazione == 180:
+            return cv2.rotate(frame, cv2.ROTATE_180)
+        if self.imp.rotazione == 270:
+            return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        return frame
+
     def scatta(self, *, attesa_luce: float | None = None) -> Scatto:
         """Esegue una raffica e restituisce il fotogramma più nitido.
 
@@ -289,6 +339,9 @@ class Camera:
         finally:
             cap.release()
 
+        # Prima si raddrizza, poi si ritaglia: il ritaglio è centrato, e su
+        # un'immagine coricata terrebbe la fascia sbagliata della bottiglia.
+        migliore = self._raddrizza(migliore)
         return Scatto(
             immagine=ritaglia_centro(migliore, self.imp.ritaglio),
             nitidezza=migliore_n,

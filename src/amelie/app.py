@@ -88,6 +88,9 @@ TETTO_RACCONTO_S = 900.0
 # ristorante non deve ritararlo ogni sera. Sta in `var`, che e' l'unica cartella
 # del progetto che l'unita' systemd lascia scrivibile.
 PERCORSO_VOLUME = RADICE / "var" / "volume"
+# Dove finiscono le bottiglie che il dispositivo non ha saputo riconoscere,
+# quando qualcuno lo segnala toccando lo schermo. Vedi `segnala()`.
+CARTELLA_SEGNALAZIONI = RADICE / "var" / "segnalazioni"
 # Di quanto sale e scende a ogni tocco. Dieci passi da un capo all'altro: meno
 # non si sente, di piu' non si regola.
 PASSO_VOLUME = 10
@@ -649,7 +652,9 @@ class Amelie:
                 if self.voce:
                     self.voce.zittisci()
             elif e is Effetto.MOSTRA_CANDIDATI:
-                self._pubblica({"tipo": "candidati", "voci": self._candidati})
+                self._pubblica({"tipo": "candidati", "voci": self._candidati,
+                                "nessuno": self.lex.frase("schermo", "nessuno_di_questi",
+                                                          lingua=self.lingua)})
         except Exception as ex:                             # noqa: BLE001
             # Un effetto che fallisce non deve MAI fermare la macchina a stati:
             # un errore dell'MCU deve costare un anello spento, non il
@@ -737,6 +742,9 @@ class Amelie:
             return
 
         self._righe = [r.testo for r in lettura.righe]
+        # Si tiene l'ultimo scatto: se l'ospite segnala che il vino non e' fra
+        # quelli proposti, e' l'unica cosa che permette di capire perche'.
+        self._ultimo_scatto = scatto.immagine
         log.info("lette %d righe in %.1f s (nitidezza %.0f)",
                  len(self._righe), lettura.durata_s, scatto.nitidezza)
         if self._righe:
@@ -864,6 +872,55 @@ class Amelie:
         else:
             return {"ok": False, "motivo": "azione sconosciuta"}
         return {"ok": True, **lettore.istantanea()}
+
+    def segnala(self) -> dict:
+        """«Nessuno di questi»: si mette da parte la bottiglia per capirla dopo.
+
+        È la sola cosa che il dispositivo non può risolvere da solo — un OCR che
+        legge male, un vino che non c'è nel database, un'etichetta con un
+        carattere che il modello non conosce — e senza questo bottone quel caso
+        sparisce: l'ospite tocca a caso o aspetta, e chi deve correggere non
+        sa nemmeno che è successo.
+
+        Si salva quello che serve a rifare il caso a tavolino: **lo scatto vero**
+        e le righe che l'OCR ne ha tirato fuori. Un rapporto senza l'immagine
+        vale poco: si saprebbe che ha sbagliato, non perché.
+        """
+        from datetime import datetime
+
+        quando = datetime.now()
+        nome = quando.strftime("%Y%m%d-%H%M%S")
+        cartella = CARTELLA_SEGNALAZIONI / nome
+        rapporto = {
+            "quando": quando.isoformat(timespec="seconds"),
+            "lingua": self.lingua,
+            "righe_lette": list(getattr(self, "_righe", [])),
+            "livello": self._fatti.livello.value,
+            "sicurezza": round(self._fatti.sicurezza),
+            "proposte": list(self._candidati),
+            "immagine": None,
+        }
+        try:
+            cartella.mkdir(parents=True, exist_ok=True)
+            scatto = getattr(self, "_ultimo_scatto", None)
+            if scatto is not None:
+                import cv2
+                percorso = cartella / "bottiglia.jpg"
+                if cv2.imwrite(str(percorso), scatto):
+                    rapporto["immagine"] = percorso.name
+            (cartella / "segnalazione.json").write_text(
+                json.dumps(rapporto, ensure_ascii=False, indent=2),
+                encoding="utf-8")
+        except OSError as e:
+            log.warning("segnalazione non salvata: %s", e)
+            return {"ok": False}
+
+        log.info("segnalata una bottiglia non riconosciuta in %s", cartella)
+        # Il tavolo non deve restare fermo su una schermata di scelta: si
+        # racconta comunque il piu' generico che si sa dire, che e' meglio di
+        # niente, e la segnalazione resta li' per chi la guardera'.
+        self.macchina.invia(Evento.CANDIDATO_SCELTO)
+        return {"ok": True, "cartella": nome}
 
     def scegli(self, indice: int) -> None:
         """L'ospite ha toccato uno dei candidati.
@@ -1033,6 +1090,10 @@ def crea_app(amelie: Amelie):
         return StreamingResponse(flusso(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache",
                                           "X-Accel-Buffering": "no"})
+
+    @app.post("/segnala")
+    async def segnala():
+        return JSONResponse(amelie.segnala())
 
     @app.post("/scegli/{indice}")
     async def scegli(indice: int):

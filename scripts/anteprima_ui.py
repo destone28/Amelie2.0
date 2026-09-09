@@ -93,7 +93,7 @@ SCENE: dict[str, list[dict]] = {
 
     "conferma": [
         LINGUA_IT, {"tipo": "stato", "vista": "conferma"},
-        {"tipo": "candidati", "voci": [
+        {"tipo": "candidati", "nessuno": "Nessuno di questi", "voci": [
             "Barolo Cannubi — Marchesi di Barolo",
             "Cannubi Barolo — Réva",
             "Barolo Bussia — Tenuta Rocca"]}],
