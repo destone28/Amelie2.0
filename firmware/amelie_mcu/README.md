@@ -51,10 +51,15 @@ arduino-cli board list      # dà l'indirizzo di rete, es. <indirizzo-della-boar
 arduino-cli compile -b arduino:zephyr:unoq --upload -p <indirizzo> firmware/amelie_mcu
 ```
 
-Va lanciato **da un terminale vero**, collegandosi alla board: il protocollo di
-rete può chiedere la password dell'utente `arduino`, e da uno script
-non interattivo fallisce con *«user input not supported in non interactive
-mode»*.
+Va lanciato **da un terminale vero**, collegandosi alla board: chiede la
+password dell'utente `arduino`, e da uno script non interattivo fallisce con
+*«user input not supported in non interactive mode»*.
+
+Non è aggirabile. L'upload passa da `remoteocd`, che apre una connessione SSH
+verso la board e ci esegue OpenOCD, e quel programma accetta **solo la
+password**: `ssh: unable to authenticate, attempted methods [none password]`.
+Una chiave già configurata non serve, e `--upload-field password=` vuoto viene
+rifiutato. La compilazione invece non chiede niente.
 
 ## Compilarlo senza la board
 
