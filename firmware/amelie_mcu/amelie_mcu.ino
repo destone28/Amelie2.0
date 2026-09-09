@@ -80,6 +80,7 @@
 #include <Wire.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/i2c.h>
+#include <zephyr/kernel.h>
 
 /* ─── tutto ciò che si dichiara, prima di qualsiasi funzione (vincolo 2) ────── */
 
@@ -157,6 +158,12 @@ static uint32_t ultima_ricerca = 0;
  * non parte dice solo "non ci sono", e per capire perche' si ricarica il
  * firmware con delle stampe - mezz'ora ogni volta. */
 static int passo_tof = -1;
+
+/* Il respiro gira su un filo suo finche' il ponte non e' pronto: vedi
+ * `filo_respiro()` per il perche'. */
+static K_THREAD_STACK_DEFINE(pila_respiro, 1024);
+static struct k_thread dati_respiro;
+static volatile bool anima = false;
 
 static bool respiro = true;
 static uint8_t fase = 0;
@@ -474,32 +481,73 @@ static void respira() {
   fase += RESPIRO_PASSO;
 }
 
+/* Il respiro, su un filo a parte, finche' Linux non e' in piedi.
+ *
+ * ── PERCHE' UN FILO ─────────────────────────────────────────────────────────
+ *
+ * `Bridge.begin()` contiene, nella sua libreria:
+ *
+ *     serial_ptr->begin(baud);
+ *     while (!*serial_ptr) { k_yield(); }
+ *
+ * cioe' ASPETTA CHE LINUX APRA LA SERIALE, che succede quando parte
+ * `arduino-router`: una quarantina di secondi dopo l'accensione. Finche' quella
+ * riga non passa, `setup()` non finisce e `loop()` non gira - e l'anello
+ * restava spento fino a tre o quattro secondi prima dello schermo, mentre la
+ * matrice di LED della board mostra il logo Arduino da subito.
+ *
+ * Il microcontrollore, invece, e' pronto in millisecondi. Qui l'anello si
+ * accende PRIMA di chiamare il ponte, e lo fa respirare un filo separato mentre
+ * quell'attesa scorre. Quando il ponte e' pronto il filo esce, e il respiro
+ * prosegue dal `loop()`: mai due padroni sullo stesso bus insieme.
+ */
+static void filo_respiro(void *a, void *b, void *c) {
+  ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
+  while (anima) {
+    if (c_anello) respira();
+    k_msleep(RESPIRO_MS);
+  }
+}
+
 void setup() {
+  /* PRIMA la luce, poi il ponte. In quest'ordine e non nell'altro. */
+  libera_il_bus();
+  Wire1.begin();
+  /* 100 kHz: e' cio' che faceva `ModulinoClass::begin()`, e i Modulino sono
+   * tarati su quello. Tolta di mezzo la libreria, il clock va rimesso a mano. */
+  Wire1.setClock(100000);
+
+  /* L'anello subito: e' l'unica cosa che dice "sono vivo" nei quaranta secondi
+   * in cui lo schermo e' ancora nero. Presente = ha risposto a una scrittura,
+   * non = non ha protestato. */
+  for (uint8_t i = 0; i < 10 && !c_anello; i++) {
+    if (risponde(IND_ANELLO)) c_anello = anello_scrivi(0, 0, 0, 0);
+    if (!c_anello) k_msleep(20);
+  }
+
+  anima = true;
+  k_thread_create(&dati_respiro, pila_respiro, K_THREAD_STACK_SIZEOF(pila_respiro),
+                  filo_respiro, NULL, NULL, NULL, 7, 0, K_NO_WAIT);
+
+  /* Qui si aspetta Linux, e puo' volerci mezzo minuto. L'anello intanto
+   * respira. */
   Bridge.begin();
 
-  /* I METODI SI DICHIARANO PRIMA DI TOCCARE L'I2C: se qualcosa non rispondesse,
-   * setup() non finirebbe e Linux non vedrebbe MAI i metodi. Il sintomo sarebbe
-   * identico a un firmware non caricato. */
+  /* Il ponte c'e': il filo ha finito e si ritira, prima che il `loop()`
+   * cominci a scrivere sullo stesso bus. */
+  anima = false;
+  k_thread_join(&dati_respiro, K_MSEC(500));
+
+  /* I metodi si dichiarano appena il ponte e' pronto. Prima si dichiaravano
+   * anche prima di toccare l'I2C, perche' un modulo che non rispondeva poteva
+   * impedire a `setup()` di finire; ora ogni transazione e' limitata, e
+   * comunque `Bridge.begin()` non ritorna finche' Linux non c'e'. */
   Bridge.provide("set_anello", set_anello);
   Bridge.provide("distanza", distanza);
   Bridge.provide("moduli", moduli);
   Bridge.provide("versione", versione);
   Bridge.provide("scansiona", scansiona);
   Bridge.provide("stato_tof", stato_tof);
-
-  /* Su UNO Q i Modulino stanno su Wire1, che e' l'i2c4 dello STM32.
-   *
-   * PRIMA di aprirlo si sblocca: se un modulo e' stato resettato a meta' di un
-   * byte tiene SDA a zero, e da li' non passa piu' niente - nemmeno verso
-   * l'anello. Vedi `libera_il_bus()`.
-   *
-   * Poi si apre e basta: la ricerca si fa nel loop, cosi' il ponte risponde
-   * subito e l'anello puo' respirare mentre il sensore finisce di avviarsi. */
-  libera_il_bus();
-  Wire1.begin();
-  /* 100 kHz: e' cio' che faceva `ModulinoClass::begin()`, e i Modulino sono
-   * tarati su quello. Toltala di mezzo, il clock va rimesso a mano. */
-  Wire1.setClock(100000);
 }
 
 void loop() {

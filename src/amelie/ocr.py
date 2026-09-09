@@ -44,14 +44,34 @@ RADICE_MODELLI = Path(__file__).resolve().parents[2] / "models"
 class ImpostazioniOCR:
     """Parametri del riconoscimento."""
 
-    # Lato massimo dell'immagine data al rilevatore. Più basso = più veloce e
-    # meno sensibile al testo piccolo. 736 è il default di PP-OCR; su A53
-    # conviene scendere se il tempo per fotogramma non regge.
+    # Lato massimo dell'immagine data al rilevatore. 736 è il default di PP-OCR.
+    #
+    # Verrebbe da alzarlo, e sarebbe sbagliato: **misurato** su tre scatti veri
+    # della stessa etichetta, 736 legge `D'AVOLA | SICILIA | NERO` in 4,9 s,
+    # mentre 1536 legge `AVOLA | SICILIA | (0 | 10 | NERO` in 12,0 s. Più
+    # risoluzione ha dato più spazzatura e il doppio del tempo: il modello di
+    # riconoscimento lavora su ritagli normalizzati, e il collo di bottiglia
+    # non era la risoluzione.
     lato_massimo: int = 736
 
-    # Il classificatore di orientamento serve quando il testo può essere
-    # capovolto. Qui non può: la bottiglia sta in piedi sul supporto.
-    usa_classificatore: bool = False
+    # Il classificatore di orientamento. Era spento, con la motivazione che la
+    # bottiglia sta in piedi e il testo non può essere capovolto.
+    #
+    # **La motivazione era sbagliata, e spegnerlo costava quasi tutto.** Su una
+    # bottiglia il testo dell'etichetta non è quasi mai orizzontale nel
+    # fotogramma: la bottiglia è cilindrica e appoggiata, la camera la guarda
+    # dal basso e di sbieco, e su un'etichetta come «NERO D'AVOLA / SICILIA»
+    # scritta lungo l'asse il testo arriva ruotato di novanta gradi.
+    #
+    # Misurato sugli stessi tre scatti:
+    #
+    #     spento    `DOLA | SILIA | NER`        vitigno, 61   6,6 s
+    #     acceso    `D'AVOLA | SICILIA | NERO`  tipologia, 87 4,9 s
+    #
+    # Più accurato **e** più veloce: il classificatore raddrizza il ritaglio
+    # prima di riconoscerlo, e un ritaglio dritto si legge meglio e prima di uno
+    # storto. Non è un costo, è un risparmio.
+    usa_classificatore: bool = True
 
     # Sotto questa confidenza la riga è quasi sempre rumore (bordi
     # dell'etichetta, riflessi, texture della carta).

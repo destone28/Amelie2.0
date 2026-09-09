@@ -86,11 +86,16 @@ class ImpostazioniCamera:
     # produttore, denominazione e annata su tutta la sua altezza, e a 0,58 ne
     # entrava la fascia centrale — spesso proprio quella con meno parole utili.
     #
-    # A 0,80 l'area utile quasi raddoppia. La distorsione ai bordi cresce, ma
-    # l'OCR sbaglia qualche carattere su una riga in più, mentre prima quella
-    # riga non la vedeva affatto: e il riconoscimento lavora su parole intere,
-    # non su singoli caratteri, quindi una riga storta vale molto più di una
-    # riga assente.
+    # A 0,80 l'area utile quasi raddoppia. MISURATO su tre scatti veri della
+    # stessa etichetta, a parità di tutto il resto:
+    #
+    #     0,58   `'AVO | SICILIA`             tipologia, 78
+    #     0,70   `'AVOL | SICILIA | ERO`      tipologia, 87
+    #     0,80   `D'AVOLA | SICILIA | NERO`   tipologia, 87
+    #
+    # Non è la qualità dei caratteri a cambiare: sono le PAROLE INTERE. A 0,58
+    # la prima e l'ultima lettera cadevano fuori dal ritaglio, e il
+    # riconoscimento lavora su parole.
     #
     # Si regola dal mirino senza toccare il codice: `--ritaglio 0.9`.
     ritaglio: float = 0.80

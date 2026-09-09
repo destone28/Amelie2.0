@@ -116,9 +116,33 @@ class TestLettura:
 
 
 class TestImpostazioni:
-    def test_classificatore_disattivato(self):
-        """Sul supporto l'etichetta è sempre dritta: il cls è tempo sprecato."""
-        assert ImpostazioniOCR().usa_classificatore is False
+    def test_il_classificatore_di_orientamento_resta_acceso(self):
+        """Era spento, e spegnerlo costava quasi tutto.
+
+        La motivazione era «sul supporto l'etichetta è sempre dritta, il
+        classificatore è tempo sprecato». Sbagliata due volte. Su una bottiglia
+        il testo non è quasi mai orizzontale nel fotogramma — cilindro,
+        appoggio, camera che guarda dal basso e di sbieco — e su un'etichetta
+        scritta lungo l'asse arriva ruotato di novanta gradi.
+
+        Misurato su tre scatti veri della stessa bottiglia:
+
+            spento    `DOLA | SILIA | NER`        vitigno, 61   6,6 s
+            acceso    `D'AVOLA | SICILIA | NERO`  tipologia, 87 4,9 s
+
+        Più accurato **e** più veloce: raddrizzare un ritaglio prima di
+        riconoscerlo fa risparmiare al riconoscitore il lavoro di indovinare.
+        """
+        assert ImpostazioniOCR().usa_classificatore is True
+
+    def test_non_si_alza_la_risoluzione_del_rilevatore(self):
+        """L'altra cosa che verrebbe da fare, e che peggiora.
+
+        Sugli stessi tre scatti, 1536 ha dato `AVOLA | SICILIA | (0 | 10 | NERO`
+        in 12,0 s contro `D'AVOLA | SICILIA | NERO` in 4,9 s a 736: più
+        spazzatura e il doppio del tempo.
+        """
+        assert ImpostazioniOCR().lato_massimo == 736
 
     def test_immutabile(self):
         with pytest.raises(Exception):
