@@ -698,6 +698,27 @@ class TestFirmwareEPythonDAccordo:
             f"lo sketch somma {bit}, NOMI_MODULI ne prevede {atteso} "
             f"({NOMI_MODULI}): uno dei due lati è rimasto indietro")
 
+    def test_lo_stato_tecnico_dice_che_firmware_c_e(self):
+        """Si apre dal vetro tenendo premuto l'angolo, senza tastiera: montando
+        è l'unico modo di vedere da lì se sull'MCU c'è ancora il firmware di
+        prima, quello in cui i bit dei moduli significavano un'altra cosa."""
+        from amelie.app import crea_app
+
+        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                  senza_voce=True, senza_modello=True))
+        try:
+            rotta = next(r for r in crea_app(a).routes
+                         if getattr(r, "path", None) == "/stato")
+            import asyncio
+            import json
+            corpo = json.loads(asyncio.run(rotta.endpoint()).body)
+        finally:
+            a.matcher.chiudi()
+            a.narratore.chiudi()
+        from amelie.bridge import PROTOCOLLO_ATTESO
+        assert corpo["protocollo"] == PROTOCOLLO_ATTESO
+        assert corpo["moduli"] == {"anello": True, "distanza": True}
+
     def test_la_versione_del_protocollo_e_la_stessa_nei_due_linguaggi(self):
         """È il numero che impedisce di leggere a rovescio i bit di un MCU
         vecchio: se i due lati non concordano, non protegge da niente."""

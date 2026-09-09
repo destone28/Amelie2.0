@@ -198,7 +198,20 @@ class Ponte:
         proprio a chi sta montando. Meglio «non lo so» che una risposta
         rovesciata.
         """
-        v_mcu = self.versione()
+        return self._moduli_secondo(self.versione())
+
+    def diagnosi(self) -> dict[str, Any]:
+        """Versione e moduli in una volta sola.
+
+        La pagina di stato le vuole tutte e due, e chiederle separatamente
+        significherebbe interrogare l'MCU tre volte invece di due: ogni chiamata
+        apre e chiude un socket, e la pagina di stato si guarda proprio quando
+        qualcosa non risponde.
+        """
+        v = self.versione()
+        return {"protocollo": v, "moduli": self._moduli_secondo(v)}
+
+    def _moduli_secondo(self, v_mcu: int | None) -> dict[str, bool]:
         if v_mcu != PROTOCOLLO_ATTESO:
             log.warning(
                 "l'MCU parla il protocollo %s, qui si aspetta il %d: i bit dei "

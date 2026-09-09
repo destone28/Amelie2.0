@@ -1018,6 +1018,13 @@ def crea_app(amelie: Amelie):
         return JSONResponse({
             "stato": amelie.macchina.stato.value,
             "mcu": amelie.ponte.disponibile,
+            # Che protocollo parla il firmware, e cosa vede. Serve montando: lo
+            # stato tecnico si apre dal vetro tenendo premuto l'angolo, senza
+            # tastiera, ed è l'unico modo di vedere da lì se sull'MCU c'è ancora
+            # il firmware di prima — quello in cui i bit dei moduli
+            # significavano un'altra cosa. Una chiamata sola per tutti e due:
+            # questa pagina si guarda quando qualcosa non risponde.
+            **amelie.ponte.diagnosi(),
             "camera": amelie.camera is not None,
             "voce": bool(amelie.voce and amelie.voce.disponibile),
             "volume": amelie.volume,
