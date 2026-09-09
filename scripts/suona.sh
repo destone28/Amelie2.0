@@ -22,7 +22,7 @@ if [ -z "$CARD" ]; then
   echo "Nessuna scheda audio." >&2
   echo "E' la corsa all'avvio nota: la catena ADSP -> APR -> clock 'audio' ->" >&2
   echo "pinctrl LPI -> scheda audio non si e' completata. Rimedio: riavvia." >&2
-  echo "  sudo systemctl restart amelie-audio   (se l'unita' e' installata)" >&2
+  echo "  sudo systemctl restart amelie-audio-guard" >&2
   exit 1
 fi
 PCM="hw:${CARD},3"

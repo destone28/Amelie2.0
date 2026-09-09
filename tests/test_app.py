@@ -6,6 +6,8 @@ flusso verso lo schermo siano coerenti fra loro, senza dipendere da una
 bottiglia vera.
 """
 
+from pathlib import Path
+
 import pytest
 
 from amelie.app import COLORE_ANELLO, VISTA, Amelie, Configurazione
@@ -117,10 +119,18 @@ class TestColore:
             Colore(0, 0, 0, luminosita=200)
 
     def test_l_anello_resta_a_bassa_luminosita(self):
-        """Due Pixels a piena potenza sono mezzo ampere sui cavetti Qwiic."""
-        from amelie.bridge import AMBRA, VERDE, ROSSO
+        """Otto LED accesi tutta la sera su un cavetto Qwiic da 28 AWG.
+
+        I colori di stato restano bassi perche' ci stanno per ore. L'unico che
+        va alto e' la luce dello scatto, che dura la frazione di secondo della
+        raffica: se un giorno finisse fra i colori di stato, il rail 3,3 V
+        cederebbe e con lui l'I2C — e il sintomo sarebbe un guasto dei moduli.
+        """
+        from amelie.bridge import AMBRA, BIANCO_SCATTO, ROSSO, VERDE
         for c in (AMBRA, VERDE, ROSSO):
             assert c.luminosita <= 40
+        assert BIANCO_SCATTO.luminosita > 40, \
+            "la luce dello scatto deve essere davvero piu' forte degli stati"
 
 
 class TestDifettiTrovatiDallaVerifica:
@@ -166,8 +176,8 @@ class TestDifettiTrovatiDallaVerifica:
         assert esito[0].livello is not Stato and esito[0].nome
 
     def test_non_si_riprova_all_infinito(self, amelie):
-        """Un oggetto illeggibile sul piatto non deve far lampeggiare il flash
-        tutta la sera."""
+        """Un oggetto illeggibile sul piatto non deve far lampeggiare l'anello
+        e girare l'OCR tutta la sera, su una board senza ventola."""
         from amelie.app import TENTATIVI_MAX
         assert TENTATIVI_MAX <= 5
 
@@ -592,6 +602,304 @@ class TestPonteOnesto:
         assert not p.disponibile
 
 
+class TestLaLinguaTornaACasa:
+    """Tolta la bottiglia, la lingua torna quella di partenza.
+
+    Lo dichiaravano il commento di `Configurazione.lingua` e la guida di
+    montaggio, e non lo faceva nessuno: la lingua si scriveva solo all'avvio e
+    dentro `cambia_lingua`. Il tavolo dopo trovava l'inglese lasciato dal
+    precedente, senza sapere che si cambia toccando una bandierina.
+    """
+
+    @pytest.fixture
+    def amelie(self):
+        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                  senza_voce=True, senza_modello=True,
+                                  lingua="it"))
+        yield a
+        a.matcher.chiudi()
+        a.narratore.chiudi()
+
+    def test_torna_alla_lingua_di_casa_quando_si_torna_in_attesa(self, amelie):
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.cambia_lingua("en")
+        assert amelie.lingua == "en"
+
+        amelie.macchina.invia(Evento.BOTTIGLIA_ASSENTE)
+        assert amelie.macchina.stato is Stato.ATTESA
+        assert amelie.lingua == "it"
+        assert amelie.narratore.lingua == "it", \
+            "anche il narratore deve tornare indietro, non solo lo schermo"
+
+    def test_la_schermata_di_attesa_esce_gia_nella_lingua_giusta(self, amelie):
+        """Prima di ridisegnare, non dopo: altrimenti l'invito comparirebbe in
+        inglese e cambierebbe sotto gli occhi di chi si siede."""
+        detti = []
+        amelie._pubblica = detti.append
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.cambia_lingua("en")
+        detti.clear()
+
+        amelie.macchina.invia(Evento.BOTTIGLIA_ASSENTE)
+        lingue = [m for m in detti if m.get("tipo") == "lingua"]
+        stati = [m for m in detti if m.get("tipo") == "stato"]
+        assert lingue and lingue[0]["lingua"] == "it"
+        assert stati, "la schermata d'attesa dev'essere stata ridisegnata"
+        assert detti.index(lingue[0]) < detti.index(stati[-1])
+
+    def test_non_si_annuncia_a_tavolo_vuoto(self, amelie):
+        """Un dispositivo che parla da solo in sala non va bene."""
+        chiesti = []
+        amelie._chiedi_annuncio = chiesti.append
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.cambia_lingua("en")
+        chiesti.clear()
+
+        amelie.macchina.invia(Evento.BOTTIGLIA_ASSENTE)
+        assert not chiesti, "tornare alla lingua di casa non si annuncia"
+
+    def test_se_la_lingua_non_e_cambiata_non_succede_niente(self, amelie):
+        detti = []
+        amelie._pubblica = detti.append
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.macchina.invia(Evento.BOTTIGLIA_ASSENTE)
+        assert not [m for m in detti if m.get("tipo") == "lingua"]
+
+
+class TestFirmwareEPythonDAccordo:
+    """Il firmware e il codice Python non si leggono a vicenda.
+
+    Lo sketch somma dei bit, `bridge.NOMI_MODULI` li rilegge per nome, e i due
+    stanno in linguaggi diversi su processori diversi. Quando il secondo Pixels
+    è stato tolto, i bit sono passati da tre a due e la distanza da 4 a 2:
+    aggiornare uno solo dei due lati avrebbe prodotto il guasto più difficile di
+    tutti — il montaggio funziona e il dispositivo dice che il sensore non c'è.
+
+    Questi test leggono lo sketch come testo. È rozzo di proposito: qualunque
+    cosa di più raffinato richiederebbe un compilatore C.
+    """
+
+    @staticmethod
+    def _sketch() -> str:
+        return (Path(__file__).resolve().parents[1]
+                / "firmware" / "amelie_mcu" / "amelie_mcu.ino").read_text(
+                    encoding="utf-8")
+
+    def test_i_bit_dello_sketch_sono_quelli_che_python_rilegge(self):
+        import re
+
+        from amelie.bridge import NOMI_MODULI
+
+        corpo = re.search(r"int moduli\(\)\s*\{(.*?)\}", self._sketch(), re.S)
+        assert corpo, "moduli() non si trova nello sketch"
+        bit = [int(b) for b in re.findall(r"\?\s*(\d+)\s*:\s*0", corpo.group(1))]
+        atteso = [1 << i for i in range(len(NOMI_MODULI))]
+        assert bit == atteso, (
+            f"lo sketch somma {bit}, NOMI_MODULI ne prevede {atteso} "
+            f"({NOMI_MODULI}): uno dei due lati è rimasto indietro")
+
+    def test_gli_indirizzi_sono_gli_stessi_nei_due_linguaggi(self):
+        import re
+
+        from amelie.bridge import ANELLO, DISTANZA
+
+        sketch = self._sketch()
+        for nome, atteso in (("IND_ANELLO", ANELLO), ("IND_DISTANZA", DISTANZA)):
+            m = re.search(rf"{nome}\s*=\s*(0x[0-9A-Fa-f]+)", sketch)
+            assert m, f"{nome} non si trova nello sketch"
+            assert int(m.group(1), 16) == atteso, \
+                f"{nome}: sketch {m.group(1)}, bridge.py {atteso:#04x}"
+
+    def test_ogni_metodo_che_python_chiama_lo_sketch_lo_dichiara(self):
+        import re
+
+        sketch = self._sketch()
+        dichiarati = set(re.findall(r'Bridge\.provide\("([^"]+)"', sketch))
+        radice = Path(__file__).resolve().parents[1]
+        bridge = (radice / "src" / "amelie" / "bridge.py").read_text(encoding="utf-8")
+        chiamati = set(re.findall(r'self\.chiama\("([^"]+)"', bridge))
+        assert chiamati <= dichiarati, (
+            f"Python chiama metodi che lo sketch non dichiara: "
+            f"{sorted(chiamati - dichiarati)}")
+
+
+class TestIlFlashNonTorna:
+    """Il secondo Modulino Pixels è stato tolto: che non rientri per sbaglio.
+
+    Non è pignoleria. I nomi del flash erano sparsi in nove file fra firmware,
+    orchestratore, cattura, ponte, test e documenti, e ne bastava uno rimasto
+    per mandare chi monta a cercare un modulo che non esiste — che è
+    esattamente la classe di perdita di tempo che questo progetto continua a
+    incontrare.
+    """
+
+    # I nomi che non devono più esistere come CODICE. Nei commenti si possono
+    # nominare: la nota storica che spiega perché il modulo è sparito vale più
+    # della regola che la vieta.
+    PROIBITI = ("set_flash", "BIANCO_FLASH", "FLASH_E_SCATTA",
+                "assestamento_flash_s", "attesa_flash")
+
+    def test_nessuno_di_quei_nomi_e_rimasto_nel_codice(self):
+        import re
+
+        radice = Path(__file__).resolve().parents[1]
+        sorgenti = [*(radice / "src" / "amelie").rglob("*.py"),
+                    *(radice / "scripts").glob("*.py"),
+                    radice / "firmware" / "amelie_mcu" / "amelie_mcu.ino"]
+        colpe = []
+        for f in sorgenti:
+            for n, riga in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+                spoglia = re.sub(r"(#|//|\*).*$", "", riga)
+                for nome in self.PROIBITI:
+                    if nome in spoglia:
+                        colpe.append(f"{f.relative_to(radice)}:{n}  {riga.strip()}")
+        assert not colpe, "il flash è rientrato:\n  " + "\n  ".join(colpe)
+
+    def test_il_ponte_non_espone_piu_un_flash(self):
+        from amelie.bridge import Ponte
+
+        assert not hasattr(Ponte, "flash")
+
+    def test_c_e_un_solo_pixels_nella_distinta(self):
+        radice = Path(__file__).resolve().parents[1]
+        distinta = (radice / "README.md").read_text(encoding="utf-8")
+        assert "2× Modulino Pixels" not in distinta
+        assert "1× Modulino Pixels" in distinta
+
+
+class TestOgniEffettoHaUnEsecutore:
+    """Un effetto che nessuno esegue è uno stato che non fa niente.
+
+    `Effetto.FLASH_E_SCATTA` è diventato `ILLUMINA_E_SCATTA` in due file: se il
+    rinominio fosse rimasto a metà, la macchina a stati sarebbe entrata in
+    SCANSIONE e non avrebbe scattato mai — e nessun test l'avrebbe detto, perché
+    la transizione sarebbe stata comunque corretta.
+
+    Tre effetti però sono inerti **di proposito**, e vanno tenuti distinti da
+    quelli dimenticati: le tre schermate. Lo schermo non lo disegna l'effetto, lo
+    disegna `_mostra(stato)` a ogni transizione — gli effetti MOSTRA_* e
+    SCHERMO_ATTESA restano nella tabella perché dicono *che cosa* si vede in
+    quello stato, non perché qualcuno li esegua.
+    """
+
+    # Se questa lista si allunga, qualcuno ha aggiunto un effetto e non l'ha
+    # collegato a niente. Se si accorcia, qualcuno l'ha implementato e va tolto
+    # da qui. In tutti e due i casi è una decisione da prendere, non da subire.
+    INERTI = {"SCHERMO_ATTESA", "MOSTRA_RIPOSIZIONA", "MOSTRA_GUASTO"}
+
+    def test_nessun_effetto_resta_inerte_per_distrazione(self):
+        from amelie.state import EFFETTI_INGRESSO, EFFETTI_USCITA
+
+        radice = Path(__file__).resolve().parents[1]
+        app = (radice / "src" / "amelie" / "app.py").read_text(encoding="utf-8")
+        chiesti = {e for effetti in
+                   (*EFFETTI_INGRESSO.values(), *EFFETTI_USCITA.values())
+                   for e in effetti}
+        senza_esecutore = {e.name for e in chiesti
+                           if f"Effetto.{e.name}" not in app and e not in COLORE_ANELLO}
+        assert senza_esecutore == self.INERTI, (
+            f"gli effetti senza esecutore sono cambiati: {sorted(senza_esecutore)}. "
+            f"Se ne hai aggiunto uno, collegalo in `_esegui`; se ne hai "
+            f"implementato uno, toglilo da INERTI")
+
+
+class TestLuceDelloScatto:
+    """L'anello è anche la luce dello scatto, da quando il flash è stato tolto.
+
+    Ed è per questo che ora ha due padroni: la macchina a stati, che gli dà il
+    colore dello stato, e la cattura, che lo porta a bianco per la raffica. Dove
+    i due si incontrano è nato un difetto, e questi test lo tengono chiuso.
+    """
+
+    class CameraRotta:
+        def scatta(self, **_):
+            from amelie.capture import CameraNonDisponibile
+            raise CameraNonDisponibile("staccata")
+
+    class CameraFinta:
+        """Registra il colore dell'anello NELL'ISTANTE dello scatto.
+
+        Guardare solo l'ordine dei comandi non basta: se un giorno l'ambra
+        venisse rimessa PRIMA di `camera.scatta()`, la sequenza resterebbe
+        bianco-poi-ambra e il test passerebbe lo stesso, mentre la raffica
+        avverrebbe al buio.
+        """
+
+        def __init__(self, ponte):
+            self.ponte = ponte
+            self.acceso_quando_ho_scattato = None
+
+        def scatta(self, **_):
+            from amelie.capture import Scatto
+            anelli = [p for m, p in self.ponte.comandi if m == "set_anello"]
+            self.acceso_quando_ho_scattato = anelli[-1] if anelli else None
+            return Scatto(immagine=None, nitidezza=99.0)
+
+    def _amelie(self, fabbrica_camera):
+        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                  senza_voce=True, senza_modello=True))
+        a.camera = fabbrica_camera(a.ponte)
+        a.lettore = object()          # non ci si arriva mai, in questi test
+        a.macchina.stato = Stato.SCANSIONE
+        return a
+
+    @staticmethod
+    def _ultimo_colore(amelie):
+        anelli = [p for m, p in amelie.ponte.comandi if m == "set_anello"]
+        return anelli[-1] if anelli else None
+
+    def test_un_guasto_lascia_l_anello_rosso(self):
+        """Il difetto vero: con un `finally` l'ambra tornava DOPO il rosso.
+
+        L'ordine era: la camera fallisce, la macchina a stati entra in GUASTO e
+        accende il rosso, e il `finally` lo cancellava rimettendo l'ambra. A
+        schermo restava un guasto dichiarato sopra un anello del colore
+        dell'invito — che è esattamente la cosa che schermo e anello non devono
+        mai fare.
+        """
+        from amelie.bridge import ROSSO
+
+        a = self._amelie(lambda _: self.CameraRotta())
+        try:
+            a._scatta_e_leggi()
+            assert a.macchina.stato is Stato.GUASTO
+            assert self._ultimo_colore(a) == (ROSSO.r, ROSSO.g, ROSSO.b,
+                                              ROSSO.luminosita), \
+                "dopo un guasto l'anello deve restare del colore del guasto"
+        finally:
+            a.matcher.chiudi()
+            a.narratore.chiudi()
+
+    def test_il_bianco_non_resta_acceso_durante_l_ocr(self):
+        """Dopo la raffica c'è l'OCR, che dura quattro secondi.
+
+        Quattro secondi di bianco pieno sotto una bottiglia non sono una luce,
+        sono un lampeggiante: l'ambra si rimette subito dopo lo scatto, non
+        alla fine del metodo.
+        """
+        from amelie.bridge import AMBRA, BIANCO_SCATTO
+
+        a = self._amelie(self.CameraFinta)
+        try:
+            # Il lettore finto solleva: si arriva fin qui e non oltre, che è
+            # esattamente il punto in cui l'anello dev'essere già tornato ambra.
+            try:
+                a._scatta_e_leggi()
+            except Exception:                               # noqa: BLE001
+                pass
+            colori = [p for m, p in a.ponte.comandi if m == "set_anello"]
+            bianco = (BIANCO_SCATTO.r, BIANCO_SCATTO.g, BIANCO_SCATTO.b,
+                      BIANCO_SCATTO.luminosita)
+            ambra = (AMBRA.r, AMBRA.g, AMBRA.b, AMBRA.luminosita)
+            assert a.camera.acceso_quando_ho_scattato == bianco, \
+                "la raffica dev'essere avvenuta con la luce accesa"
+            assert colori[-1] == ambra, \
+                "dopo lo scatto l'ambra deve tornare subito, prima dell'OCR"
+        finally:
+            a.matcher.chiudi()
+            a.narratore.chiudi()
+
+
 class TestModuliVisti:
     """`moduli()` è lo strumento del montaggio: si collega un pezzo per volta e
     si chiede al dispositivo se lo vede, invece di dedurlo da un LED spento.
@@ -610,17 +918,28 @@ class TestModuliVisti:
         return p
 
     def test_i_bit_stanno_nell_ordine_dello_sketch(self):
-        assert self._ponte(0).moduli() == {
-            "anello": False, "flash": False, "distanza": False}
+        assert self._ponte(0).moduli() == {"anello": False, "distanza": False}
         assert self._ponte(1).moduli()["anello"]
-        assert self._ponte(2).moduli()["flash"]
-        assert self._ponte(4).moduli()["distanza"]
-        assert all(self._ponte(7).moduli().values())
+        assert self._ponte(2).moduli()["distanza"]
+        assert all(self._ponte(3).moduli().values())
 
     def test_il_sensore_da_solo_non_e_l_anello(self):
-        """Il caso del montaggio vero: sensore collegato, anelli ancora no."""
-        assert self._ponte(4).moduli() == {
-            "anello": False, "flash": False, "distanza": True}
+        """Il caso del montaggio vero: sensore collegato, anello ancora no."""
+        assert self._ponte(2).moduli() == {"anello": False, "distanza": True}
+
+    def test_i_nomi_sono_quelli_che_lo_sketch_dichiara(self):
+        """Il numero dei bit e il numero dei nomi sono la stessa cosa.
+
+        Quando il secondo Pixels è stato tolto, i bit sono passati da tre a due
+        e la distanza da 4 a 2: una tabella rimasta indietro avrebbe detto
+        «sensore assente» a un sensore collegato, che è il guasto più difficile
+        da capire di tutti — il montaggio funziona e il dispositivo dice di no.
+        """
+        from amelie.bridge import NOMI_MODULI
+
+        assert NOMI_MODULI == ("anello", "distanza")
+        pieno = (1 << len(NOMI_MODULI)) - 1
+        assert set(self._ponte(pieno).moduli()) == set(NOMI_MODULI)
 
     def test_un_firmware_vecchio_dice_non_vedo_niente(self):
         from amelie.bridge import ErroreMCU, PonteNonDisponibile
@@ -629,11 +948,10 @@ class TestModuliVisti:
                        PonteNonDisponibile("niente socket"),
                        OSError("socket sparito")):
             assert self._ponte(guasto).moduli() == {
-                "anello": False, "flash": False, "distanza": False}
+                "anello": False, "distanza": False}
 
     def test_una_risposta_senza_senso_non_fa_saltare_niente(self):
-        assert self._ponte(None).moduli() == {
-            "anello": False, "flash": False, "distanza": False}
+        assert self._ponte(None).moduli() == {"anello": False, "distanza": False}
 
     def test_il_banco_simulato_ha_tutto_collegato(self):
         from amelie.bridge import PonteSimulato

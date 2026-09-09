@@ -18,7 +18,7 @@ Il momento in cui l'ospite appoggia la bottiglia è l'unica cosa che il
 dispositivo non controlla. Da lì:
 
     assestamento    0,6 s   la bottiglia smette di oscillare
-    scatto          0,3 s   flash, scarto dei fotogrammi vecchi, raffica
+    scatto          0,3 s   luce, scarto dei fotogrammi vecchi, raffica
     OCR             3,8 s   il vero costo
     riconoscimento  ~0 s    SQLite
     racconto        ~0 s    se è in cache; 65 s se va generato dal vivo
@@ -42,8 +42,8 @@ from pathlib import Path
 from typing import Any
 
 from .bridge import (
-    AMBRA, BIANCO_FLASH, ROSSO, SPENTO, VERDE,
-    Ponte, PonteNonDisponibile, PonteSimulato, Presenza,
+    AMBRA, BIANCO_SCATTO, ROSSO, SPENTO, VERDE,
+    Colore, ErroreMCU, Ponte, PonteNonDisponibile, PonteSimulato, Presenza,
 )
 from .capture import Camera, CameraNonDisponibile, blocca_esposizione
 from .matcher import Fatti, Livello, Matcher
@@ -52,7 +52,7 @@ from .ocr import Lettore, OCRNonDisponibile
 from .speech import (
     VOLUME_PREDEFINITO, ImpostazioniVoce, Riproduttore, Voce, VoceNonDisponibile,
 )
-from .state import DURATE_S, Effetto, Evento, Macchina, Stato
+from .state import DURATE_S, EFFETTI_INGRESSO, Effetto, Evento, Macchina, Stato
 
 log = logging.getLogger("amelie")
 
@@ -164,7 +164,7 @@ class Amelie:
         self._fatti: Fatti = Fatti()
         self._candidati: list[str] = []
         # Quante volte di fila l'OCR non ha letto nulla. Senza un tetto, un
-        # oggetto illeggibile lasciato sul piatto fa lampeggiare il flash e
+        # oggetto illeggibile lasciato sul piatto fa lampeggiare l'anello e
         # girare l'OCR per tutta la sera, su una board senza ventola.
         self._tentativi = 0
         self._ferma_voce = threading.Event()
@@ -211,9 +211,35 @@ class Amelie:
         if t.cambia_stato or t.rientro:
             log.info("%s -> %s", t.da.value, t.a.value)
             self._scadenza = (time.monotonic() + t.durata_s) if t.durata_s else None
+            # Il tavolo e' finito: si torna alla lingua di casa PRIMA di
+            # ridisegnare, cosi' la schermata d'attesa esce gia' nella lingua
+            # giusta invece di cambiare sotto gli occhi di chi arriva.
+            if t.cambia_stato and t.a is Stato.ATTESA:
+                self._torna_alla_lingua_di_casa()
             self._mostra(t.a)
         for e in t.effetti:
             self._esegui(e)
+
+    def _torna_alla_lingua_di_casa(self) -> None:
+        """Tolta la bottiglia, la lingua torna quella di partenza.
+
+        Il tavolo dopo deve trovare il dispositivo come lo trova sempre: chi si
+        siede non ha modo di sapere che l'inglese ce l'ha lasciato qualcun
+        altro, ne' che la bandierina si tocca per cambiarlo.
+
+        Senza voce e senza annuncio: qui non c'e' nessuno a cui dirlo, e un
+        dispositivo che parla da solo a tavolo vuoto in un ristorante e' una
+        cosa che non si puo' lasciare in sala.
+        """
+        if self.lingua == self.cfg.lingua:
+            return
+        log.info("tavolo finito, torno alla lingua di casa: %s -> %s",
+                 self.lingua, self.cfg.lingua)
+        self.lingua = self.cfg.lingua
+        self.narratore.lingua = self.cfg.lingua
+        if self.voce is not None:
+            self.voce.per_lingua(self.cfg.lingua)
+        self._manda_lingua()
 
     def _mostra(self, stato: Stato) -> None:
         """Che cosa vede l'ospite. Le frasi vengono dal lessico, non da qui.
@@ -555,11 +581,26 @@ class Amelie:
 
     # -------------------------------------------------------------- effetti
 
+    def _colore_dello_stato(self) -> Colore | None:
+        """Di che colore vuole l'anello lo stato in cui siamo ADESSO.
+
+        Serve a rimettere l'anello dopo la raffica. Cablare AMBRA funzionava
+        finche' SCANSIONE era l'unico stato da cui si scatta, ma era una
+        coincidenza scritta in due posti: bastava cambiare ANELLO_LAVORO in
+        state.py perche' la pipeline continuasse a rimettere l'ambra di prima.
+        E se nel frattempo la bottiglia e' stata tolta - succede, la raffica
+        dura mezzo secondo - lo stato non e' piu' quello di partenza.
+        """
+        for effetto in EFFETTI_INGRESSO.get(self.macchina.stato, ()):
+            if effetto in COLORE_ANELLO:
+                return COLORE_ANELLO[effetto]
+        return None
+
     def _esegui(self, e: Effetto) -> None:
         try:
             if e in COLORE_ANELLO:
                 self.ponte.anello(COLORE_ANELLO[e])
-            elif e is Effetto.FLASH_E_SCATTA:
+            elif e is Effetto.ILLUMINA_E_SCATTA:
                 self._avvia(self._scatta_e_leggi)
             elif e is Effetto.INTERROGA_DATABASE:
                 self._avvia(self._riconosci)
@@ -616,9 +657,29 @@ class Amelie:
         if self.camera is None or self.lettore is None:
             self.macchina.invia(Evento.LETTURA_FALLITA)
             return
+        # La luce dello scatto è l'anello stesso, che sale a bianco e poi torna
+        # al colore del lavoro. Prima era un secondo Modulino Pixels che faceva
+        # da flash di taglio sull'etichetta; tolto quello, questa è la sola luce
+        # che il dispositivo controlla.
+        #
+        # L'ambra si rimette SOLO se lo scatto è riuscito, e in un `else` invece
+        # che in un `finally`. Col `finally` l'ordine era: errore -> la macchina
+        # a stati entra in GUASTO e accende il ROSSO -> il finally lo cancella
+        # rimettendo l'ambra. Restava uno schermo che dichiara un guasto sopra
+        # un anello del colore dell'invito, che è esattamente la cosa che schermo
+        # e anello non devono mai fare. In ogni via d'errore il colore lo decide
+        # la macchina a stati, che è l'unica a sapere dove si sta andando.
+        #
+        # E si rimette SUBITO dopo la raffica, non alla fine del metodo: dopo
+        # c'è l'OCR, che dura quattro secondi, e quattro secondi di bianco pieno
+        # sotto una bottiglia non sono una luce, sono un lampeggiante.
         try:
-            self.ponte.flash(BIANCO_FLASH)
-        except PonteNonDisponibile:
+            self.ponte.anello(BIANCO_SCATTO)
+        except (PonteNonDisponibile, ErroreMCU):
+            # Un anello che non si accende costa una foto piu' scura, non una
+            # scansione fallita: e' la stessa regola con cui `_esegui` protegge
+            # tutti gli effetti. Senza ErroreMCU, un firmware vecchio che non
+            # conosce `set_anello` trasformava ogni scatto in un guasto.
             pass
         try:
             scatto = self.camera.scatta()
@@ -626,11 +687,13 @@ class Amelie:
             log.error("camera: %s", e)
             self.macchina.invia(Evento.ERRORE)
             return
-        finally:
-            try:
-                self.ponte.flash(SPENTO)
-            except PonteNonDisponibile:
-                pass
+        else:
+            colore = self._colore_dello_stato()
+            if colore is not None:
+                try:
+                    self.ponte.anello(colore)
+                except (PonteNonDisponibile, ErroreMCU):
+                    pass
 
         try:
             lettura = self.lettore.leggi(scatto.immagine)
@@ -650,7 +713,7 @@ class Amelie:
         self.macchina.invia(Evento.LETTURA_FALLITA)
         if self._tentativi >= TENTATIVI_MAX:
             # Si e' provato abbastanza: si mostra il messaggio e si tace, invece
-            # di riaccendere il flash ogni quattro secondi finche' qualcuno non
+            # di riaccendere la luce ogni quattro secondi finche' qualcuno non
             # toglie l'oggetto dal piatto.
             log.info("rinuncio dopo %d tentativi", self._tentativi)
             self.macchina.invia(Evento.RINUNCIA)
@@ -816,8 +879,8 @@ class Amelie:
             # guasto. Il fronte di salita non si ripresenta mai piu', e senza
             # questo rilancio il dispositivo resterebbe fermo per sempre con una
             # bottiglia davanti. Il contatore NON si azzera qui: se il guasto si
-            # ripete, dopo TENTATIVI_MAX si smette, invece di riaccendere il
-            # flash ogni quattro secondi tutta la sera su una board senza
+            # ripete, dopo TENTATIVI_MAX si smette, invece di riaccendere
+            # l'anello ogni quattro secondi tutta la sera su una board senza
             # ventola. Si riparte solo togliendo e rimettendo la bottiglia.
             self._tentativi += 1
             log.info("bottiglia ancora presente in attesa, rilancio (%d/%d)",

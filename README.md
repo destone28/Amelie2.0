@@ -40,7 +40,7 @@ Il riconoscimento è una **cascata**, e non risponde mai «non lo so»:
 | solo la tipologia | «Non riesco a leggere l'etichetta con certezza, ma questo è un Amarone della Valpolicella Classico.» |
 | solo la denominazione | «L'etichetta non è nitida, ma riconosco la denominazione: Barolo, DOCG.» |
 | solo il vitigno | «Del produttore non sono sicuro, ma il vitigno sì: Nebbiolo.» |
-| niente | «Non riesco a leggere questa etichetta. Prova a girarla verso di me.» |
+| niente | «Non riesco a leggere questa etichetta. Provi a girarla verso di me.» |
 
 ---
 
@@ -70,7 +70,7 @@ Tutto ciò che segue è stato misurato sull'hardware reale, non stimato.
 | **Telecamera USB** InnoMaker U20CAM-1080P | UVC, MJPEG 1920×1080 |
 | **Schermo 5"** LAFVIN MPI5001 | 800×480 IPS, HDMI + touch |
 | **Hub USB-C** UGREEN Revodok 105 | HDMI + 3 USB-A + ingresso di alimentazione |
-| **2× Modulino Pixels** | l'anello di luce e l'illuminatore |
+| **1× Modulino Pixels** | l'anello di luce sotto la bottiglia |
 | **1× Modulino Distance** | rileva la bottiglia |
 | **Amplificatore** PAM8403 + 2 altoparlanti 3 W | la voce |
 | **Alimentatore** ≥ 30 W USB-C | oppure un power bank con PD |
@@ -112,13 +112,18 @@ scarica i modelli, costruisce il database e abilita i servizi. Circa **40
 minuti**, quasi tutti di compilazione.
 
 > **Non serve rifare il flash della board.** La partizione `/home/arduino` ha
-> 17 GB liberi e tutto vive lì. Vedi il § 1.2 di `docs/01-PRIMO-AVVIO.md` per
+> 18 GiB liberi e tutto vive lì. Vedi il § 1.2 di `docs/01-PRIMO-AVVIO.md` per
 > il perché.
 
 ### Il firmware del microcontrollore
 
-Va caricato a parte, e prima va riprogrammato l'indirizzo del secondo anello di
-LED: istruzioni in [`firmware/amelie_mcu/README.md`](firmware/amelie_mcu/README.md).
+Va caricato a parte, sullo STM32U585: istruzioni in
+[`firmware/amelie_mcu/README.md`](firmware/amelie_mcu/README.md). Entrambi i
+Modulino usano l'indirizzo di fabbrica, quindi non c'è niente da riprogrammare
+prima di montare.
+
+Per provare il giro completo con i pezzi ancora sul tavolo, prima di chiuderli
+nella scocca: [`docs/06-ASSEMBLAGGIO-BANCO.md`](docs/06-ASSEMBLAGGIO-BANCO.md).
 
 ---
 

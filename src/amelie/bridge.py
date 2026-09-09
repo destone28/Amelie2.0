@@ -1,8 +1,8 @@
 """Il ponte verso il microcontrollore.
 
 Il connettore Qwiic della UNO Q è cablato sull'**I²C4 dello STM32U585**, non del
-processore Linux. I Modulino — i due anelli di LED e il sensore di distanza —
-li vede quindi solo l'MCU, e Linux ci parla attraverso il router.
+processore Linux. I Modulino — l'anello di LED e il sensore di distanza — li
+vede quindi solo l'MCU, e Linux ci parla attraverso il router.
 
 Questa divisione non è un fastidio: è ciò che permette al dispositivo di stare
 in attesa a consumo bassissimo. L'MCU fa la guardia sul sensore e sveglia Linux
@@ -35,15 +35,15 @@ log = logging.getLogger(__name__)
 
 SOCKET = "/run/arduino-router.sock"
 
-# Indirizzi I2C dei Modulino, in forma a 7 bit. I due Pixels nascono entrambi
-# a 0x36: il secondo va riprogrammato una volta con lo sketch AddressChanger
-# della libreria Arduino_Modulino, e l'indirizzo resta in memoria.
+# Indirizzi I2C dei Modulino, in forma a 7 bit. Un solo Pixels, quindi
+# l'indirizzo di fabbrica va bene com'è e non c'è niente da riprogrammare prima
+# di montare: era il passo più fragile di tutto l'assemblaggio, ed è sparito
+# insieme al secondo modulo.
 ANELLO = 0x36     # l'anello sotto la bottiglia
-FLASH = 0x37      # l'illuminatore per la camera, riprogrammato
 DISTANZA = 0x29   # VL53L4CD, indirizzo fisso
 
-# L'ordine è quello dei bit che lo sketch somma in `moduli()`: 1, 2, 4.
-NOMI_MODULI = ("anello", "flash", "distanza")
+# L'ordine è quello dei bit che lo sketch somma in `moduli()`: 1, 2.
+NOMI_MODULI = ("anello", "distanza")
 
 
 @dataclass(frozen=True)
@@ -61,11 +61,22 @@ class Colore:
             raise ValueError(f"luminosità fuori scala: {self.luminosita}")
 
 
-# I due Pixels insieme, a piena luminosità, assorbirebbero oltre mezzo ampere
-# sul rail 3,3 V passando dai cavetti Qwiic da 28 AWG. L'anello resta basso in
-# permanenza; il flash sale solo per la frazione di secondo dello scatto.
+# L'anello resta basso in permanenza — otto LED accesi tutta la sera su un
+# cavetto Qwiic da 28 AWG — e sale a bianco SOLO per la raffica. È l'unica luce
+# rimasta da quando il secondo Pixels, che faceva da flash, è stato tolto.
+#
+# «Solo per la raffica» sono **circa 1,7 secondi**, non un lampo: `Camera.scatta`
+# apre il device, aspetta 0,15 s che la luce si assesti, butta cinque fotogrammi
+# e ne legge altri cinque (misura in docs/03-COLLAUDO.md). È un dettaglio che
+# conta per l'alimentazione: 22 di luminosità per ore e 90 per quasi due secondi
+# sono due carichi diversi da quelli che sembrano leggendo «flash».
+#
+# Quanto serva davvero è una domanda aperta e va misurata sul banco: il grosso
+# del segnale non l'hanno mai dato i LED, viene dalla posa lunga a guadagno
+# zero che questa geometria si può permettere perché bottiglia e camera sono
+# ferme entrambe (vedi `amelie.capture`).
 AMBRA = Colore(255, 150, 40, 22)      # attesa: caldo, discreto
-BIANCO_FLASH = Colore(255, 255, 255, 90)
+BIANCO_SCATTO = Colore(255, 255, 255, 90)   # solo durante la raffica
 VERDE = Colore(60, 220, 90, 30)
 ROSSO = Colore(230, 60, 40, 30)
 SPENTO = Colore(0, 0, 0, 0)
@@ -147,9 +158,6 @@ class Ponte:
 
     def anello(self, c: Colore) -> None:
         self.chiama("set_anello", c.r, c.g, c.b, c.luminosita)
-
-    def flash(self, c: Colore) -> None:
-        self.chiama("set_flash", c.r, c.g, c.b, c.luminosita)
 
     def moduli(self) -> dict[str, bool]:
         """Quali Modulino il microcontrollore vede in questo momento.

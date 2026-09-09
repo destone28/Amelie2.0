@@ -26,7 +26,7 @@ SALTA_MODELLO=0
 G=$'\033[32m'; N=$'\033[0m'
 passo() { echo; echo "${G}==>${N} $*"; }
 
-passo "1/9  Pacchetti di sistema"
+passo "1/10  Pacchetti di sistema"
 sudo apt-get update -qq
 # fonts-ebgaramond: l'interfaccia lo DICHIARA, e finche' non era installato il
 # testo usciva col serif generico della distribuzione. Non e' la stessa cosa: un
@@ -40,7 +40,7 @@ sudo apt-get install -y -qq \
     libcurl4-openssl-dev \
     fonts-ebgaramond
 
-passo "2/9  Correzione della corsa all'avvio dell'audio"
+passo "2/10  Correzione della corsa all'avvio dell'audio"
 # Mitigazione proposta upstream da Loic Poulain (Linaro) per la UNO Q:
 # MODULE_SOFTDEP("pre: qcom_pd_mapper"). Una riga softdep qui e' equivalente,
 # quindi il fix si applica senza ricompilare il kernel.
@@ -52,7 +52,7 @@ softdep qcom_common pre: qcom_pd_mapper
 EOF
 sudo update-initramfs -u >/dev/null 2>&1 || true
 
-passo "3/9  Ambiente Python"
+passo "3/10  Ambiente Python"
 mkdir -p "$RADICE"
 cd "$RADICE"
 [ -d venv ] || python3 -m venv venv
@@ -61,7 +61,7 @@ cd "$RADICE"
     numpy opencv-python-headless onnxruntime rapidocr rapidfuzz msgpack \
     fastapi "uvicorn[standard]" piper-tts
 
-passo "4/9  llama.cpp"
+passo "4/10  llama.cpp"
 if [ ! -x "$RADICE/llama.cpp/build/bin/llama-server" ]; then
     [ -d llama.cpp ] || git clone --depth 1 https://github.com/ggml-org/llama.cpp
     cd llama.cpp
@@ -70,7 +70,7 @@ if [ ! -x "$RADICE/llama.cpp/build/bin/llama-server" ]; then
     cd "$RADICE"
 fi
 
-passo "5/9  Modelli"
+passo "5/10  Modelli"
 mkdir -p models
 if [ "$SALTA_MODELLO" = 0 ] && [ ! -f "models/$MODELLO_LLM" ]; then
     echo "    scarico il modello linguistico (~700 MB)"
@@ -91,10 +91,28 @@ for percorso in $VOCI; do
     done
 done
 
-passo "6/9  Database dei vini"
+passo "6/10  Database dei vini"
 [ -f data/amelie.db ] || ./venv/bin/python data/build_db.py
 
-passo "7/9  Servizi"
+passo "7/10  Librerie del microcontrollore"
+# Il firmware gira sullo STM32U585, non su Linux: si carica a parte e va
+# lanciato da un terminale vero, perche' il caricamento in rete puo' chiedere la
+# password dell'utente. Le librerie, pero', si installano bene da qui - sono
+# l'unico pezzo che manca per poter compilare, ed e' scomodo scoprirlo davanti
+# ai Modulino gia' collegati.
+if command -v arduino-cli >/dev/null 2>&1; then
+    arduino-cli lib install Arduino_RouterBridge Arduino_Modulino >/dev/null 2>&1 \
+        && echo "    Arduino_RouterBridge e Arduino_Modulino installate" \
+        || echo "    librerie non installate: rifallo a mano prima di caricare il firmware"
+    # L'indirizzo risolto, non la formula: questo comando si copia e si incolla.
+    IP_BOARD="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    echo "    il firmware si carica a parte, da un terminale sulla board:"
+    echo "      arduino-cli compile -b arduino:zephyr:unoq --upload -p ${IP_BOARD:-<indirizzo>} firmware/amelie_mcu"
+else
+    echo "    arduino-cli non trovato: vedi firmware/amelie_mcu/README.md"
+fi
+
+passo "8/10  Servizi"
 sudo install -m755 scripts/systemd/amelie-*.sh scripts/systemd/azzera-*.sh /usr/local/bin/
 sudo install -m644 scripts/systemd/amelie-*.service /etc/systemd/system/
 sudo mkdir -p /var/lib/amelie /usr/share/xsessions
@@ -104,7 +122,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable amelie-llm amelie-audio-guard amelie-audio-rotta \
     amelie-sipario amelie-display amelie amelie-kiosk amelie-scrivania
 
-passo "8/9  Avvio automatico della sessione grafica"
+passo "9/10  Avvio automatico della sessione grafica"
 # Senza autologin il server X appartiene al greeter e Chromium non riesce ad
 # aprirlo: fallisce con "The platform failed to initialize", che non dice quale
 # sia il problema. Con l'autologin la sessione e' di arduino e ~/.Xauthority
@@ -130,7 +148,7 @@ user-session=amelie
 autologin-session=amelie
 EOF
 
-passo "9/9  Silenzio sulla console"
+passo "10/10  Silenzio sulla console"
 # Niente testo sul pannello durante l'avvio. Il `quiet` del kernel starebbe
 # sulla riga di comando, che qui vive dentro un'immagine unificata: rifarla per
 # dodici secondi di testo non vale il rischio di una board che non riparte. Il

@@ -538,8 +538,8 @@ class Voce:
             if p.exists():
                 return p
         raise VoceNonDisponibile(
-            f"modello {nome}.onnx non trovato. "
-            f"Scaricalo con scripts/fetch_voce.sh"
+            f"modello {nome}.onnx non trovato in {Path.home()}/amelie/models. "
+            f"Lo scarica scripts/install.sh (passo «Modelli»)"
         )
 
     @property

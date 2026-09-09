@@ -1,22 +1,30 @@
 """Cattura del fotogramma dell'etichetta.
 
-La geometria è fissa e nota (vedi `docs/OTTICA.md`): la lente sta 30 mm sopra il
-piano d'appoggio, 60 mm davanti alla bottiglia, con l'asse inclinato di 53° sopra
-l'orizzonte. La distanza ottica al centro dell'etichetta è ~100 mm e la fascia a
+La geometria è fissa e nota: la lente sta 30 mm sopra il piano d'appoggio, 60 mm
+davanti alla bottiglia, con l'asse inclinato di 53° sopra l'orizzonte. I disegni
+da cui vengono questi numeri stanno fuori dal repo, in `Project/Amelie2.0/`
+insieme al CAD; le quote che servono a montare sono in
+`docs/06-ASSEMBLAGGIO-BANCO.md`. La distanza ottica al centro dell'etichetta è ~100 mm e la fascia a
 fuoco copre una finestra di circa 60 × 36 mm, che su qualunque etichetta
 commerciale contiene produttore, denominazione e annata.
 
 Tre accorgimenti valgono più di qualunque scelta di libreria:
 
 1. **Esposizione bloccata.** Con l'auto-esposizione servono 500-800 ms di
-   assestamento dopo l'accensione del flash e i risultati non sono ripetibili.
+   assestamento dopo l'accensione della luce e i risultati non sono ripetibili.
    Con l'esposizione fissa bastano 120-200 ms. Bottiglia e camera sono entrambe
    ferme: si può permettere un tempo di posa lungo e guadagno a zero, che dà
-   molto più segnale di quanto possano darne i LED.
+   **molto più segnale di quanto possano darne i LED**.
+
+   È anche il motivo per cui togliere il secondo Modulino Pixels — quello che
+   faceva da flash — costa meno di quanto sembri: la luce non era il fattore
+   dominante. Resta l'anello alla base, che sale a bianco per la durata della
+   raffica. Quanto basti va misurato sul banco, con l'etichetta vera e la luce
+   del locale.
 
 2. **Scartare i primi fotogrammi.** Il buffer UVC contiene immagini precedenti
-   all'accensione del flash. Il primo fotogramma letto dopo il flash è quasi
-   sempre vecchio: è l'errore più comune nelle pipeline OpenCV.
+   all'accensione della luce. Il primo fotogramma letto dopo è quasi sempre
+   vecchio: è l'errore più comune nelle pipeline OpenCV.
 
 3. **Raffica e varianza del laplaciano.** Cinque fotogrammi, si tiene il più
    nitido. Costa 200 ms e salva dai casi in cui la bottiglia oscilla ancora.
@@ -68,8 +76,8 @@ class ImpostazioniCamera:
     # Ritaglio centrale, frazione del fotogramma tenuta per lato.
     ritaglio: float = 0.58
 
-    # Attesa fra accensione del flash e primo fotogramma utile.
-    assestamento_flash_s: float = 0.15
+    # Attesa fra accensione della luce dello scatto e primo fotogramma utile.
+    assestamento_luce_s: float = 0.15
 
 
 @dataclass
@@ -221,13 +229,13 @@ class Camera:
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         return cap
 
-    def scatta(self, *, attesa_flash: float | None = None) -> Scatto:
+    def scatta(self, *, attesa_luce: float | None = None) -> Scatto:
         """Esegue una raffica e restituisce il fotogramma più nitido.
 
-        Il chiamante è responsabile di accendere il flash **prima** e spegnerlo
-        **dopo**: questo modulo non parla con l'MCU.
+        Il chiamante è responsabile di accendere la luce **prima** e riportarla
+        com'era **dopo**: questo modulo non parla con l'MCU.
         """
-        attesa = self.imp.assestamento_flash_s if attesa_flash is None else attesa_flash
+        attesa = self.imp.assestamento_luce_s if attesa_luce is None else attesa_luce
         cap = self._apri()
         try:
             if attesa > 0:

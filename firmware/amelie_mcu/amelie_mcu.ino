@@ -2,64 +2,64 @@
  * Amelie 2.0 — firmware del microcontrollore
  *
  * Il connettore Qwiic della UNO Q è cablato sull'I2C4 dello STM32U585, non del
- * processore Linux: i due anelli di LED e il sensore di distanza li vede solo
+ * processore Linux: l'anello di LED e il sensore di distanza li vede solo
  * questo microcontrollore. Linux ci parla attraverso il router (Bridge).
  *
  * Questa divisione permette l'attesa a consumo bassissimo: qui si fa la guardia
  * sul sensore, e Linux viene svegliato solo quando arriva una bottiglia.
  *
- * ── TRE VINCOLI CHE FANNO FALLIRE IN SILENZIO ────────────────────────────────
+ * ── DUE MODULI, NON TRE ──────────────────────────────────────────────────────
  *
- * 1. App Lab carica il binario in SRAM con un tetto di 131.072 byte, e un binario
- *    più grande COMPILA senza errori per poi andare in bus fault al caricamento.
- *    Da qui l'idea di includere solo gli header dei due Modulino che servono,
- *    invece di <Modulino.h> che ne tira dentro sette — due driver ToF completi,
- *    IMU, barometro, umidità, sensore RGB, grafica.
+ * C'era un secondo Modulino Pixels che faceva da flash per la camera. È stato
+ * tolto, e con lui è sparita la parte più fragile del montaggio: due Pixels
+ * nascono entrambi a 0x36, quindi il secondo andava riprogrammato una volta per
+ * sempre con uno sketch a parte, e da fuori i due moduli sono identici — chi
+ * scambiava i cavetti si ritrovava il flash sotto la bottiglia.
  *
- *    MISURATO, e l'idea era sbagliata due volte. Primo: Arduino_Modulino 0.9.0
- *    NON espone ModulinoPixels.h e ModulinoDistance.h, quindi lo sketch non
- *    compilava affatto. Secondo: caricando con `arduino-cli` per il core
- *    arduino:zephyr, <Modulino.h> compreso, il binario occupa 33.000 byte di
- *    programma su 1.966.080 e 3.772 byte di RAM su 523.624. L'1%. Il tetto dei
- *    131 KB riguarda un'altra via di caricamento, non questa.
+ * L'etichetta si illumina lo stesso: l'anello sale a bianco per la frazione di
+ * secondo dello scatto e poi torna al suo colore. E il grosso del segnale non
+ * l'hanno mai dato i LED — viene dalla posa lunga a guadagno zero, che questa
+ * geometria si può permettere perché bottiglia e camera sono ferme entrambe
+ * (vedi `amelie.capture`).
  *
- * 2. Chiamare Bridge.call() o Monitor.print() DENTRO un gestore registrato con
+ * ── DUE VINCOLI CHE FANNO FALLIRE IN SILENZIO ────────────────────────────────
+ *
+ * 1. Chiamare Bridge.call() o Monitor.print() DENTRO un gestore registrato con
  *    provide() manda in stallo il canale di comunicazione. È documentato. Per
  *    questo i gestori qui sotto non fanno altro che scrivere in una variabile,
  *    e ogni accesso a Wire1 avviene nel loop().
  *
- * 3. Un .ino non è un .cpp: prima di compilarlo, Arduino gli genera i prototipi
+ * 2. Un .ino non è un .cpp: prima di compilarlo, Arduino gli genera i prototipi
  *    di tutte le funzioni e li infila subito PRIMA della prima definizione di
  *    funzione del file. Un tipo dichiarato dopo quel punto non esiste ancora
  *    quando il prototipo lo nomina, e si prende un "has not been declared" su
  *    una riga che sta sotto la dichiarazione e sembra corretta. Per questo qui
  *    tutti i tipi e le variabili stanno insieme in cima, e le funzioni dopo.
  *
- * ── I DUE ANELLI ─────────────────────────────────────────────────────────────
+ * ── LA MISURA ────────────────────────────────────────────────────────────────
  *
- * I Modulino Pixels nascono tutti all'indirizzo 0x36. Il secondo va
- * riprogrammato UNA VOLTA, con un solo modulo collegato, usando lo sketch
- * examples/Utilities/AddressChanger della libreria Arduino_Modulino: comando
- * "36 37" sul monitor seriale, poi togliere e ridare corrente. L'indirizzo
- * resta in memoria. L'auto-discovery non troverà mai il secondo modulo, quindi
- * va costruito con l'indirizzo esplicito, in forma a 7 bit.
+ * Compilato con `arduino-cli` per il core arduino:zephyr, <Modulino.h>
+ * compreso: 33.000 byte di programma su 1.966.080 e 3.772 di RAM su 523.624.
+ * L'1%. Il tetto dei 131.072 byte che App Lab impone caricando in SRAM riguarda
+ * un'altra via di caricamento, non questa.
  */
 
 #include <Arduino_RouterBridge.h>
 #include <Modulino.h>
 
-/* ─── tutto ciò che si dichiara, prima di qualsiasi funzione (vincolo 3) ────── */
+/* ─── tutto ciò che si dichiara, prima di qualsiasi funzione (vincolo 2) ────── */
 
 /* Indirizzi a 7 bit. Il datasheet chiama 0x6C l'indirizzo "Modulino" e 0x36
  * quello "Hardware": qui va quello hardware. Passare 0x6C fallisce in SILENZIO,
- * perché begin() ritorna comunque true. */
+ * perché begin() ritorna comunque true.
+ *
+ * Un solo Pixels, quindi l'indirizzo di fabbrica va bene com'è: non c'è niente
+ * da riprogrammare prima di montare. */
 static const uint8_t IND_ANELLO   = 0x36;
-static const uint8_t IND_FLASH    = 0x37;
 static const uint8_t IND_DISTANZA = 0x29;   /* VL53L4CD, fisso */
 static const uint8_t N_LED = 8;
 
 ModulinoPixels anello(IND_ANELLO);
-ModulinoPixels flash(IND_FLASH);
 ModulinoDistance tof;
 
 /* Quali moduli hanno risposto. Si cercano invece di darli per presenti: un
@@ -70,7 +70,7 @@ ModulinoDistance tof;
  *
  * Si ricercano anche a caldo, ogni due secondi, cosi' durante il montaggio si
  * collega un pezzo per volta e prende vita da solo. */
-static bool c_anello = false, c_flash = false, c_tof = false;
+static bool c_anello = false, c_tof = false;
 static uint32_t ultimo_sondaggio = 0;
 
 /* Stato richiesto da Linux. I gestori scrivono qui e basta: l'accesso a Wire1
@@ -79,7 +79,7 @@ struct StatoLed {
   uint8_t r = 0, g = 0, b = 0, lum = 0;
   bool da_applicare = false;
 };
-static StatoLed rich_anello, rich_flash;
+static StatoLed rich_anello;
 
 /* Presenza della bottiglia. L'isteresi vera sta su Linux, in amelie.bridge:
  * qui si tiene solo l'ultima misura valida e si notifica il cambiamento, così
@@ -97,7 +97,6 @@ static bool risponde(uint8_t indirizzo) {
 
 static void cerca_moduli() {
   if (!c_anello && risponde(IND_ANELLO))   c_anello = anello.begin();
-  if (!c_flash  && risponde(IND_FLASH))    c_flash  = flash.begin();
   if (!c_tof    && risponde(IND_DISTANZA)) c_tof    = tof.begin();
 }
 
@@ -108,11 +107,6 @@ bool set_anello(int r, int g, int b, int lum) {
   return true;
 }
 
-bool set_flash(int r, int g, int b, int lum) {
-  rich_flash = {(uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)lum, true};
-  return true;
-}
-
 /* Ultima misura valida in millimetri, -1 se il sensore non sa rispondere.
  * Il "non so" è già un buon segnale di "non c'è niente sopra": il VL53L4CD
  * dichiara la misura non valida quando il segnale di ritorno è troppo debole,
@@ -120,11 +114,11 @@ bool set_flash(int r, int g, int b, int lum) {
 int distanza() { return ultima_mm; }
 
 /* Quali moduli il microcontrollore vede in questo momento, come somma di bit:
- * 1 anello, 2 flash, 4 sensore. Serve a montare - si collega un pezzo per volta
- * e si chiede al dispositivo se lo vede - e a capire un guasto senza smontare
+ * 1 anello, 2 sensore. Serve a montare - si collega un pezzo per volta e si
+ * chiede al dispositivo se lo vede - e a capire un guasto senza smontare
  * niente. */
 int moduli() {
-  return (c_anello ? 1 : 0) | (c_flash ? 2 : 0) | (c_tof ? 4 : 0);
+  return (c_anello ? 1 : 0) | (c_tof ? 2 : 0);
 }
 
 /* ─── ciclo ────────────────────────────────────────────────────────────────── */
@@ -152,7 +146,6 @@ void setup() {
    * qualsiasi cosa - che e' l'ordine in cui si monta un dispositivo - e un
    * modulo guasto costa un anello spento, non un dispositivo muto. */
   Bridge.provide("set_anello", set_anello);
-  Bridge.provide("set_flash", set_flash);
   Bridge.provide("distanza", distanza);
   Bridge.provide("moduli", moduli);
 
@@ -197,7 +190,6 @@ void loop() {
   }
 
   if (c_anello) applica(anello, rich_anello);
-  if (c_flash)  applica(flash, rich_flash);
 
   delay(20);
 }

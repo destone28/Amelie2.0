@@ -169,8 +169,11 @@ ${B}== Come si legge l'esito ==${N}
   ${G}Si sente${N}
       Tutta la catena e' provata: kernel, device tree, ALSA, ANX7625,
       DisplayPort, hub UGREEN e schermo. Nessun acquisto, nessuna modifica alla
-      scocca. Fissa il mixer all'avvio con  scripts/systemd/amelie-audio.service
-      e blocca i pacchetti che possono farlo sparire:
+      scocca. Il cancello del mixer si richiude a ogni avvio: a riaprirlo ci
+      pensa  amelie-audio-guard.service  (e  amelie-audio-rotta.service  se la
+      rotta cambia). Sono gia' abilitati da scripts/install.sh; verifica con
+          systemctl is-enabled amelie-audio-guard amelie-audio-rotta
+      e blocca i pacchetti che possono far sparire la scheda:
           sudo apt-mark hold alsa-ucm-conf linux-image-\$(uname -r)
 
   ${Y}Si sente ma pianissimo${N}

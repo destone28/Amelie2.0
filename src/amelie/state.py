@@ -35,7 +35,7 @@ class Stato(enum.Enum):
 
     ATTESA = "attesa"                  # nessuna bottiglia, anello in respiro lento
     ASSESTAMENTO = "assestamento"      # bottiglia appena posata, si aspetta che smetta di oscillare
-    SCANSIONE = "scansione"            # flash, raffica, OCR
+    SCANSIONE = "scansione"            # luce, raffica, OCR
     RICONOSCIMENTO = "riconoscimento"  # interrogazione del database
     CONFERMA = "conferma"              # match dubbio: si mostrano i candidati
     RACCONTO = "racconto"              # testo a schermo e voce
@@ -74,7 +74,11 @@ class Effetto(enum.Enum):
     ANELLO_LAVORO = "anello_lavoro"        # elaborazione: rotazione lenta
     ANELLO_ATTENZIONE = "anello_attenzione"  # serve qualcosa dall'utente
     ANELLO_SPENTO = "anello_spento"
-    FLASH_E_SCATTA = "flash_e_scatta"
+    # Si chiamava FLASH_E_SCATTA, quando c'era un secondo Pixels che faceva da
+    # flash. Ora la luce dello scatto è l'anello stesso, che sale a bianco per
+    # tutta la raffica — circa 1,7 s, non un lampo. Un nome che promette un
+    # flash che non c'è manderebbe a cercare un modulo inesistente.
+    ILLUMINA_E_SCATTA = "illumina_e_scatta"
     INTERROGA_DATABASE = "interroga_database"
     AVVIA_RACCONTO = "avvia_racconto"
     FERMA_RACCONTO = "ferma_racconto"
@@ -108,7 +112,7 @@ DURATE_S: dict[Stato, float | None] = {
 EFFETTI_INGRESSO: dict[Stato, tuple[Effetto, ...]] = {
     Stato.ATTESA: (Effetto.ANELLO_RESPIRO, Effetto.SCHERMO_ATTESA),
     Stato.ASSESTAMENTO: (Effetto.ANELLO_ACCESO,),
-    Stato.SCANSIONE: (Effetto.ANELLO_LAVORO, Effetto.FLASH_E_SCATTA),
+    Stato.SCANSIONE: (Effetto.ANELLO_LAVORO, Effetto.ILLUMINA_E_SCATTA),
     Stato.RICONOSCIMENTO: (Effetto.ANELLO_LAVORO, Effetto.INTERROGA_DATABASE),
     Stato.CONFERMA: (Effetto.ANELLO_ATTENZIONE, Effetto.MOSTRA_CANDIDATI),
     Stato.RACCONTO: (Effetto.ANELLO_ACCESO, Effetto.AVVIA_RACCONTO),
@@ -159,7 +163,7 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
     (Stato.RIPOSIZIONA, Evento.SCADENZA): Stato.SCANSIONE,
     # Dopo qualche tentativo si smette. Senza questa uscita, un oggetto
     # illeggibile lasciato sul piatto - un bicchiere, una bottiglia senza
-    # etichetta - fa lampeggiare il flash e girare l'OCR per tutta la sera.
+    # etichetta - fa lampeggiare l'anello e girare l'OCR per tutta la sera.
     (Stato.RIPOSIZIONA, Evento.RINUNCIA): Stato.CONCLUSO,
 
     # Se il lavoro non torna entro il tetto, si passa da GUASTO, che scade da

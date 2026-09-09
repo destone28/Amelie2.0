@@ -86,7 +86,7 @@ class TestScatto:
 
 class TestImpostazioni:
     def test_scarta_prima_di_tenere(self):
-        # il buffer UVC contiene fotogrammi precedenti al flash: se non se ne
+        # il buffer UVC contiene fotogrammi precedenti alla luce: se non se ne
         # scartano abbastanza si legge un'immagine al buio
         imp = ImpostazioniCamera()
         assert imp.fotogrammi_da_scartare >= 4
