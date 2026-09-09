@@ -461,22 +461,33 @@ class Amelie:
             threading.Thread(target=self._riprendi_racconto, daemon=True).start()
 
     def _chiedi_annuncio(self, lingua: str) -> None:
-        """Chiede di annunciare una lingua. Uno alla volta, per intero.
+        """Chiede di annunciare una lingua, SUBITO, tagliando quella in corso.
 
-        Il primo tocco parla SUBITO. Chi tocca mentre quello parla non lo
-        interrompe: lascia detto cosa vuole sentire dopo, e se arrivano dieci
-        tocchi resta solo l'ultimo.
+        Chi tocca una bandierina mentre il dispositivo sta annunciando l'altra
+        ha cambiato idea: sentirsi finire la frase di prima, e solo dopo quella
+        chiesta, fa sembrare il tocco perso.
 
-        Interrompere era la scelta di prima, ed era sbagliata: le frasi durano
-        un secondo abbondante, e provando l'audio si tocca ogni mezzo secondo.
-        Ogni annuncio tagliava il precedente prima che uscisse dalle casse, e
-        non si sentiva NIENTE - sembrava un guasto dell'amplificatore.
+        Questa e' la seconda volta che si sceglie di interrompere, e la prima
+        volta era andata male: gli annunci si tagliavano a vicenda e non si
+        sentiva NIENTE, come un guasto dell'amplificatore. La causa pero' non
+        era l'interruzione — era che il flusso audio si apriva e si chiudeva a
+        ogni frase, e il DSP di questa board impiega due secondi ad avviarsi:
+        una frase da un secondo spariva dentro quei due. Da quando il flusso
+        resta APERTO (vedi `speech.Uscita`) quel costo non c'e' piu', e
+        interrompere fa esattamente quello che sembra: tace e riparte.
         """
         with self._lucchetto_annuncio:
             self._lingua_da_annunciare = lingua
-            if self._annunciatore_vivo:
-                return
+            gia_in_corso = self._annunciatore_vivo
             self._annunciatore_vivo = True
+        if gia_in_corso:
+            # Si butta via cio' che non e' ancora uscito: l'annuncio in corso
+            # smette di aspettare la propria coda e torna, e il ciclo trova
+            # subito la lingua nuova.
+            if self.voce is not None:
+                self.voce.zittisci()
+            self._didascalia("")
+            return
         threading.Thread(target=self._ciclo_annunci, daemon=True).start()
 
     def _ciclo_annunci(self) -> None:
@@ -496,7 +507,19 @@ class Amelie:
         # Cadeva nel vuoto: la lingua cambiava a schermo e la storia non
         # ripartiva mai, senza che niente lo dicesse.
         self._attendi_lavoro(5.0)
+        # E l'annuncio deve aver FINITO DI PARLARE. Scrivono tutti e due nello
+        # stesso flusso audio: partendo insieme, «English language» e la prima
+        # frase del racconto uscivano sovrapposte, e non si capiva ne' l'una ne'
+        # l'altra. L'ordine giusto e' quello che ci si aspetta sentendolo:
+        # prima la lingua, poi il vino in quella lingua.
+        self._attendi_annuncio(6.0)
         self.macchina.invia(Evento.RIPETI)
+
+    def _attendi_annuncio(self, secondi: float) -> None:
+        """Aspetta che l'annunciatore abbia smesso di parlare. Mai per sempre."""
+        scadenza = time.monotonic() + secondi
+        while self._annunciatore_vivo and time.monotonic() < scadenza:
+            time.sleep(0.05)
 
     def _prepara(self) -> None:
         """Scalda le voci, e in ogni caso dichiara finita la preparazione.

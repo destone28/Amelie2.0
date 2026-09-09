@@ -105,15 +105,15 @@ DURATE_S: dict[Stato, float | None] = {
     Stato.RACCONTO: None,
     Stato.RIPOSIZIONA: 4.0,
     Stato.GUASTO: 6.0,
-    # Il racconto e' finito. Si resta qualche secondo sull'ultima schermata -
-    # perche' l'ultima frase si posi, e perche' sparire nell'istante in cui la
-    # voce tace e' brusco - e poi si torna in attesa.
+    # Il racconto e' finito. Si resta due secondi sull'ultima schermata - perche'
+    # l'ultima frase si posi, e perche' sparire nell'istante in cui la voce tace
+    # e' brusco - e poi si torna in attesa.
     #
     # Prima era `None`: si restava li' per sempre, con il riproduttore in vista e
     # tutti i pulsanti inerti, finche' qualcuno non toglieva la bottiglia. A
     # tavola quella schermata non dice niente e non fa niente: e' il dispositivo
     # che sembra piantato.
-    Stato.CONCLUSO: 4.0,
+    Stato.CONCLUSO: 2.0,
     Stato.ATTESA: None,
 }
 

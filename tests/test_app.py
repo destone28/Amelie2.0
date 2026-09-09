@@ -6,6 +6,7 @@ flusso verso lo schermo siano coerenti fra loro, senza dipendere da una
 bottiglia vera.
 """
 
+import threading
 import time
 from pathlib import Path
 
@@ -690,6 +691,91 @@ class TestLaSchermataNonResta:
             asyncio.run(amelie._un_battito())
         assert amelie.macchina.stato is not Stato.ATTESA, \
             "una bottiglia nuova deve far ripartire il giro"
+
+
+class TestIlCambioLinguaEImmediato:
+    """Toccare una bandierina mentre parla l'altra vuol dire aver cambiato idea.
+
+    Prima l'annuncio in corso si sentiva per intero, e solo dopo partiva quello
+    chiesto: il tocco sembrava perso. Ora si taglia e si riparte.
+
+    È la seconda volta che si sceglie di interrompere. La prima era andata male
+    — gli annunci si tagliavano a vicenda e non si sentiva niente — ma la causa
+    non era l'interruzione: era che il flusso audio si apriva e chiudeva a ogni
+    frase, e il DSP di questa board impiega due secondi ad avviarsi. Da quando
+    il flusso resta aperto quel costo non c'è più.
+    """
+
+    @pytest.fixture
+    def amelie(self):
+        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                  senza_voce=True, senza_modello=True))
+        yield a
+        a.matcher.chiudi()
+        a.narratore.chiudi()
+
+    def test_il_secondo_tocco_taglia_il_primo(self, amelie):
+        class VoceFinta:
+            def __init__(self): self.zittita = 0
+            def zittisci(self): self.zittita += 1
+        amelie.voce = VoceFinta()
+
+        avviati = []
+        amelie._ciclo_annunci = lambda: avviati.append(1)
+
+        amelie._annunciatore_vivo = True          # uno sta gia' parlando
+        amelie._chiedi_annuncio("en")
+
+        assert amelie.voce.zittita == 1, "l'annuncio in corso va tagliato"
+        assert amelie._lingua_da_annunciare == "en"
+        assert not avviati, "non si avvia un secondo annunciatore"
+
+    def test_il_primo_tocco_parla_e_basta(self, amelie):
+        class VoceFinta:
+            def __init__(self): self.zittita = 0
+            def zittisci(self): self.zittita += 1
+        amelie.voce = VoceFinta()
+
+        partiti = []
+        import threading as t
+        vero = t.Thread
+        try:
+            t.Thread = lambda **k: type("F", (), {"start": lambda s: partiti.append(k)})()
+            amelie._chiedi_annuncio("it")
+        finally:
+            t.Thread = vero
+        assert amelie.voce.zittita == 0, "non c'e' niente da tagliare"
+        assert partiti, "il primo tocco avvia l'annunciatore"
+
+    def test_il_racconto_aspetta_che_l_annuncio_abbia_finito(self, amelie):
+        """Scrivono nello stesso flusso audio: partendo insieme si sovrappongono.
+
+        «English language» e la prima frase del racconto uscivano una sopra
+        l'altra, e non si capiva né l'una né l'altra.
+        """
+        import time as t
+
+        amelie._annunciatore_vivo = True
+
+        def libera():
+            t.sleep(0.25)
+            amelie._annunciatore_vivo = False
+        threading.Thread(target=libera, daemon=True).start()
+
+        inizio = t.monotonic()
+        amelie._attendi_annuncio(3.0)
+        passato = t.monotonic() - inizio
+        assert 0.2 < passato < 1.0, "deve aspettare, ma non per sempre"
+        assert not amelie._annunciatore_vivo
+
+    def test_l_attesa_ha_sempre_un_tetto(self, amelie):
+        """Un annunciatore che non finisce non deve bloccare il racconto."""
+        import time as t
+
+        amelie._annunciatore_vivo = True
+        inizio = t.monotonic()
+        amelie._attendi_annuncio(0.3)
+        assert t.monotonic() - inizio < 1.0
 
 
 class TestLaCodaAudioNonSiTronca:
