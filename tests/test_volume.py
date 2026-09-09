@@ -393,3 +393,254 @@ class TestUnSoloColore:
                 "scripts/systemd/amelie-sipario.sh"):
             assert self.FONDO in testo.upper(), \
                 f"{nome} non usa il fondo del marchio: si vedrebbe uno stacco"
+
+
+class TestAvanzamentoDelRacconto:
+    """La barra del racconto arretrava a ogni frase nuova.
+
+    Divideva la posizione per `durata_s`, cioe' per i byte GIA' sintetizzati.
+    Ma la sintesi corre al doppio del tempo reale: per tutta la prima meta' del
+    racconto il denominatore cresceva quasi al doppio della velocita' del
+    numeratore. Dentro una frase il rapporto saliva, all'arrivo della frase
+    dopo precipitava.
+
+    Misurato su un racconto ricomposto da frasi con audio vero - otto frasi per
+    16,8 secondi - la barra faceva **sette arretramenti, il peggiore di 43,9
+    punti**, e a due secondi dall'inizio segnava gia' il 56%.
+    """
+
+    @staticmethod
+    def _riproduttore(frasi):
+        from amelie.speech import Riproduttore
+
+        class UscitaFinta:
+            def svuota(self): pass
+            def scrivi(self, dati): pass
+            def in_pancia_s(self): return 0.0
+            def attendi_fine(self, tetto=10.0): pass
+
+        class VoceFinta:
+            class imp:
+                modello = "it_IT-serena-medium"
+                frequenza = 22050
+
+            def uscita(self):
+                return UscitaFinta()
+
+        return Riproduttore(VoceFinta(), frasi)
+
+    @staticmethod
+    def _accoda(r, secondi):
+        """Aggiunge una frase gia' sintetizzata, come fa il thread di sintesi."""
+        from amelie.speech import byte_al_secondo
+
+        r._inizi.append(len(r._pcm))
+        r._pcm.extend(b"\x00" * int(secondi * byte_al_secondo(22050)))
+
+    FRASI = ["Questo è un Barolo.",
+             "Nasce da uve Nebbiolo nelle Langhe, in Piemonte.",
+             "Ha corpo pieno e tannini fitti.",
+             "Si accompagna a brasati e formaggi stagionati.",
+             "Si serve fra 16 e 18 gradi."]
+    DURATE = [2.1, 4.4, 2.6, 4.0, 2.2]
+
+    def _ascolta(self, r):
+        """Simula l'ascolto: una frase si sintetizza, poi la si sente."""
+        from amelie.speech import byte_al_secondo
+
+        bps = byte_al_secondo(22050)
+        quote = []
+        for i, sec in enumerate(self.DURATE):
+            self._accoda(r, sec)
+            for k in range(int(sec / 0.1)):
+                r._posizione = r._inizi[i] + int((k + 1) * 0.1 * bps)
+                quote.append(r.quota)
+        return quote
+
+    def test_non_arretra_mai_ascoltando(self):
+        r = self._riproduttore(self.FRASI)
+        quote = self._ascolta(r)
+        arretra = [(a, b) for a, b in zip(quote, quote[1:]) if b < a - 1e-9]
+        assert not arretra, f"la barra e' tornata indietro {len(arretra)} volte"
+
+    def test_arriva_in_fondo_alla_fine(self):
+        r = self._riproduttore(self.FRASI)
+        self._ascolta(r)
+        r._completo = True
+        r._posizione = len(r._pcm)
+        assert r.quota == pytest.approx(1.0)
+
+    def test_non_arriva_in_fondo_prima_della_voce(self):
+        """L'altro modo di sbagliare, e capitava in un caso su quattro.
+
+        Quando la riproduzione raggiunge la sintesi, la posizione finisce
+        esattamente sull'ultimo byte esistente: dividendo per i byte
+        sintetizzati fa uno tondo. La barra andava a fondo scala a meta'
+        racconto e poi crollava.
+        """
+        r = self._riproduttore(self.FRASI)
+        self._accoda(r, self.DURATE[0])
+        r._posizione = len(r._pcm)           # la voce ha raggiunto la sintesi
+        assert r.quota < 0.9, f"barra a {r.quota:.2f} con una frase su cinque"
+
+    def test_la_pausa_puo_farla_arretrare(self):
+        """L'unico movimento all'indietro che una barra debba fare.
+
+        La pausa riavvolge di circa tre quarti di secondo per non tagliare una
+        parola alla ripresa, e la barra deve seguirla.
+        """
+        r = self._riproduttore(self.FRASI)
+        self._ascolta(r)
+        prima = r.quota
+        r._posizione = int(len(r._pcm) * 0.5)
+        r._quota_vista = 0.0                 # come fanno pausa, salta, ricomincia
+        assert r.quota < prima
+
+    def test_da_capo_riporta_a_zero(self):
+        r = self._riproduttore(self.FRASI)
+        self._ascolta(r)
+        r.ricomincia()
+        assert r.quota == pytest.approx(0.0)
+
+    def test_una_sintesi_rotta_a_meta_arriva_lo_stesso_in_fondo(self):
+        """`_completo` diventa vero anche quando la sintesi si rompe.
+
+        Restano meno frasi di quelle previste, e il racconto finisce dove e'
+        arrivato. Continuando a contare le frasi mai sintetizzate la barra
+        resterebbe inchiodata a due terzi per sempre, mentre lo schermo va
+        avanti.
+        """
+        r = self._riproduttore(self.FRASI)
+        for sec in self.DURATE[:3]:
+            self._accoda(r, sec)
+        r._completo = True                   # rotta dopo tre frasi su cinque
+        r._posizione = len(r._pcm)
+        assert r.quota == pytest.approx(1.0)
+
+
+class TestZittire:
+    """Svuotare la coda non basta a far tacere chi sta parlando.
+
+    `zittisci()` buttava via cio' che non era ancora uscito, e chi stava
+    aspettando spazio per accodare la frase successiva si svegliava sulla coda
+    ora vuota e la faceva sentire. Un annuncio di lingua e' di DUE frasi:
+    zittendolo a meta' si sentiva la seconda per intero - piu' di due secondi -
+    sopra la schermata d'invito.
+    """
+
+    @staticmethod
+    def _voce():
+        from amelie.speech import Voce
+
+        v = Voce.__new__(Voce)
+        import threading
+        v._lock = threading.Lock()
+        v._silenzi = 0
+        v._uscita = None
+        return v
+
+    def test_chi_parla_si_accorge_di_essere_zittito(self):
+        v = self._voce()
+        mio = v._silenzi
+        v.zittisci()
+        assert v._silenzi != mio, \
+            "senza contatore, il ciclo delle frasi non ha modo di accorgersene"
+
+    def test_ogni_silenzio_conta(self):
+        v = self._voce()
+        v.zittisci()
+        v.zittisci()
+        assert v._silenzi == 2
+
+    def test_zittire_a_meta_ferma_la_frase_dopo(self):
+        """Il caso vero: il silenzio arriva mentre la prima frase e' in coda.
+
+        E' quello che succede toccando «annulla» durante l'annuncio della
+        lingua: la prima frase e' gia' consegnata, la seconda no. Prima
+        usciva lo stesso, perche' `svuota` libera la coda e chi aspettava
+        spazio si sveglia e accoda.
+        """
+        from amelie.speech import Voce
+
+        v = self._voce()
+        sintetizzate, consegnate = [], []
+
+        class UscitaFinta:
+            def scrivi(self, dati):
+                consegnate.append(dati)
+                # Il tocco arriva mentre la prima frase e' appena entrata.
+                if len(consegnate) == 1:
+                    v.zittisci()
+
+            def svuota(self):
+                pass
+
+            def attendi_residuo(self, secondi):
+                pass
+
+        v.sintetizza = lambda f: (sintetizzate.append(f) or b"\x00" * 100)
+        v.uscita = lambda: UscitaFinta()
+        v._attendi_uscita = lambda u: None
+        v._byte_al_secondo = lambda: 44100
+
+        Voce.parla(v, ["Lingua italiana.", "Da adesso racconto i vini in italiano."])
+        assert sintetizzate == ["Lingua italiana."], (
+            f"ha continuato dopo il silenzio: {sintetizzate}")
+        assert len(consegnate) == 1
+
+
+class TestStimaDellaVoce:
+    def test_si_stima_su_cio_che_si_pronuncia(self):
+        """«DOCG» sono quattro caratteri e quarantotto suoni.
+
+        `per_la_voce` scioglie le sigle prima della sintesi. Stimare sul testo
+        scritto sbaglia di piu' del doppio, e proprio sulle frasi d'apertura -
+        quelle che si sentono per prime.
+        """
+        from amelie.speech import byte_stimati
+
+        sigla = byte_stimati("Un Barolo DOCG.", "it_IT-serena-medium")
+        piano = byte_stimati("Un Barolo rosso.", "it_IT-serena-medium")
+        assert sigla > piano * 2
+
+    def test_una_frase_che_non_si_pronuncia_non_dura(self):
+        """`sintetizza` restituisce b"" nello stesso caso: devono concordare.
+
+        Sono i soli spazi, non la punteggiatura: «...» il motore lo pronuncia
+        eccome, come una pausa.
+        """
+        from amelie.speech import byte_stimati
+
+        assert byte_stimati("   ", "it_IT-serena-medium") == 0
+        assert byte_stimati("", "it_IT-serena-medium") == 0
+
+    def test_ogni_voce_ha_il_suo_ritmo(self):
+        """Misurati sintetizzando davvero, 90 frasi per voce.
+
+        Non dalla cache: dai quattordici file inglesi che c'erano in cache
+        usciva un'altra costante, e sbagliata.
+        """
+        from amelie.speech import CARATTERI_AL_SECONDO, VOCI
+
+        for modello in VOCI.values():
+            assert modello in CARATTERI_AL_SECONDO, f"{modello} senza ritmo misurato"
+
+    def test_una_cifra_dura_piu_di_un_carattere(self):
+        """«1990» sono quattro segni e Piper dice «millenovecentonovanta».
+
+        Non e' un caso di bordo: annata, temperatura e gradazione chiudono
+        quasi ogni racconto, cioe' sono proprio la coda che la stima deve
+        coprire. Contandole per quattro, l'errore mediano su quelle frasi era
+        del 27% in italiano; col peso misurato scende al 3,2%.
+        """
+        from amelie.speech import byte_stimati
+
+        con_cifre = byte_stimati("Annata 1990.", "it_IT-serena-medium")
+        senza = byte_stimati("Annata rossa.", "it_IT-serena-medium")
+        assert con_cifre > senza * 1.5
+
+    def test_il_ripiego_sta_fra_le_due(self):
+        from amelie.speech import CARATTERI_AL_SECONDO, CARATTERI_AL_SECONDO_RIPIEGO
+
+        misurate = list(CARATTERI_AL_SECONDO.values())
+        assert min(misurate) <= CARATTERI_AL_SECONDO_RIPIEGO <= max(misurate)

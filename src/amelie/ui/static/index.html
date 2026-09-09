@@ -504,6 +504,56 @@ svg { display: block; }
 #racconto.attiva ~ #didascalia { display: none; }
 
 /* ===========================================================================
+   ANNULLA — chiudere senza dover togliere la bottiglia.
+
+   Fino a qui l'unico modo di finire era sollevare la bottiglia dal piatto. Va
+   benissimo quando si ha finito davvero, ma non per chi ha appena versato: il
+   vino e' nel bicchiere, la bottiglia sta li', e nessuno la risolleva solo per
+   far tacere il dispositivo.
+
+   Sta FUORI dalle viste, come la didascalia. Dentro `#racconto` finirebbe
+   sotto `.comandi`, che nonostante i cerchi stiano al centro e' una scatola
+   larga tutto lo schermo (left:0; right:0): si mangerebbe il tocco in tutta la
+   fascia bassa, e sembrerebbe un difetto del touch invece che una
+   sovrapposizione.
+
+   In basso a SINISTRA perche' l'angolo destro e' gia' il gesto da tre secondi
+   che apre lo stato tecnico. A sinistra il posto c'e', ma e' stretto: le righe
+   di scelta della conferma cominciano a 170 e la colonna del testo a 140. Ci
+   sta un cerchio da 108, non una pillola con la scritta - «Annulla» a 34 px
+   misura 110 px, che col contorno fanno 180. La scritta tradotta resta come
+   nome accessibile.
+   =========================================================================== */
+#annulla {
+  position: absolute; left: calc(var(--passo) * 2); z-index: 8;
+  /* Sulla stessa riga dei cerchi del racconto. Il loro `bottom` dichiarato e'
+     il fondo della SCATOLA, alta 140, con dentro cerchi da 108 centrati: il
+     fondo dei cerchi sta mezza differenza piu' su. Prendendo il valore
+     dichiarato si resterebbe sedici pixel piu' in basso. */
+  bottom: calc(var(--passo) * 2.8 + (var(--tocco-grande) - var(--tocco)) / 2);
+  /* Tono spento come «Nessuno di questi»: e' una via d'uscita, non un comando
+     del racconto, e non deve pesare quanto la pausa. */
+  border-color: rgba(138, 107, 48, .45); color: var(--avorio-tenue);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  /* La visibilita' NON si interpola, per la stessa ragione delle viste: per
+     quattro decimi di secondo un pulsante invisibile resterebbe vivo sopra la
+     schermata d'invito, dove un tocco non deve fare niente. */
+  transition: opacity .3s var(--curva), visibility 0s linear .3s,
+              transform .12s var(--curva), background-color .2s, border-color .2s;
+}
+#annulla.disponibile {
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transition: opacity .3s var(--curva), visibility 0s,
+              transform .12s var(--curva), background-color .2s, border-color .2s;
+}
+/* Il ritorno al tocco va ridichiarato: `#annulla` ha specificita' 1-1-0 e
+   batte `.cmd.premuto`, che ne ha 0-2-0. Senza queste due righe il bordo
+   smette di accendersi sotto il dito, in silenzio. */
+#annulla.premuto {
+  background: rgba(200, 134, 13, .16); border-color: var(--oro-chiaro);
+}
+
+/* ===========================================================================
    SERVIZIO — cose che si vedono solo quando qualcosa non va.
    =========================================================================== */
 /* Quando non c'e' voce non c'e' niente da comandare: i pulsanti spariscono
@@ -666,6 +716,11 @@ svg { display: block; }
   </section>
 
   <div id="didascalia"></div>
+  <!-- Dopo la didascalia, cosi' a parita' di z-index vince sulla sua velatura
+       e resta leggibile anche quando c'e' una didascalia accesa sotto. -->
+  <button class="cmd" id="annulla" aria-label="Annulla">
+    <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+  </button>
   <div id="muto"></div>
   <div id="spia"></div>
   <div id="angolo"></div>
@@ -699,8 +754,15 @@ function adattaScena() {
 adattaScena();
 addEventListener("resize", adattaScena);
 
+/* Le due sole schermate in cui il dispositivo sta aspettando l'ospite, ed e'
+   quindi lecito chiudere: la scelta fra candidati e il racconto. Nelle altre
+   non c'e' niente da annullare - in attesa si e' gia' a casa, e durante la
+   lettura fermarsi a meta' lascerebbe l'OCR a girare. */
+const VISTE_ANNULLABILI = ["conferma", "racconto"];
+
 function mostra(nome) {
   viste.forEach(v => $(v).classList.toggle("attiva", v === nome));
+  $("annulla").classList.toggle("disponibile", VISTE_ANNULLABILI.includes(nome));
 }
 
 /* Quello che il dispositivo sta dicendo, adesso. Arriva già temporizzato: il
@@ -899,6 +961,13 @@ function regolaVolume(delta) {
 }
 
 rendiToccabile($("v-apri"), alternaVolume);
+/* Rotta a se', non un'azione del racconto: `comanda()` parla con
+   `/racconto/<azione>`, e quella rotta non fa NIENTE quando non c'e' un
+   riproduttore acceso - cioe' in tutta la schermata di conferma, nei due
+   secondi dopo la fine, e quando la lingua non ha voce. Il pulsante sarebbe
+   morto proprio nei casi in cui serve di piu'. */
+rendiToccabile($("annulla"), () => fetch("/annulla", { method: "POST" }).catch(() => {}));
+
 rendiToccabile($("v-giu"), () => regolaVolume(-passoVolume));
 rendiToccabile($("v-su"),  () => regolaVolume(+passoVolume));
 
@@ -912,6 +981,10 @@ function disegnaLingue(m) {
   if (m.invito)  $("invito").textContent  = m.invito;
   if (m.domanda) $("domanda").textContent = m.domanda;
   if (m.avviso_muto) $("muto").textContent = m.avviso_muto;
+  /* Il nome del pulsante non e' scritto nella pagina: arriva tradotto come
+     tutte le altre scritte fisse. Sul cerchio c'e' solo la croce, ma il nome
+     accessibile deve dire in che lingua si sta parlando. */
+  if (m.annulla) $("annulla").setAttribute("aria-label", m.annulla);
   segnaVoceMuta(m.voce_muta === true);
 
   const box = $("lingue");
@@ -943,8 +1016,13 @@ eventi.onmessage = (e) => {
         $("r-sottotitolo").textContent = m.sottotitolo || "";
         /* Il testo si svuota QUI, non quando arriva quello nuovo: fra il
            cambio di vista e la prima frase passa qualche decimo, e in quel
-           buco si leggerebbe ancora il vino di prima. */
-        componiRacconto([]);
+           buco si leggerebbe ancora il vino di prima.
+           Ma non quando il racconto e' lo STESSO: la schermata resta accesa
+           anche nei due secondi che seguono la fine, e li' non c'e' nessun
+           vino di prima da nascondere - c'e' quello che si e' appena
+           ascoltato. Svuotandola, l'ospite guardava due secondi di schermo
+           vuoto ogni volta che una storia finiva. */
+        if (!m.stesso_racconto) componiRacconto([]);
       }
       if (m.vista === "lavoro" && m.frase) $("frase-lavoro").textContent = m.frase;
       if (m.vista === "avviso") {
@@ -973,7 +1051,11 @@ eventi.onmessage = (e) => {
     case "riproduzione":
       illumina(m.frase || 0);
       segnaPausa(m.in_pausa === true);
-      if (m.durata > 0) avanzamento(m.posizione / m.durata);
+      /* La quota la calcola il server, che e' l'unico a sapere quanto dura
+         il racconto INTERO. Qui si divideva posizione per durata, ma quella
+         durata era «quanto e' gia' sintetizzato»: cresceva sotto i piedi del
+         numeratore e la barra tornava indietro a ogni frase nuova. */
+      if (typeof m.quota === "number") avanzamento(m.quota);
       break;
 
     case "candidati": {

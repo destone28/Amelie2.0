@@ -59,6 +59,9 @@ class Evento(enum.Enum):
     RACCONTO_FINITO = "racconto_finito"
     RIPETI = "ripeti"                  # tocco sullo schermo a racconto concluso
     RINUNCIA = "rinuncia"              # troppi tentativi di lettura falliti
+    # Il tocco su «annulla»: l'ospite chiude da se', senza togliere la
+    # bottiglia dal piatto. Vedi le tre righe in TRANSIZIONI.
+    ANNULLA = "annulla"
     ERRORE = "errore"
 
 
@@ -185,6 +188,24 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
     (Stato.RICONOSCIMENTO, Evento.SCADENZA): Stato.GUASTO,
 
     (Stato.GUASTO, Evento.SCADENZA): Stato.ATTESA,
+
+    # ANNULLA — l'unica via d'uscita che non passi da un fatto fisico.
+    #
+    # Fino a qui l'unico modo di chiudere era TOGLIERE LA BOTTIGLIA. E' la
+    # scelta giusta per il caso normale - attrito zero, nessun pulsante - ma
+    # lascia scoperto chi ha appena versato: il vino e' nel bicchiere, la
+    # bottiglia sta sul piatto e nessuno vuole risollevarla per far tacere il
+    # dispositivo.
+    #
+    # Solo da questi tre stati, e sono esattamente i tre in cui c'e' un
+    # pulsante a schermo. CONCLUSO c'e' perche' la vista «racconto» resta
+    # accesa anche nei due secondi che seguono la fine (VISTA[CONCLUSO] in
+    # app.py): li' il pulsante si vede, quindi deve funzionare. Dagli stati di
+    # lavoro NO: quelle schermate non hanno pulsanti, e annullare in SCANSIONE
+    # lascerebbe l'OCR a girare.
+    (Stato.CONFERMA, Evento.ANNULLA): Stato.ATTESA,
+    (Stato.RACCONTO, Evento.ANNULLA): Stato.ATTESA,
+    (Stato.CONCLUSO, Evento.ANNULLA): Stato.ATTESA,
 }
 
 # Stati da cui togliere la bottiglia riporta sempre in attesa. Vale ovunque

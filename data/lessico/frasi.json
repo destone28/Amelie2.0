@@ -135,6 +135,10 @@
     "voce_assente": {
       "it": "In questa lingua il racconto si legge, non si ascolta.",
       "en": "In this language the story is written, not spoken."
+    },
+    "annulla": {
+      "it": "Annulla",
+      "en": "Cancel"
     }
   },
   "sigle": {

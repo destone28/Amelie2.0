@@ -50,9 +50,12 @@ from .matcher import Fatti, Livello, Matcher
 from .narrator import Narratore, spezza_in_frasi
 from .ocr import Lettore, OCRNonDisponibile
 from .speech import (
-    VOLUME_PREDEFINITO, ImpostazioniVoce, Riproduttore, Voce, VoceNonDisponibile,
+    VOCI, VOLUME_PREDEFINITO, ImpostazioniVoce, Riproduttore, Voce,
+    VoceNonDisponibile, caratteri_al_secondo, per_la_voce,
 )
-from .state import DURATE_S, EFFETTI_INGRESSO, Effetto, Evento, Macchina, Stato
+from .state import (
+    DURATE_S, EFFETTI_INGRESSO, TRANSIZIONI, Effetto, Evento, Macchina, Stato,
+)
 
 log = logging.getLogger("amelie")
 
@@ -199,7 +202,10 @@ class Amelie:
         # bottiglia ancora sul piatto, il rilancio qui sotto farebbe ripartire
         # una seconda lettura, e poi una terza. Si azzera quando la bottiglia
         # viene tolta - che e' il modo in cui l'ospite dice "ho finito".
-        self._gia_raccontato = False
+        # Questa bottiglia e' gia' stata servita: si e' raccontata fino in
+        # fondo, oppure l'ospite ha annullato. Finche' e' alzata, il ciclo non
+        # riparte da solo. Si abbassa quando la bottiglia viene tolta davvero.
+        self._bottiglia_chiusa = False
         self.volume = self._volume_salvato(cfg.volume)
         if self.voce is not None:
             self.voce.volume = self.volume
@@ -226,10 +232,23 @@ class Amelie:
             # Il tavolo e' finito: si torna alla lingua di casa PRIMA di
             # ridisegnare, cosi' la schermata d'attesa esce gia' nella lingua
             # giusta invece di cambiare sotto gli occhi di chi arriva.
-            if t.cambia_stato and t.a is Stato.ATTESA:
+            # Annullare non vuol dire che il tavolo e' finito: la bottiglia
+            # e' ancora li' e sono le stesse persone. Chi aveva scelto
+            # l'inglese, premendo la croce, si ritrovava l'invito in italiano e
+            # doveva ricercarsi la bandierina per la bottiglia dopo. La lingua
+            # torna a casa quando la bottiglia viene TOLTA, che e' il momento
+            # in cui il tavolo cambia davvero.
+            if (t.cambia_stato and t.a is Stato.ATTESA
+                    and t.evento is not Evento.ANNULLA):
                 self._torna_alla_lingua_di_casa()
-            if t.a is Stato.CONCLUSO:
-                self._gia_raccontato = True
+            # Questa bottiglia e' finita, comunque sia finita: perche' il
+            # racconto e' arrivato in fondo, o perche' l'ospite ha annullato.
+            # In tutti e due i casi il ciclo NON deve ripartire da solo con la
+            # bottiglia ancora sul piatto - vedi il ramo di rilancio in
+            # `_un_battito`, che senza questa bandiera rilancerebbe al primo
+            # battito, cioe' un decimo di secondo dopo il tocco.
+            if t.a is Stato.CONCLUSO or t.evento is Evento.ANNULLA:
+                self._bottiglia_chiusa = True
             self._mostra(t.a)
         for e in t.effetti:
             self._esegui(e)
@@ -279,12 +298,19 @@ class Amelie:
                              # essere dello stesso oro dell'invito.
                              "tono": TONO.get(stato, "invito"),
                              "voce_muta": not self._voce_disponibile()}
-        if stato is Stato.RACCONTO:
+        if stato in (Stato.RACCONTO, Stato.CONCLUSO):
             f = self._fatti
             m["titolo"] = f.nome or f.tipologia or f.denominazione or (
                 f.vitigni[0] if f.vitigni else "")
             pezzi = [x for x in (f.cantina, str(f.annata) if f.annata else None) if x]
             m["sottotitolo"] = " · ".join(pezzi)
+            # CONCLUSO mostra la stessa schermata del racconto - la vista non
+            # cambia - e il racconto e' quello di prima: il testo NON va
+            # svuotato. Senza questa riga, alla fine di ogni racconto l'ospite
+            # guardava due secondi di schermo vuoto con sopra il solo pulsante:
+            # titolo, testo e barra sparivano tutti insieme, perche' il client
+            # ripulisce a ogni messaggio di stato con vista «racconto».
+            m["stesso_racconto"] = stato is Stato.CONCLUSO
         elif stato is Stato.SCANSIONE:
             m["frase"] = frase("sto_leggendo")
         elif stato is Stato.RICONOSCIMENTO:
@@ -312,6 +338,7 @@ class Amelie:
             "voce_muta": not self._voce_disponibile(),
             "avviso_muto": self.lex.frase("schermo", "voce_assente",
                                           lingua=self.lingua),
+            "annulla": self.lex.frase("schermo", "annulla", lingua=self.lingua),
         })
 
     # -------------------------------------------------------------- volume
@@ -599,9 +626,14 @@ class Amelie:
         self._pubblica({"tipo": "didascalia", "testo": testo})
 
     def _ferma_racconto(self) -> None:
-        """Ferma la riproduzione in corso e chi la stava aspettando."""
-        self._ferma_voce.set()
+        """Ferma la riproduzione in corso e chi la stava aspettando.
+
+        La bandiera si alza SOTTO il lucchetto del riproduttore, non prima: e'
+        cio' che rende impossibile passare fra il controllo e l'assegnazione in
+        `_racconta` e lasciar partire un racconto gia' annullato.
+        """
         with self._lucchetto_lettore:
+            self._ferma_voce.set()
             lettore, self._lettore = self._lettore, None
         if lettore is not None:
             lettore.ferma()
@@ -644,13 +676,12 @@ class Amelie:
             elif e is Effetto.AVVIA_RACCONTO:
                 self._avvia(self._racconta)
             elif e is Effetto.FERMA_RACCONTO:
-                self._ferma_voce.set()
-                with self._lucchetto_lettore:
-                    lettore, self._lettore = self._lettore, None
-                if lettore is not None:
-                    lettore.ferma()
-                if self.voce:
-                    self.voce.zittisci()
+                # Non una copia: la fermata e' UNA. Ce n'erano due, e quella
+                # che stava qui - cioe' quella che usano l'annullamento e la
+                # bottiglia tolta - alzava la bandiera FUORI dal lucchetto del
+                # riproduttore, che e' esattamente cio' che apre la finestra
+                # descritta in `_racconta`. Una sola copia, un solo invariante.
+                self._ferma_racconto()
             elif e is Effetto.MOSTRA_CANDIDATI:
                 self._pubblica({"tipo": "candidati", "voci": self._candidati,
                                 "nessuno": self.lex.frase("schermo", "nessuno_di_questi",
@@ -798,14 +829,27 @@ class Amelie:
         try:
             lettore = Riproduttore(
                 self.voce, frasi,
-                su_avanzamento=lambda i: self._pubblica({"tipo": "riproduzione", **i}),
-                passo_s=SALTO_S)
+                su_avanzamento=lambda i: self._pubblica({"tipo": "riproduzione", **i}))
         except Exception as e:                              # noqa: BLE001
             log.warning("riproduttore non avviabile: %s", e)
             self._scorri_senza_voce(frasi)
             return
 
+        # Fra la generazione del testo e questa riga puo' essere passato un
+        # minuto, e in quel minuto `_lettore` era vuoto: un annullamento caduto
+        # li' non trovava niente da fermare e il dispositivo cominciava a
+        # parlare sopra la schermata d'invito.
+        #
+        # Il controllo sta DENTRO il lucchetto, insieme all'assegnazione, e
+        # `_ferma_racconto` alza la bandiera dentro lo stesso lucchetto: senza,
+        # fra il controllo e l'assegnazione restano pochi bytecode in cui un
+        # annullamento passa in mezzo, non trova nessun riproduttore da fermare
+        # e ne lascia partire uno subito dopo. Stretta quanto si vuole, e'
+        # comunque la finestra che questa correzione doveva chiudere.
         with self._lucchetto_lettore:
+            if self._ferma_voce.is_set():
+                log.info("racconto annullato prima di cominciare")
+                return
             self._lettore = lettore
         lettore.avvia()
         finito = lettore.attendi(timeout=TETTO_RACCONTO_S)
@@ -830,19 +874,49 @@ class Amelie:
     def _scorri_senza_voce(self, frasi: list[str]) -> None:
         """Il ripiego quando non c'e' voce: il testo si illumina da solo.
 
-        Il ritmo e' quello di una lettura ad alta voce, circa quindici caratteri
-        al secondo. E' una stima, ma qui non c'e' nessun audio con cui possa
-        andare fuori sincrono.
+        Il ritmo e' quello di una lettura ad alta voce. Era «circa quindici
+        caratteri al secondo», dichiarato come stima; ora e' il ritmo MISURATO
+        della voce che sta imitando - 17,2 caratteri al secondo in italiano,
+        14,4 in inglese - cosi' il testo scorre come sarebbe stato letto.
+
+        E pubblica una quota vera. Prima mandava `durata: 0`, e il client
+        saltava l'aggiornamento: quando la lingua non ha voce la barra e'
+        nascosta dal foglio di stile e non si notava, ma a questo ripiego ci si
+        arriva ANCHE quando la voce per la lingua c'e' e il riproduttore non
+        parte. Li' la barra e' bene in vista, e restava ferma a zero per tutto
+        il racconto.
         """
+        pesi = [max(1, len(per_la_voce(f))) for f in frasi]
+        totale = sum(pesi)
+        fatto = 0
+        # Il ritmo della lingua che si sta MOSTRANDO. Non `voce.imp.modello`:
+        # quando la lingua scelta non ha voce, `Voce.per_lingua` esce prima di
+        # cambiare il modello, e li' resta quello dell'ultima lingua che una
+        # voce ce l'aveva. Il testo inglese sarebbe scorso al ritmo italiano -
+        # cioe' proprio nel caso per cui questo ripiego esiste.
+        car_s = caratteri_al_secondo(VOCI.get(self.lingua, ""))
         for i, frase in enumerate(frasi):
             if self._ferma_voce.is_set():
                 return
             self._pubblica({"tipo": "riproduzione", "frase": i,
                             "posizione": 0.0, "durata": 0.0,
+                            "quota": round(fatto / totale, 3),
                             "in_pausa": False, "completo": False,
                             "senza_voce": True})
-            time.sleep(min(6.0, max(1.0, len(frase) / 15)))
+            # `wait` e non `sleep`: la bandiera e' un Event, e aspettarci
+            # sopra fa tornare il thread nell'istante in cui viene alzata.
+            # Dormendo, chi annulla lasciava il thread di lavoro vivo fino a
+            # sei secondi dopo che lo schermo era gia' tornato all'invito - e
+            # una bottiglia rimessa dentro quella finestra trovava il lavoro
+            # ancora in corso, cioe' un guasto dichiarato.
+            if self._ferma_voce.wait(min(6.0, max(1.0, pesi[i] / car_s))):
+                return
+            fatto += pesi[i]
         if not self._ferma_voce.is_set():
+            self._pubblica({"tipo": "riproduzione", "frase": len(frasi) - 1,
+                            "posizione": 0.0, "durata": 0.0, "quota": 1.0,
+                            "in_pausa": False, "completo": True,
+                            "senza_voce": True})
             self.macchina.invia(Evento.RACCONTO_FINITO)
 
     # ------------------------------------------------------------- comandi
@@ -855,7 +929,12 @@ class Amelie:
         """
         with self._lucchetto_lettore:
             lettore = self._lettore
-        if lettore is None:
+        # `esaurito` e non solo `None`: il riproduttore resta agganciato ancora
+        # mezzo secondo dopo la fine, il tempo che l'ultimo suono esca davvero.
+        # In quella finestra i suoi thread sono gia' morti, e un tocco su
+        # «indietro» faceva arretrare la barra lasciandocela, perche' nessuno
+        # pubblicava piu' niente.
+        if lettore is None or lettore.esaurito:
             return {"ok": False}
         if azione == "alterna":
             lettore.alterna()
@@ -872,6 +951,66 @@ class Amelie:
         else:
             return {"ok": False, "motivo": "azione sconosciuta"}
         return {"ok": True, **lettore.istantanea()}
+
+    def annulla(self) -> dict:
+        """Il tocco su «annulla»: si chiude e si torna all'invito.
+
+        Serve perche' fino a qui l'unico modo di finire era TOGLIERE LA
+        BOTTIGLIA. Va benissimo nel caso normale, ma non per chi ha appena
+        versato: il vino e' nel bicchiere, la bottiglia sta sul piatto, e
+        risollevarla solo per far tacere il dispositivo e' una cosa che non si
+        chiede a un ospite.
+
+        Quasi tutto lo spegne la macchina, e va lasciato fare a lei: uscendo da
+        RACCONTO scatta FERMA_RACCONTO, entrando in ATTESA tornano l'anello in
+        respiro, la schermata d'invito e la lingua di casa, e la scadenza dei
+        dodici secondi della conferma si azzera da sola. Scrivere l'annullamento
+        fuori dalla macchina significa dimenticarsene meta': la voce tace e
+        l'anello resta verde sopra la schermata d'invito.
+
+        Restano due cose che la macchina non puo' sapere, ed e' per quelle che
+        questo metodo esiste.
+
+        La PRIMA e' l'annuncio della lingua, che vive in un thread suo. Uscendo
+        da RACCONTO viene zittito di rimbalzo, perche' FERMA_RACCONTO svuota il
+        flusso; uscendo dalla CONFERMA no. Chi guarda i candidati, tocca una
+        bandierina e poi annulla si sentirebbe finire «English» sopra la
+        schermata d'invito.
+
+        La SECONDA e' il racconto non ancora cominciato. Fra la generazione del
+        testo e l'avvio del riproduttore c'e' una finestra in cui `_lettore` e'
+        ancora vuoto: un FERMA_RACCONTO che cade li' non trova niente da
+        fermare, e il dispositivo comincia a parlare a schermata d'invito gia'
+        disegnata. Con i testi in archivio la finestra e' quasi nulla, col
+        modello linguistico acceso arriva a un minuto - e ci mette tanto
+        proprio quando qualcuno ha voglia di annullare. `_ferma_voce` resta
+        alzata, e `_racconta` la rilegge prima di dare fiato.
+
+        Non promette silenzio istantaneo: i due decimi di secondo gia'
+        consegnati ad ALSA escono comunque. Sono gli stessi che si sentono oggi
+        togliendo la bottiglia.
+        """
+        stato = self.macchina.stato
+        # Si guarda PRIMA se c'e' qualcosa da annullare, e nel dubbio non si
+        # tocca niente. Zittendo prima di sapere, un tocco caduto nel vuoto -
+        # arrivato mentre la schermata stava gia' cambiando - lascerebbe
+        # `_ferma_voce` alzata addosso al racconto che sta per partire; e
+        # riabbassarla dopo sarebbe peggio, perche' potrebbe averla alzata
+        # qualcun altro un istante prima, per esempio chi ha tolto la
+        # bottiglia. Meglio non entrarci affatto.
+        if (stato, Evento.ANNULLA) not in TRANSIZIONI:
+            log.info("annulla ignorato: la macchina e' in %s", stato.value)
+            return {"ok": False, "stato": stato.value}
+        # Ora si puo'. Prima si zittisce e poi si manda l'evento: al contrario,
+        # fra l'ingresso in ATTESA e il silenzio ci sarebbe una frase intera.
+        self._ferma_voce.set()
+        with self._lucchetto_annuncio:
+            self._lingua_da_annunciare = None
+        if self.voce is not None:
+            self.voce.zittisci()
+        t = self.macchina.invia(Evento.ANNULLA)
+        log.info("annullato da %s", stato.value)
+        return {"ok": True, "stato": t.a.value}
 
     def segnala(self) -> dict:
         """«Nessuno di questi»: si mette da parte la bottiglia per capirla dopo.
@@ -978,11 +1117,11 @@ class Amelie:
                 self._tentativi = 0     # bottiglia nuova, si riparte da capo
             else:
                 # Tolta la bottiglia, la prossima e' un'altra storia.
-                self._gia_raccontato = False
+                self._bottiglia_chiusa = False
             self.macchina.invia(
                 Evento.BOTTIGLIA_PRESENTE if ora else Evento.BOTTIGLIA_ASSENTE)
         elif (ora and self.macchina.stato is Stato.ATTESA
-                and not self._gia_raccontato
+                and not self._bottiglia_chiusa
                 and self._tentativi < TENTATIVI_MAX):
             # La bottiglia c'e' ma siamo tornati in attesa: succede dopo un
             # guasto. NON dopo un racconto finito - quello ci torna apposta, e
@@ -1090,6 +1229,14 @@ def crea_app(amelie: Amelie):
         return StreamingResponse(flusso(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache",
                                           "X-Accel-Buffering": "no"})
+
+    @app.post("/annulla")
+    async def annulla():
+        # `async def`, come tutte le altre: FastAPI manderebbe una `def` in un
+        # thread del pool, e `Macchina.invia` non ha lucchetti. Correrebbe
+        # contro il battito del sensore, che gira sul loop - cioe' contro la
+        # scadenza dei dodici secondi della conferma.
+        return JSONResponse(amelie.annulla())
 
     @app.post("/segnala")
     async def segnala():

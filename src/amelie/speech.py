@@ -373,6 +373,55 @@ VOCI = {
 }
 CARTELLA_CACHE = Path.home() / ".cache" / "amelie" / "voce"
 
+# Quanti caratteri di testo stanno in un secondo di parlato, voce per voce.
+# Serve a dire quanto dura un racconto PRIMA di averlo sintetizzato: la barra
+# di avanzamento ha bisogno di un denominatore, e quello vero non esiste
+# ancora. Vedi `Riproduttore.quota`.
+#
+# Misurate sintetizzando davvero, 90 frasi per voce prese dai racconti in
+# archivio, 15-136 caratteri, per dieci minuti di parlato complessivi. Non
+# dalla cache: dai 14 file inglesi che c'erano in cache usciva 32.000 byte
+# fissi piu' 2.349 per carattere, cioe' un'altra costante, e sbagliata.
+#
+# Il modello e' PROPORZIONALE, senza parte fissa. Provato anche quello con
+# l'intercetta - il silenzio che Piper mette in testa e in coda e' reale, e in
+# italiano i minimi quadrati lo misurano in 0,22 s - e vale uguale: tarando su
+# meta' frasi e provando sull'altra meta', l'errore sulla somma di sei frasi e'
+# 2,8% contro 2,9% in inglese e 2,7% contro 3,2% in italiano. Mezzo punto non
+# paga una seconda costante per voce.
+#
+# (Sull'inglese quell'intercetta viene NEGATIVA, -5.179 byte, il che dice solo
+# che una retta non e' la forma giusta su quel campione. Non sarebbe stato un
+# pericolo: la stima si annullerebbe sotto 1,6 caratteri, e le frasi misurate
+# vanno da 23 a 136. E' un motivo per diffidare del modello, non per temerlo.)
+#
+# Errore sulla somma di sei frasi, che e' cio' che conta qui: mediana 2,7% in
+# italiano e 2,8% in inglese, novantesimo percentile 8,0% e 6,6%.
+CARATTERI_AL_SECONDO = {
+    "it_IT-serena-medium": 17.2,
+    "en_US-ljspeech-medium": 14.4,
+}
+# Per una voce che non e' in tabella. E' la media delle due misurate: chi
+# aveva scritto «circa quindici caratteri al secondo» a occhio, nel ripiego
+# senza voce, aveva indovinato quasi esattamente questo numero.
+CARATTERI_AL_SECONDO_RIPIEGO = 15.8
+
+# Quanto vale una CIFRA, in caratteri parlati. «1990» sono quattro segni e
+# Piper dice «millenovecentonovanta», che ne vale ventuno: contandoli per
+# quattro si sottostima. Non e' un caso di bordo - annata, temperatura e
+# gradazione chiudono quasi ogni racconto, cioe' sono proprio la CODA, la sola
+# parte che questa stima deve coprire.
+#
+# Misurato sintetizzando davvero, 39 frasi con cifre fra le due voci: l'errore
+# mediano su quelle frasi passa dal 27% (italiano) e 19% (inglese) al 3,2% in
+# tutte e due. E il valore viene lo stesso per le due lingue, il che ha senso:
+# un numero si pronuncia lungo in qualunque lingua.
+CIFRA_VALE = 4.7
+
+
+def caratteri_al_secondo(modello: str) -> float:
+    return CARATTERI_AL_SECONDO.get(modello, CARATTERI_AL_SECONDO_RIPIEGO)
+
 
 # --------------------------------------------------------------- pronuncia
 
@@ -424,6 +473,28 @@ def per_la_voce(testo: str) -> str:
     return re.sub(r"\s+", " ", testo).strip()
 
 
+def byte_stimati(frase: str, modello: str, frequenza: int = 22050) -> int:
+    """Quanto audio produrra' questa frase, prima di sintetizzarla.
+
+    Si contano i caratteri di cio' che verra' PRONUNCIATO, non di cio' che e'
+    scritto. `per_la_voce` scioglie le sigle, e «DOCG» da quattro caratteri ne
+    diventa quarantotto: stimare sul testo grezzo sbaglia di piu' del doppio
+    proprio sulle frasi d'apertura, che sono quelle che si sentono per prime.
+
+    E le cifre valgono per quello che si sente, non per quanti segni sono:
+    vedi `CIFRA_VALE`.
+
+    Zero per una frase che non si pronuncia: `sintetizza` restituisce b"" nello
+    stesso caso, e le due cose devono dire la stessa cosa.
+    """
+    detto = per_la_voce(frase)
+    if not detto:
+        return 0
+    cifre = sum(c.isdigit() for c in detto)
+    lunghezza = len(detto) + (CIFRA_VALE - 1) * cifre
+    return int(lunghezza / caratteri_al_secondo(modello) * byte_al_secondo(frequenza))
+
+
 # ------------------------------------------------------------------- voce
 
 @dataclass(frozen=True)
@@ -467,6 +538,9 @@ class Voce:
         # Il flusso verso lo schermo si apre una volta e resta aperto: vedi
         # `Uscita` per il perche'.
         self._uscita: Uscita | None = None
+        # Quante volte si e' chiesto silenzio. Serve a chi sta parlando per
+        # accorgersi che non lo deve piu' fare: vedi `zittisci` e `parla`.
+        self._silenzi = 0
         # Il volume sta QUI, non nell'uscita: si regola anche a flusso ancora
         # chiuso - all'avvio, prima che qualcuno parli - e l'uscita lo legge a
         # ogni pezzo. Una sola verita', nessuna copia da tenere allineata.
@@ -632,11 +706,22 @@ class Voce:
         scrittura, il testo compariva uno o due secondi prima della voce.
         """
         uscita = self.uscita()
+        # Di quale silenzio siamo figli. Se `zittisci` ne dichiara un altro
+        # mentre parliamo, questo discorso e' finito: vedi `zittisci`.
+        with self._lock:
+            mio = self._silenzi
         for frase in frasi:
+            if self._silenzi != mio:
+                return
             pcm = self.sintetizza(frase)
             if not pcm:
                 continue
             uscita.scrivi(pcm)
+            if self._silenzi != mio:
+                # Zittiti mentre accodavamo: si butta anche questa, altrimenti
+                # esce comunque, dopo lo svuotamento.
+                uscita.svuota()
+                return
             if su_frase is not None:
                 # Si accoda PRIMA e si mostra DOPO: la frase comincia a sentirsi
                 # quando manca esattamente la sua durata alla fine della coda.
@@ -688,7 +773,17 @@ class Voce:
 
         Si butta via cio' che non e' ancora uscito, e il flusso resta APERTO:
         chiuderlo costerebbe altri due secondi alla prossima parola.
+
+        Ma svuotare la coda NON basta, e per un po' non e' bastato: `parla`
+        cicla sulle frasi, e chi stava aspettando spazio per accodare la
+        successiva si svegliava sulla coda ora vuota e la faceva sentire. Un
+        annuncio di lingua e' di DUE frasi: zittendolo a meta' si sentiva la
+        seconda per intero - due secondi e mezzo - sopra la schermata d'invito.
+        Per questo si alza anche un contatore: chi sta parlando se ne accorge e
+        smette.
         """
+        with self._lock:
+            self._silenzi += 1
         if self._uscita is not None:
             self._uscita.svuota()
 
@@ -750,17 +845,26 @@ class Riproduttore:
     """
 
     def __init__(self, voce: "Voce", frasi: list[str], *,
-                 su_avanzamento=None, passo_s: float = 5.0) -> None:
+                 su_avanzamento=None) -> None:
         self.voce = voce
         self.frasi = [f for f in frasi if f and f.strip()]
         self.su_avanzamento = su_avanzamento
-        self.passo_s = passo_s
 
         self._bps = byte_al_secondo(voce.imp.frequenza)
         self._pcm = bytearray()
         # Offset in byte a cui comincia ogni frase: e' quello che permette di
         # dire QUALE frase si sta ascoltando, invece di indovinarlo.
         self._inizi: list[int] = []
+        # Quanto audio produrra' ogni frase, stimato prima di sintetizzarla.
+        # E' la CODA del racconto, quella non ancora sintetizzata, a non avere
+        # una durata vera: vedi `quota`.
+        self._stima = [byte_stimati(f, voce.imp.modello, voce.imp.frequenza)
+                       for f in self.frasi]
+        # Il pavimento della barra di avanzamento. Non e' una cache: e' cio'
+        # che impedisce alla barra di tremare all'indietro quando una stima
+        # viene sostituita dalla durata vera. Si riabbassa dove la posizione
+        # viene spostata a mano - pausa, salto, da capo - e solo li'.
+        self._quota_vista = 0.0
         self._posizione = 0
         self._in_pausa = False
         self._completo = False
@@ -784,8 +888,91 @@ class Riproduttore:
 
     @property
     def durata_s(self) -> float:
-        """Quanto c'e' GIA' sintetizzato. Cresce mentre si ascolta."""
+        """Quanto c'e' GIA' sintetizzato. Cresce mentre si ascolta.
+
+        NON e' la durata del racconto, e non va usata come denominatore di una
+        barra di avanzamento: per quello c'e' `quota`.
+        """
         return len(self._pcm) / self._bps
+
+    @property
+    def quota(self) -> float:
+        """Quanto del racconto INTERO e' stato detto, da 0 a 1.
+
+        La barra a schermo arretrava a ogni frase nuova, e la ragione era che
+        divideva la posizione per `durata_s`, cioe' per i byte gia'
+        sintetizzati. Ma la sintesi corre al doppio del tempo reale (RTF 0,54):
+        per tutta la prima meta' del racconto il denominatore
+        cresceva quasi al doppio della velocita' del numeratore. Dentro una
+        frase il rapporto saliva; all'arrivo della frase dopo precipitava.
+
+        Misurato su un racconto ricomposto da frasi con audio vero, otto frasi
+        per 16,8 secondi: **sette arretramenti, il peggiore di 43,9 punti** - e
+        a due secondi dall'inizio la barra segnava gia' il 56%, perche' con una
+        sola frase sintetizzata la posizione e' quasi tutto il buffer.
+
+        Qui il denominatore e' il racconto intero: i byte VERI di cio' che e'
+        gia' sintetizzato piu' i byte STIMATI delle sole frasi che mancano.
+        L'approssimazione copre quindi solo la CODA, che si accorcia da sola e
+        a quel ritmo di sintesi sparisce verso meta' racconto. E quando non
+        manca piu' niente il denominatore e' esatto, quindi la barra non puo'
+        piu' arrivare a fondo scala mentre c'e' ancora testo da sintetizzare -
+        cosa che con la vecchia formula capitava in un caso su quattro.
+
+        Resta avanti alla voce di quel tanto che separa cio' che si CONSEGNA
+        all'uscita da cio' che l'orecchio sente: circa tre quarti di secondo,
+        gli stessi che `attendi_la_coda` esiste per aspettare. Non e' un
+        difetto di questa formula, e' la distanza che c'e' in tutto il modulo:
+        anche la frase illuminata la ha.
+
+        Provata anche la strada senza stime - ripartire il racconto sul peso in
+        caratteri di ogni frase, denominatore costante dal primo istante - e
+        misurata contro la verita', cioe' la frazione di audio davvero
+        trascorsa. Su ottanta racconti, tarando la stima su frasi diverse da
+        quelle di prova:
+
+            peso in caratteri    0 arretramenti   scarto mediano 1,1%  peggiore 6,5%
+            denominatore misto   0 arretramenti   scarto mediano 0,0%  peggiore 2,8%
+
+        Nessuna delle due arretra; la seconda e' piu' che doppiamente fedele al
+        tempo, perche' il numeratore resta la posizione in byte e non il conto
+        delle lettere. Ventidue pixel di errore su una barra di 793, invece di
+        cinquantadue. Il confronto e' stato rifatto con la stima ESATTA che gira
+        qui: la prima volta era stato fatto con un estimatore diverso, e dava
+        1,4% - un numero migliore di quello vero.
+
+        Il pavimento serve proprio a questa strada: sostituire la stima di una
+        frase con la sua durata vera muove il denominatore di qualche punto, e
+        senza freno si vedrebbe un tremolio all'indietro a ogni frase. Una
+        costante sbagliata puo' quindi falsare il PASSO della barra, mai farla
+        tornare indietro.
+
+        Arretra ancora, e deve: `pausa`, `salta` all'indietro e `ricomincia`
+        spostano la posizione, ed e' l'unico movimento all'indietro che una
+        barra debba fare.
+        """
+        with self._stato:
+            return self._quota()
+
+    def _quota(self) -> float:
+        """`quota` col lucchetto gia' preso.
+
+        Il lucchetto non e' zelo: `_posizione`, `_pcm` e `_inizi` li muta il
+        thread di sintesi, e qui si combinano. Senza, si puo' leggere `_inizi`
+        con una voce in piu' e `_pcm` non ancora esteso.
+        """
+        reale = len(self._pcm)
+        # Quando la sintesi e' finita il totale e' esatto, e questo e' anche
+        # cio' che salva il caso in cui si sia ROTTA a meta': `_completo`
+        # diventa vero lo stesso, con meno frasi di quelle previste, e il
+        # racconto finisce dove e' arrivato. Continuare a contare le frasi mai
+        # sintetizzate inchioderebbe la barra a due terzi per sempre.
+        totale = reale if self._completo else reale + sum(self._stima[len(self._inizi):])
+        if totale <= 0:
+            return 0.0
+        grezza = min(1.0, max(0.0, self._posizione / totale))
+        self._quota_vista = max(self._quota_vista, grezza)
+        return self._quota_vista
 
     @property
     def in_pausa(self) -> bool:
@@ -798,15 +985,29 @@ class Riproduttore:
     @property
     def indice_frase(self) -> int:
         """L'ultima frase cominciata prima della posizione attuale."""
-        i = bisect.bisect_right(self._inizi, self._posizione) - 1
-        return max(0, i)
+        with self._stato:
+            return self._indice_frase()
+
+    def _indice_frase(self) -> int:
+        return max(0, bisect.bisect_right(self._inizi, self._posizione) - 1)
 
     def istantanea(self) -> dict:
-        return {"posizione": round(self.posizione_s, 2),
-                "durata": round(self.durata_s, 2),
-                "frase": self.indice_frase,
-                "in_pausa": self._in_pausa,
-                "completo": self._completo}
+        """Lo stato del racconto, tutto letto nello stesso istante.
+
+        Sotto lucchetto perche' `quota` e `frase` si ricavano dalle stesse tre
+        variabili che il thread di sintesi sta muovendo: prese in momenti
+        diversi potrebbero raccontare due punti diversi del racconto.
+        """
+        with self._stato:
+            return {"posizione": round(self._posizione / self._bps, 2),
+                    "durata": round(len(self._pcm) / self._bps, 2),
+                    # Tre decimali: la barra e' larga 793 pixel, un millesimo
+                    # e' meno di un pixel, e ogni cambio e' animato per un
+                    # quarto di secondo. Di piu' sarebbe rumore sul canale.
+                    "quota": round(self._quota(), 3),
+                    "frase": self._indice_frase(),
+                    "in_pausa": self._in_pausa,
+                    "completo": self._completo}
 
     # ------------------------------------------------------------ comandi
 
@@ -825,6 +1026,9 @@ class Riproduttore:
                 return
             self._in_pausa = True
             self._posizione = max(0, self._posizione - int(self._bps * indietro))
+            # La barra DEVE arretrare: si riavvolge di circa tre quarti di
+            # secondo per non tagliare una parola alla ripresa.
+            self._quota_vista = 0.0
             self._taci()
             self._sveglia.notify_all()
         self._avvisa()
@@ -855,6 +1059,7 @@ class Riproduttore:
         with self._sveglia:
             nuovo = self._posizione + int(secondi * self._bps)
             self._posizione = max(0, min(nuovo, len(self._pcm)))
+            self._quota_vista = 0.0       # all'indietro la barra deve seguire
             self._taci()                  # si butta cio' che non e' ancora uscito
             self._sveglia.notify_all()
         self._avvisa()
@@ -863,6 +1068,7 @@ class Riproduttore:
         with self._sveglia:
             self._posizione = 0
             self._in_pausa = False
+            self._quota_vista = 0.0
             self._taci()
             self._sveglia.notify_all()
         self._avvisa()
@@ -885,6 +1091,20 @@ class Riproduttore:
         with self._sveglia:
             self._taci()
             self._sveglia.notify_all()
+
+    @property
+    def esaurito(self) -> bool:
+        """La riproduzione e' finita: i suoi due thread non ci sono piu'.
+
+        Fra la fine e il momento in cui l'orchestratore lascia andare il
+        riproduttore passano i tre quarti di secondo che servono all'ultimo
+        suono per uscire davvero. In quel mezzo secondo lo schermo mostra
+        ancora il racconto e i pulsanti sono accesi, ma qui dentro non c'e' piu'
+        nessuno che suoni: un tocco su «indietro» spostava la posizione, la
+        barra tornava indietro e ci restava, perche' nessuno pubblica piu'
+        niente. Un pulsante che non puo' fare niente deve dirlo.
+        """
+        return self._finito.is_set()
 
     def attendi(self, timeout: float | None = None) -> bool:
         """True se il racconto e' arrivato in fondo, False se l'hanno fermato."""

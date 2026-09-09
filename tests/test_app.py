@@ -706,7 +706,7 @@ class TestLaSchermataNonResta:
         amelie.macchina.stato = Stato.RACCONTO
         amelie.macchina.invia(Evento.RACCONTO_FINITO)
         assert amelie.macchina.stato is Stato.CONCLUSO
-        assert amelie._gia_raccontato
+        assert amelie._bottiglia_chiusa
         amelie.macchina.invia(Evento.SCADENZA)
         assert amelie.macchina.stato is Stato.ATTESA
 
@@ -719,14 +719,14 @@ class TestLaSchermataNonResta:
         """Tolta e rimessa, è un'altra storia."""
         import asyncio
 
-        amelie._gia_raccontato = True
+        amelie._bottiglia_chiusa = True
         amelie.macchina.stato = Stato.ATTESA
         amelie.presenza.presente = True      # la bottiglia c'era
         amelie._distanza_finta = None        # e adesso e' tolta
         for _ in range(6):
             asyncio.run(amelie._un_battito())
         assert not amelie.presenza.presente
-        assert not amelie._gia_raccontato
+        assert not amelie._bottiglia_chiusa
 
         amelie._distanza_finta = 20          # rimessa
         for _ in range(4):
@@ -1343,3 +1343,294 @@ class TestModuliVisti:
         from amelie.bridge import PonteSimulato
 
         assert all(PonteSimulato().moduli().values())
+
+
+class TestFineDelRacconto:
+    def test_i_pulsanti_non_fingono_dopo_la_fine(self, amelie):
+        """Mezzo secondo in cui i tasti agivano su un riproduttore gia' morto.
+
+        Il riproduttore resta agganciato finche' l'ultimo suono non e' uscito
+        davvero - tre quarti di secondo. In quella finestra i suoi thread sono
+        finiti, ma lo schermo mostra ancora il racconto: un tocco su «indietro»
+        spostava la posizione, la barra tornava indietro e ci restava, perche'
+        nessuno pubblicava piu' niente.
+        """
+        class LettoreEsaurito:
+            esaurito = True
+
+            def salta(self, s):
+                raise AssertionError("non deve essere toccato")
+
+        amelie._lettore = LettoreEsaurito()
+        try:
+            assert amelie.comanda_racconto("indietro") == {"ok": False}
+        finally:
+            amelie._lettore = None
+
+
+    def test_la_schermata_non_si_svuota_alla_fine(self, amelie):
+        """Due secondi di schermo vuoto alla fine di OGNI racconto.
+
+        La vista di CONCLUSO e' la stessa del racconto, ma `_mostra` riempiva
+        titolo e sottotitolo solo per RACCONTO: il client, che ripulisce a ogni
+        messaggio di stato con vista «racconto», si trovava senza titolo e
+        svuotava testo e barra. Restava uno schermo nero con sopra il solo
+        pulsante, finche' non si tornava all'invito.
+        """
+        from amelie.matcher import Livello
+
+        amelie._fatti.livello = Livello.VINO      # altrimenti e' «ho rinunciato»
+        amelie._fatti.nome = "Barolo Cannubi"
+        amelie._fatti.cantina = "Marchesi di Barolo"
+        visti = []
+        amelie._pubblica = lambda m: visti.append(m)
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.macchina.invia(Evento.RACCONTO_FINITO)
+        stati = [m for m in visti if m.get("tipo") == "stato"]
+        assert stati, "nessuna schermata mandata entrando in concluso"
+        ultimo = stati[-1]
+        assert ultimo["vista"] == "racconto"
+        assert ultimo.get("titolo"), "il titolo e' sparito"
+        assert ultimo.get("stesso_racconto") is True, \
+            "senza questo il client svuota il testo che si e' appena ascoltato"
+
+    def test_arrivando_al_racconto_invece_si_svuota(self, amelie):
+        """L'altro lato: fra una bottiglia e l'altra il testo di prima non resta."""
+        from amelie.matcher import Livello
+
+        amelie._fatti.livello = Livello.VINO
+        visti = []
+        amelie._pubblica = lambda m: visti.append(m)
+        amelie.macchina.stato = Stato.RICONOSCIMENTO
+        amelie.macchina.invia(Evento.MATCH_SICURO)
+        stati = [m for m in visti if m.get("tipo") == "stato"]
+        assert stati[-1].get("stesso_racconto") is False
+
+
+class TestAnnullamento:
+    """Chiudere senza dover togliere la bottiglia dal piatto.
+
+    Fino a qui l'unico modo di finire era sollevarla. Va benissimo quando si e'
+    finito davvero, ma non per chi ha appena versato: il vino e' nel bicchiere,
+    la bottiglia sta li', e nessuno la risolleva solo per far tacere il
+    dispositivo.
+    """
+
+    def test_dal_racconto_si_torna_all_invito(self, amelie):
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie._ferma_voce.clear()
+        assert amelie.annulla()["ok"]
+        assert amelie.macchina.stato is Stato.ATTESA
+
+    def test_annullare_zittisce_subito(self, amelie):
+        """Il difetto che si sente: la voce che continua sopra l'invito.
+
+        La macchina zittisce da sola uscendo da RACCONTO, ma solo da li'.
+        """
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie._ferma_voce.clear()
+        amelie.annulla()
+        assert amelie._ferma_voce.is_set()
+
+    def test_dalla_conferma_si_torna_all_invito(self, amelie):
+        """Da qui la macchina NON zittisce da sola: non si esce da RACCONTO.
+
+        E in conferma ci puo' essere un annuncio di lingua in bocca, perche'
+        guardando i candidati si tocca la bandierina.
+        """
+        amelie.macchina.stato = Stato.CONFERMA
+        amelie._lingua_da_annunciare = "en"
+        assert amelie.annulla()["ok"]
+        assert amelie.macchina.stato is Stato.ATTESA
+        assert amelie._lingua_da_annunciare is None, \
+            "l'annuncio finirebbe sopra la schermata d'invito"
+
+    def test_anche_nei_due_secondi_dopo_la_fine(self, amelie):
+        """La schermata del racconto resta accesa anche in CONCLUSO.
+
+        Ci si vede il pulsante, quindi deve funzionare: un pulsante acceso e
+        inerte e' peggio di un pulsante che non c'e'.
+        """
+        amelie.macchina.stato = Stato.CONCLUSO
+        assert amelie.annulla()["ok"]
+        assert amelie.macchina.stato is Stato.ATTESA
+
+    def test_l_anello_torna_al_respiro(self, amelie):
+        """Schermo e anello devono dire la stessa cosa.
+
+        Un annullamento scritto fuori dalla macchina lascerebbe l'anello del
+        racconto acceso sopra la schermata d'invito.
+        """
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.ponte.comandi.clear()
+        amelie.annulla()
+        colori = [c for c in amelie.ponte.comandi if c[0] == "set_anello"]
+        assert colori, "l'anello non e' stato rimesso"
+
+    def test_la_scadenza_della_conferma_si_spegne(self, amelie):
+        """Restava armata e scattava dopo, a invito gia' disegnato.
+
+        In conferma c'e' un tetto di dodici secondi che prende il primo
+        candidato: annullando non deve piu' scattare.
+        """
+        amelie.macchina.stato = Stato.RICONOSCIMENTO
+        amelie.macchina.invia(Evento.MATCH_DUBBIO)
+        assert amelie._scadenza is not None
+        amelie.annulla()
+        assert amelie._scadenza is None
+
+    def test_negli_stati_di_lavoro_non_fa_nulla(self, amelie):
+        """Quelle schermate non hanno pulsanti, e l'OCR resterebbe a girare."""
+        amelie.macchina.stato = Stato.SCANSIONE
+        amelie._ferma_voce.clear()
+        assert not amelie.annulla()["ok"]
+        assert amelie.macchina.stato is Stato.SCANSIONE
+        assert not amelie._ferma_voce.is_set(), \
+            "un tocco caduto nel vuoto non deve zittire il racconto che verra'"
+
+    def test_un_tocco_caduto_nel_vuoto_non_tocca_niente(self, amelie):
+        """Il difetto che stavo per introdurre correggendo l'altro.
+
+        Chi toglie la bottiglia alza `_ferma_voce` per zittire il racconto. Se
+        un tocco su «annulla» arriva un istante dopo - il dito era gia' partito
+        mentre la schermata cambiava - e l'annullamento «ripulisce» quel flag
+        perche' non ha trovato niente da annullare, il racconto di una
+        bottiglia che non c'e' piu' riprende a scorrere.
+
+        La regola: si guarda PRIMA se c'e' qualcosa da annullare, e nel dubbio
+        non si tocca niente.
+        """
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.macchina.invia(Evento.BOTTIGLIA_ASSENTE)   # la bottiglia se ne va
+        assert amelie._ferma_voce.is_set()
+        amelie.annulla()                                   # il tocco in ritardo
+        assert amelie._ferma_voce.is_set(), \
+            "il tocco in ritardo ha rimesso in moto un racconto gia' fermato"
+
+    def test_fermare_e_avviare_non_possono_incrociarsi(self):
+        """Fra il controllo e l'assegnazione c'era una finestra di pochi bytecode.
+
+        `_racconta` guardava `_ferma_voce`, poi assegnava `_lettore`. Un
+        annullamento che passava in mezzo non trovava nessun riproduttore da
+        fermare, e ne lasciava partire uno subito dopo: il dispositivo
+        cominciava a parlare sopra la schermata d'invito. Stretta quanto si
+        vuole, era proprio la finestra che l'annullamento doveva chiudere.
+
+        La prova: tenendo il lucchetto del riproduttore, `_ferma_racconto` non
+        deve riuscire ad alzare la bandiera. Se ci riuscisse, vorrebbe dire che
+        la alza FUORI dal lucchetto, e allora potrebbe alzarla in mezzo.
+        """
+        import threading
+
+        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                  senza_voce=True, senza_modello=True))
+        try:
+            a._ferma_voce.clear()
+            partito = threading.Event()
+
+            def ferma():
+                partito.set()
+                a._ferma_racconto()
+
+            with a._lucchetto_lettore:
+                t = threading.Thread(target=ferma, daemon=True)
+                t.start()
+                partito.wait(1.0)
+                time.sleep(0.05)
+                assert not a._ferma_voce.is_set(), (
+                    "la bandiera si alza fuori dal lucchetto: fra il controllo "
+                    "e l'assegnazione ci si puo' infilare")
+            t.join(timeout=1.0)
+            assert a._ferma_voce.is_set(), "rilasciato il lucchetto, deve alzarsi"
+        finally:
+            a.matcher.chiudi()
+            a.narratore.chiudi()
+
+    def test_senza_voce_annullare_non_lascia_il_lavoro_in_giro(self, amelie):
+        """Il testo scorreva con `sleep`, che nessuna bandiera puo' svegliare.
+
+        Il thread di lavoro restava vivo fino a sei secondi dopo che lo schermo
+        era gia' tornato all'invito, e una bottiglia rimessa dentro quella
+        finestra trovava il lavoro ancora in corso: guasto dichiarato.
+        """
+        import threading
+        import time
+
+        frasi = ["Una frase abbastanza lunga da far dormire il ciclo a lungo." * 2]
+        amelie._ferma_voce.clear()
+        finito = threading.Event()
+
+        def scorri():
+            amelie._scorri_senza_voce(frasi)
+            finito.set()
+
+        t = threading.Thread(target=scorri, daemon=True)
+        t.start()
+        time.sleep(0.15)
+        amelie._ferma_voce.set()
+        assert finito.wait(1.0), \
+            "il ripiego senza voce non si e' accorto dell'annullamento"
+
+    def test_la_lingua_scelta_non_si_perde(self, amelie):
+        """Annullare non vuol dire che il tavolo e' finito.
+
+        Una coppia inglese tocca la bandierina, ascolta, e poi preme la croce
+        perche' ne ha sentito abbastanza. La bottiglia e' ancora sul piatto e
+        sono le stesse persone: ritrovarsi l'invito in italiano, e dover
+        ricercare la bandierina per la bottiglia dopo, e' una piccola offesa.
+        La lingua torna a casa quando la bottiglia viene TOLTA.
+        """
+        amelie.cambia_lingua("en")
+        assert amelie.lingua == "en"
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.annulla()
+        assert amelie.lingua == "en", "annullare ha riportato la lingua a casa"
+
+    def test_togliendo_la_bottiglia_invece_si(self, amelie):
+        """Li' il tavolo cambia davvero, e il dispositivo torna come si trova."""
+        amelie.cambia_lingua("en")
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.macchina.invia(Evento.BOTTIGLIA_ASSENTE)
+        assert amelie.lingua == "it"
+
+    def test_annullando_il_giro_non_riparte(self, amelie):
+        """Il difetto che nasce dalla correzione, se non ci si pensa.
+
+        Tornando in attesa con la bottiglia ancora sul piatto, il rilancio che
+        serve a riprendersi da un guasto fa ripartire la lettura al PRIMO
+        battito, cioe' un decimo di secondo dopo il tocco. E non si ferma dopo
+        tre tentativi: ogni lettura riuscita azzera quel contatore, quindi con
+        un'etichetta leggibile il dispositivo racconterebbe lo stesso vino ogni
+        cinque secondi finche' qualcuno non solleva la bottiglia.
+        """
+        import asyncio
+
+        amelie._distanza_finta = 20          # la bottiglia c'e', e resta
+        amelie.presenza.presente = True      # il filtro l'ha gia' vista
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.annulla()
+        assert amelie.macchina.stato is Stato.ATTESA
+
+        for _ in range(6):
+            asyncio.run(amelie._un_battito())
+        assert amelie.macchina.stato is Stato.ATTESA, \
+            "annullare e poi ricominciare da soli e' peggio che non annullare"
+
+    def test_ma_togliendola_e_rimettendola_si(self, amelie):
+        """Annullare chiude QUESTA bottiglia, non spegne il dispositivo."""
+        import asyncio
+
+        amelie._distanza_finta = 20
+        amelie.presenza.presente = True
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.annulla()
+
+        amelie._distanza_finta = None        # tolta
+        for _ in range(6):
+            asyncio.run(amelie._un_battito())
+        assert not amelie._bottiglia_chiusa
+
+        amelie._distanza_finta = 20          # rimessa
+        for _ in range(4):
+            asyncio.run(amelie._un_battito())
+        assert amelie.macchina.stato is not Stato.ATTESA

@@ -32,10 +32,10 @@ VOLUME = {"tipo": "volume", "valore": 60, "passo": 10, "attivo": True}
 
 LINGUA_IT = {"tipo": "lingua", "lingua": "it", "disponibili": ["it", "en"],
              "invito": "Appoggi una bottiglia", "domanda": "Quale di questi?",
-             "voce_muta": False, "avviso_muto": ""}
+             "voce_muta": False, "avviso_muto": "", "annulla": "Annulla"}
 LINGUA_EN = {"tipo": "lingua", "lingua": "en", "disponibili": ["it", "en"],
              "invito": "Place a bottle", "domanda": "Which one is it?",
-             "voce_muta": False, "avviso_muto": ""}
+             "voce_muta": False, "avviso_muto": "", "annulla": "Cancel"}
 
 RACCONTO_IT = [
     "Questo è il «Cannubi Barolo» di Marchesi di Barolo annata 2016.",
@@ -68,7 +68,7 @@ SCENE: dict[str, list[dict]] = {
          "sottotitolo": "Marchesi di Barolo · 2016", "voce_muta": False},
         {"tipo": "racconto", "origine": "template", "frasi": RACCONTO_IT},
         {"tipo": "riproduzione", "frase": 2, "posizione": 7.4, "durata": 19.0,
-         "in_pausa": False, "completo": True}],
+         "quota": 0.39, "in_pausa": False, "completo": True}],
 
     "racconto_pausa": [
         LINGUA_EN,
@@ -76,7 +76,7 @@ SCENE: dict[str, list[dict]] = {
          "sottotitolo": "Marchesi di Barolo · 2016", "voce_muta": False},
         {"tipo": "racconto", "origine": "cache", "frasi": RACCONTO_EN},
         {"tipo": "riproduzione", "frase": 1, "posizione": 4.2, "durata": 21.0,
-         "in_pausa": True, "completo": True}],
+         "quota": 0.20, "in_pausa": True, "completo": True}],
 
     # Il caso peggiore per il titolo: 1.751 nomi su 19.358 superano la riga.
     "titolo_lungo": [
@@ -89,7 +89,7 @@ SCENE: dict[str, list[dict]] = {
             "Questo è l'Amarone della Valpolicella Classico Riserva.",
             "Nasce da Corvina, Corvinone e Rondinella."]},
         {"tipo": "riproduzione", "frase": 0, "posizione": 1.0, "durata": 12.0,
-         "in_pausa": False}],
+         "quota": 0.08, "in_pausa": False}],
 
     "conferma": [
         LINGUA_IT, {"tipo": "stato", "vista": "conferma"},
@@ -143,7 +143,7 @@ SCENE: dict[str, list[dict]] = {
          "sottotitolo": "Marchesi di Barolo · 2016", "voce_muta": True},
         {"tipo": "racconto", "origine": "cache", "frasi": RACCONTO_EN[:3]},
         {"tipo": "riproduzione", "frase": 1, "posizione": 0, "durata": 0,
-         "in_pausa": False, "senza_voce": True}],
+         "quota": 0.33, "in_pausa": False, "senza_voce": True}],
 }
 
 # Le scene che esistono solo dopo un tocco. Il codice gira DOPO lo script della
