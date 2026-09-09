@@ -5,147 +5,133 @@
  * processore Linux: l'anello di LED e il sensore di distanza li vede solo
  * questo microcontrollore. Linux ci parla attraverso il router (Bridge).
  *
- * Questa divisione permette l'attesa a consumo bassissimo: qui si fa la guardia
- * sul sensore, e Linux viene svegliato solo quando arriva una bottiglia.
+ * ── SI COLLEGA TUTTO, SI ACCENDE, FUNZIONA ───────────────────────────────────
+ *
+ * È il requisito, e per rispettarlo il sensore NON usa la sua libreria.
+ *
+ * `ModulinoDistance` poggia su STM32duino_VL53L4CD, e in `platform.cpp` di
+ * quella libreria ogni trasferimento I2C sta dentro:
+ *
+ *     do { ...trasferimento... } while (status != 0);
+ *
+ * Un ciclo di ritentativi SENZA USCITA. La sola scappatoia prevista è chiusa in
+ * `#ifdef ARDUINO_ARCH_STM32`, che sul core Zephyr della UNO Q non è definito:
+ * qui non c'è nemmeno quella. Se un trasferimento fallisce in modo persistente,
+ * il `loop()` non ritorna mai più — e allora il Bridge non risponde a NIENTE,
+ * nemmeno a `versione()`, e da Linux il dispositivo sembra senza firmware.
+ *
+ * Al banco è successo tre volte. Due tentativi di difendersi dall'esterno sono
+ * falliti: prima scandendo l'indirizzo (è la difesa che usa la stessa libreria
+ * Modulino, "the library contains a while(true) on begin()" c'è scritto nel suo
+ * sorgente), poi leggendo il registro d'identità — che PASSAVA, e `begin()` si
+ * bloccava lo stesso. Un connettore che entra rimbalza, e un chip alimentato a
+ * singhiozzo risponde a una lettura e alla successiva no.
+ *
+ * Non si può rendere sicura dall'esterno una funzione che non torna. Quindi il
+ * VL53L4CD lo si pilota qui sotto, direttamente: la sequenza è la stessa della
+ * libreria — la tabella di configurazione è copiata da lì — ma OGNI
+ * trasferimento è nostro, e ognuno o riesce o fallisce. Nessuno aspetta per
+ * sempre. Se il sensore non parte, il dispositivo parte lo stesso e lo dice.
+ *
+ * L'anello continua a usare `ModulinoPixels`, che non ha cicli del genere: fa
+ * scritture semplici e ritorna sempre.
  *
  * ── DUE MODULI, NON TRE ──────────────────────────────────────────────────────
  *
- * C'era un secondo Modulino Pixels che faceva da flash per la camera. È stato
- * tolto, e con lui la parte più fragile del montaggio: due Pixels nascono
- * entrambi a 0x36, quindi il secondo andava riprogrammato una volta per sempre,
- * e da fuori i due moduli sono identici. L'etichetta si illumina lo stesso —
+ * C'era un secondo Pixels che faceva da flash per la camera. Tolto: i Pixels
+ * nascono tutti a 0x36, quindi il secondo andava riprogrammato una volta per
+ * sempre, e da fuori i due sono identici. L'etichetta si illumina lo stesso —
  * l'anello sale a bianco per la durata della raffica.
  *
- * ── I MODULI SI CERCANO SOLO ALL'ACCENSIONE ──────────────────────────────────
+ * ── DUE VINCOLI CHE FANNO FALLIRE IN SILENZIO ────────────────────────────────
  *
- * Il dispositivo si monta una volta e non si tocca più: i Modulino sono avvitati
- * dentro la scocca. Cercarli anche dopo, per poterli attaccare a caldo, non
- * serve a niente e costa carissimo — vedi il vincolo 1 qui sotto.
- *
- * ── TRE VINCOLI CHE FANNO FALLIRE IN SILENZIO ────────────────────────────────
- *
- * 1. IL DRIVER DEL SENSORE NON HA VIA D'USCITA. In `platform.cpp` della
- *    libreria VL53L4CD:
- *
- *        do { ...trasferimento I2C... } while (status != 0);
- *
- *    Un ciclo di ritentativi senza uscita, e la sola scappatoia prevista è
- *    chiusa in `#ifdef ARDUINO_ARCH_STM32`, che sul core Zephyr della UNO Q non
- *    è definito. La libreria Modulino lo sa — "the library contains a
- *    while(true) on begin()", c'è scritto nel suo sorgente — e si difende
- *    scandendo l'indirizzo prima di `begin()`. NON BASTA: un chip appena
- *    alimentato riconosce il proprio indirizzo parecchio prima di saper servire
- *    un registro.
- *
- *    È successo al banco, ed è un guasto totale: il `loop()` non gira più,
- *    quindi il Bridge non risponde a NIENTE — nemmeno a `versione()` — e da
- *    Linux il dispositivo sembra senza firmware. Peggio: il sensore resta mezzo
- *    configurato, e da quello stato non si esce riavviando il microcontrollore.
- *    Si esce solo togliendo corrente al modulo.
- *
- *    Difesa: si legge il registro d'identità con una transazione NOSTRA, che al
- *    massimo fallisce, e il chip si consegna al driver solo quando risponde
- *    0xEBAA. E non lo si consegna mai più dopo l'accensione.
- *
- * 2. Chiamare Bridge.call() o Monitor.print() DENTRO un gestore registrato con
+ * 1. Chiamare Bridge.call() o Monitor.print() DENTRO un gestore registrato con
  *    provide() manda in stallo il canale. È documentato. Per questo i gestori
  *    qui sotto non fanno altro che scrivere in una variabile, e ogni accesso a
  *    Wire1 avviene nel loop().
  *
- * 3. Un .ino non è un .cpp: Arduino gli genera i prototipi e li infila subito
+ * 2. Un .ino non è un .cpp: Arduino gli genera i prototipi e li infila subito
  *    PRIMA della prima definizione di funzione. Un tipo dichiarato dopo quel
  *    punto non esiste ancora quando il prototipo lo nomina, e si prende un
  *    "has not been declared" su una riga che sta sotto la dichiarazione e
  *    sembra corretta. Per questo qui tutti i tipi e le variabili stanno in cima.
- *
- * ── LA MISURA ────────────────────────────────────────────────────────────────
- *
- * Il tetto dei 131.072 byte che App Lab impone caricando in SRAM riguarda
- * un'altra via di caricamento, non `arduino-cli --upload`. E la dimensione
- * dipende dalla catena: ~33.000 byte compilando sulla board (core 0.52.0),
- * ~116.000 compilando su PC (core 1.0.0), su tetti diversi. Si misura, non si
- * ricorda: vedi la tabella in README.md.
  */
 
 #include <Arduino_RouterBridge.h>
 #include <Modulino.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/i2c.h>
 
-/* ─── tutto ciò che si dichiara, prima di qualsiasi funzione (vincolo 3) ────── */
+/* ─── tutto ciò che si dichiara, prima di qualsiasi funzione (vincolo 2) ────── */
 
 /* Versione del PROTOCOLLO fra questo firmware e Linux. Si alza quando cambia il
- * SIGNIFICATO di qualcosa, non il codice.
- *
- * Alla 2 il secondo Pixels è stato tolto, e il bit 2 di moduli() è passato da
- * "flash" a "sensore" mentre il sensore lasciava il bit 4. Un Linux nuovo che
- * interroga un MCU alla versione 1 leggerebbe "sensore presente" quando c'è il
- * flash, e "sensore assente" con il sensore collegato: il guasto peggiore che
- * si possa avere montando, perché è silenzioso e dice il contrario del vero. */
+ * SIGNIFICATO di qualcosa, non il codice. Alla 2 il secondo Pixels è stato
+ * tolto e il bit 2 di moduli() è passato da "flash" a "sensore". */
 static const int PROTOCOLLO = 2;
 
-/* Indirizzi a 7 bit. Il datasheet chiama 0x6C l'indirizzo "Modulino" e 0x36
- * quello "Hardware": qui va quello hardware. Passare 0x6C fallisce in SILENZIO,
- * perché begin() ritorna comunque true. Un solo Pixels, quindi l'indirizzo di
- * fabbrica va bene com'è: non c'è niente da riprogrammare prima di montare. */
-static const uint8_t IND_ANELLO   = 0x36;
-static const uint8_t IND_DISTANZA = 0x29;   /* VL53L4CD, fisso */
+static const uint8_t IND_ANELLO   = 0x36;   /* indirizzo hardware, non 0x6C */
+static const uint8_t IND_TOF      = 0x29;   /* VL53L4CD, fisso */
 static const uint8_t N_LED = 8;
 
-/* Il registro d'identità del VL53L4CD e il valore che deve contenere: è il
- * lasciapassare del vincolo 1. */
-static const uint16_t REG_IDENTITA = 0x010F;
-static const uint16_t IDENTITA_TOF = 0xEBAA;
+/* Registri del VL53L4CD che servono qui. Sono a 16 bit. */
+static const uint16_t R_IDENTITA        = 0x010F;   /* deve valere 0xEBAA */
+static const uint16_t R_STATO_FIRMWARE  = 0x00E5;   /* 0x03 = avviato */
+static const uint16_t R_MUX_GPIO        = 0x0030;
+static const uint16_t R_STATO_GPIO      = 0x0031;
+static const uint16_t R_VHV_LOOP_BOUND  = 0x0008;
+static const uint16_t R_RANGE_A         = 0x005E;
+static const uint16_t R_RANGE_B         = 0x0061;
+static const uint16_t R_INTERMISURA     = 0x006C;
+static const uint16_t R_AZZERA_INT      = 0x0086;
+static const uint16_t R_AVVIO           = 0x0087;
+static const uint16_t R_STATO_MISURA    = 0x0089;
+static const uint16_t R_SPAD            = 0x008C;
+static const uint16_t R_DISTANZA        = 0x0096;
+
+/* La configurazione di fabbrica, registri da 0x2D a 0x87. Copiata pari pari
+ * dalla libreria: sono valori del costruttore, non c'è niente da capire e
+ * niente da migliorare. */
+static const uint8_t CONFIG_TOF[] = {
+  0x12, 0x00, 0x00, 0x11, 0x02, 0x00, 0x02, 0x08, 0x00, 0x08, 0x10, 0x01, 0x01,
+  0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20,
+  0x0b, 0x00, 0x00, 0x02, 0x14, 0x21, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00,
+  0xc8, 0x00, 0x00, 0x38, 0xff, 0x01, 0x00, 0x08, 0x00, 0x00, 0x01, 0xcc, 0x07,
+  0x01, 0xf1, 0x05, 0x00, 0xa0, 0x00, 0x80, 0x08, 0x38, 0x00, 0x00, 0x00, 0x00,
+  0x0f, 0x89, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x07, 0x05, 0x06,
+  0x06, 0x00, 0x00, 0x02, 0xc7, 0xff, 0x9b, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00
+};
 
 /* Quanto si aspetta, all'accensione, che i moduli si presentino. Il
  * microcontrollore parte in millisecondi, il sensore ha bisogno di più tempo, e
  * qui non c'è fretta: Linux ci mette comunque una cinquantina di secondi ad
  * arrivare alla sua schermata. Scaduta l'attesa si va avanti lo stesso — un
  * dispositivo che racconta senza vedere la bottiglia è meglio di uno fermo. */
-static const uint32_t ATTESA_MODULI_MS = 8000;
-static const uint32_t PASSO_RICERCA_MS = 100;
+static const uint32_t ATTESA_MODULI_MS = 10000;
+static const uint32_t PASSO_RICERCA_MS = 200;
 
-/* Quante letture buone di fila servono prima di consegnare il sensore al
- * driver. UNA NON BASTA, ed è costato un pomeriggio scoprirlo: collegando il
- * cavetto a dispositivo acceso il guardiano passava — il chip rispondeva
- * 0xEBAA — e `begin()` si bloccava lo stesso. Un connettore che entra rimbalza,
- * e il chip alimentato a singhiozzo risponde a una lettura e alla successiva
- * no. Tre letture a un decimo di secondo l'una dicono che il bus è stabile, non
- * che è stato fortunato una volta. */
-static const uint8_t LETTURE_BUONE = 3;
-
-/* Il respiro dell'accensione. Dà segno di vita mentre Linux si avvia: il
+/* Il respiro dell'accensione: dà segno di vita mentre Linux si avvia. Il
  * microcontrollore è pronto in millisecondi, lo schermo ci mette una
  * cinquantina di secondi, e in mezzo l'anello sarebbe spento — un dispositivo
  * appena acceso che non fa niente sembra rotto.
  *
- * Si spegne da solo al primo comando che arriva da Linux: da quel momento il
- * colore dell'anello lo decide la macchina a stati, e due padroni sullo stesso
- * anello si vedrebbero come un tremolio. */
+ * Si spegne da solo al primo comando da Linux: da lì il colore lo decide la
+ * macchina a stati, e la luce diventa l'oro fisso dell'attesa. */
 static const uint8_t  RESPIRO_MIN = 3;
 static const uint8_t  RESPIRO_MAX = 26;
 static const uint32_t RESPIRO_MS = 50;      /* 20 aggiornamenti al secondo */
 static const uint8_t  RESPIRO_PASSO = 4;    /* 256/4 x 50 ms = 3,2 s a ciclo */
 
 ModulinoPixels anello(IND_ANELLO);
-ModulinoDistance tof;
 
 static bool c_anello = false, c_tof = false;
 static bool ricerca_finita = false;
 static uint32_t ultima_ricerca = 0;
-static uint8_t buone = 0;
-
-/* Il sensore è sparito dal bus? Ci vogliono più fallimenti di fila: uno solo può
- * essere un disturbo, e perdere il sensore per un disturbo significa un
- * dispositivo che non vede più le bottiglie fino al prossimo spegnimento. */
-static const uint8_t ASSENZE_PER_RINUNCIARE = 5;
-static uint8_t assenze = 0;
-static uint32_t ultima_presenza = 0;
 
 static bool respiro = true;
 static uint8_t fase = 0;
 static uint32_t ultimo_respiro = 0;
 
-/* Stato richiesto da Linux. I gestori scrivono qui e basta: l'accesso a Wire1
- * avviene solo nel loop, mai dentro un handler del Bridge (vincolo 2). */
+/* Stato richiesto da Linux. I gestori scrivono qui e basta (vincolo 1). */
 struct StatoLed {
   uint8_t r = 0, g = 0, b = 0, lum = 0;
   bool da_applicare = false;
@@ -153,31 +139,199 @@ struct StatoLed {
 static StatoLed rich_anello;
 
 /* Presenza della bottiglia. L'isteresi vera sta su Linux, in amelie.bridge:
- * qui si tiene solo l'ultima misura valida e si notifica il cambiamento, così
- * il microcontrollore resta semplice e la politica si cambia senza riflashare. */
+ * qui si tiene solo l'ultima misura valida e si notifica il cambiamento. */
 static int ultima_mm = -1;
 static bool presente = false;
 static uint32_t ultimo_invio = 0;
 
-/* ─── il bus ───────────────────────────────────────────────────────────────── */
+/* ─── il bus, con transazioni che finiscono sempre ─────────────────────────── */
+
+/* Sblocca il bus, se qualcuno lo sta tenendo fermo.
+ *
+ * ── PERCHE' SERVE ────────────────────────────────────────────────────────────
+ *
+ * L'I2C ha un modo di rompersi che nessun timeout risolve: se un dispositivo
+ * viene resettato a meta' di un byte, resta convinto di stare trasmettendo e
+ * tiene SDA a zero. Il bus e' occupato per sempre, e ogni transazione - anche
+ * verso un ALTRO dispositivo - non parte nemmeno.
+ *
+ * E' successo qui, ed e' la spiegazione del sintomo che non tornava: dopo un
+ * blocco del sensore, l'anello non si accendeva PIU' NEMMENO LUI. Non era rotto
+ * l'anello, era il bus. Il microcontrollore si fermava sulla primissima
+ * transazione, prima ancora di poter far respirare la luce, e da Linux il
+ * dispositivo sembrava senza firmware. Ricaricare il firmware non bastava:
+ * resetta il microcontrollore, non il sensore che tiene giu' la linea. Serviva
+ * togliere corrente a tutto.
+ *
+ * `i2c_recover_bus()` fa la manovra prevista dallo standard: batte SCL finche'
+ * lo schiavo finisce il byte che crede di star mandando e rilascia SDA, poi
+ * manda uno STOP. E' la sola via d'uscita che non richieda una mano umana.
+ *
+ * Si fa PRIMA di qualunque altra cosa, a ogni accensione: costa un millisecondo
+ * quando non serve, e quando serve e' la differenza fra un dispositivo che si
+ * riprende da solo e uno da riavviare staccando la spina. */
+static void libera_il_bus() {
+  const struct device *bus = DEVICE_DT_GET(DT_NODELABEL(i2c4));
+  if (device_is_ready(bus)) {
+    i2c_recover_bus(bus);
+  }
+}
 
 static bool risponde(uint8_t indirizzo) {
   Wire1.beginTransmission(indirizzo);
   return Wire1.endTransmission() == 0;
 }
 
-/* Il sensore risponde all'indirizzo E sa servire i registri? Vedi il vincolo 1:
- * è questa lettura, non la scansione dell'indirizzo, a dire che il chip ha
- * finito di avviarsi e che il driver non girerà a vuoto per sempre. */
-static bool tof_pronto() {
-  Wire1.beginTransmission(IND_DISTANZA);
-  Wire1.write((uint8_t)(REG_IDENTITA >> 8));
-  Wire1.write((uint8_t)(REG_IDENTITA & 0xFF));
+/* Lettura e scrittura di registri a 16 bit. Ognuna riesce o fallisce: è tutta
+ * la differenza con la libreria, ed è il motivo per cui questo codice esiste. */
+static bool tof_leggi(uint16_t reg, uint8_t *fuori, uint8_t quanti) {
+  Wire1.beginTransmission(IND_TOF);
+  Wire1.write((uint8_t)(reg >> 8));
+  Wire1.write((uint8_t)(reg & 0xFF));
   if (Wire1.endTransmission() != 0) return false;
-  if (Wire1.requestFrom((int)IND_DISTANZA, 2) != 2) return false;
-  uint16_t id = ((uint16_t)Wire1.read() << 8);
-  id |= (uint16_t)Wire1.read();
-  return id == IDENTITA_TOF;
+  if ((int)Wire1.requestFrom((int)IND_TOF, (int)quanti) != (int)quanti) return false;
+  for (uint8_t i = 0; i < quanti; i++) fuori[i] = (uint8_t)Wire1.read();
+  return true;
+}
+
+static bool tof_leggi8(uint16_t reg, uint8_t *v) {
+  return tof_leggi(reg, v, 1);
+}
+
+static bool tof_leggi16(uint16_t reg, uint16_t *v) {
+  uint8_t b[2];
+  if (!tof_leggi(reg, b, 2)) return false;
+  *v = ((uint16_t)b[0] << 8) | b[1];
+  return true;
+}
+
+static bool tof_scrivi(uint16_t reg, const uint8_t *dati, uint8_t quanti) {
+  Wire1.beginTransmission(IND_TOF);
+  Wire1.write((uint8_t)(reg >> 8));
+  Wire1.write((uint8_t)(reg & 0xFF));
+  for (uint8_t i = 0; i < quanti; i++) Wire1.write(dati[i]);
+  return Wire1.endTransmission() == 0;
+}
+
+static bool tof_scrivi8(uint16_t reg, uint8_t v) {
+  return tof_scrivi(reg, &v, 1);
+}
+
+static bool tof_scrivi16(uint16_t reg, uint16_t v) {
+  uint8_t b[2] = { (uint8_t)(v >> 8), (uint8_t)(v & 0xFF) };
+  return tof_scrivi(reg, b, 2);
+}
+
+static bool tof_scrivi32(uint16_t reg, uint32_t v) {
+  uint8_t b[4] = { (uint8_t)(v >> 24), (uint8_t)(v >> 16),
+                   (uint8_t)(v >> 8),  (uint8_t)(v & 0xFF) };
+  return tof_scrivi(reg, b, 4);
+}
+
+/* C'è una misura pronta? Si guarda la polarità dell'interrupt e poi lo stato,
+ * come fa la libreria. */
+static bool tof_misura_pronta(bool *pronta) {
+  uint8_t t;
+  if (!tof_leggi8(R_MUX_GPIO, &t)) return false;
+  uint8_t polarita = ((t & 0x10) >> 4) == 1 ? 0 : 1;
+  if (!tof_leggi8(R_STATO_GPIO, &t)) return false;
+  *pronta = ((t & 0x01) == polarita);
+  return true;
+}
+
+/* La sequenza d'avvio del costruttore, con ogni attesa limitata.
+ * Restituisce false invece di non tornare: è tutto il punto. */
+static bool tof_avvia() {
+  uint8_t t;
+  uint16_t v16;
+
+  /* 1. Il chip ha finito di avviarsi? Fino a 200 ms, non "per sempre". */
+  for (uint16_t i = 0; ; i++) {
+    if (!tof_leggi8(R_STATO_FIRMWARE, &t)) return false;
+    if (t == 0x03) break;
+    if (i >= 200) return false;
+    delay(1);
+  }
+
+  /* 2. La configurazione di fabbrica, un registro per volta. */
+  for (uint8_t i = 0; i < sizeof(CONFIG_TOF); i++) {
+    if (!tof_scrivi8((uint16_t)(0x2D + i), CONFIG_TOF[i])) return false;
+  }
+
+  /* 3. La calibrazione VHV: si avvia, si aspetta la prima misura, si azzera. */
+  if (!tof_scrivi8(R_AVVIO, 0x40)) return false;
+  for (uint16_t i = 0; ; i++) {
+    bool pronta = false;
+    if (!tof_misura_pronta(&pronta)) return false;
+    if (pronta) break;
+    if (i >= 1000) return false;
+    delay(1);
+  }
+  if (!tof_scrivi8(R_AZZERA_INT, 0x01)) return false;
+  if (!tof_scrivi8(R_AVVIO, 0x00)) return false;
+  if (!tof_scrivi8(R_VHV_LOOP_BOUND, 0x09)) return false;
+  if (!tof_scrivi8(0x000B, 0x00)) return false;
+  if (!tof_scrivi16(0x0024, 0x0500)) return false;
+
+  /* 4. Tempo di misura: 50 ms per misura, in continua. Il conto e' quello del
+   *    costruttore, ricopiato passo per passo: il periodo di macro si ricava
+   *    dalla frequenza dell'oscillatore, e i due registri di intervallo vogliono
+   *    un valore in virgola mobile ridotto a mantissa piu' esponente. Non c'e'
+   *    niente da capire e niente da migliorare — c'e' solo da non sbagliarlo. */
+  if (!tof_leggi16(0x0006, &v16)) return false;      /* frequenza oscillatore */
+  if (v16 == 0) return false;
+  {
+    uint32_t macro = (uint32_t)(((uint32_t)2304 *
+                                 ((uint32_t)0x40000000 / (uint32_t)v16)) >> 6);
+    /* Misura continua: nessuna pausa fra una e l'altra. */
+    if (!tof_scrivi32(R_INTERMISURA, 0)) return false;
+    uint32_t budget = 50U * 1000U - 2500U;
+    budget <<= 12;
+
+    for (uint8_t quale = 0; quale < 2; quale++) {
+      uint32_t tmp = macro * (quale == 0 ? 16U : 12U);
+      uint32_t basso = ((budget + ((tmp >> 6) >> 1)) / (tmp >> 6)) - 1U;
+      uint16_t alto = 0;
+      while ((basso & 0xFFFFFF00U) > 0U) { basso >>= 1; alto++; }
+      uint16_t reg = (uint16_t)((alto << 8) + (uint16_t)(basso & 0xFFU));
+      if (!tof_scrivi16(quale == 0 ? R_RANGE_A : R_RANGE_B, reg)) return false;
+    }
+  }
+
+  /* 5. Via alla misura continua, e si aspetta la prima per lasciare il sensore
+   *    in uno stato pulito. */
+  if (!tof_scrivi8(R_AVVIO, 0x21)) return false;
+  for (uint16_t i = 0; ; i++) {
+    bool pronta = false;
+    if (!tof_misura_pronta(&pronta)) return false;
+    if (pronta) break;
+    if (i >= 1000) return false;
+    delay(1);
+  }
+  if (!tof_scrivi8(R_AZZERA_INT, 0x01)) return false;
+  return true;
+}
+
+/* L'ultima misura, se ce n'è una nuova. -1 quando non c'è niente da leggere o
+ * quando il sensore dichiara la misura non valida — che con il piatto vuoto è
+ * la risposta normale, non un guasto. */
+static int tof_misura() {
+  bool pronta = false;
+  if (!tof_misura_pronta(&pronta)) return -2;   /* il sensore non risponde */
+  if (!pronta) return -3;                       /* nessuna misura nuova */
+
+  uint8_t stato;
+  uint16_t spad, mm;
+  bool ok = tof_leggi8(R_STATO_MISURA, &stato)
+         && tof_leggi16(R_SPAD, &spad)
+         && tof_leggi16(R_DISTANZA, &mm);
+  tof_scrivi8(R_AZZERA_INT, 0x01);              /* sempre, anche se sopra e' andata male */
+  if (!ok) return -2;
+  /* Lo stato 0 e' "misura buona"; la libreria rimappa i codici, a noi basta
+   * distinguere buono da non buono. E zero SPAD attivi vuol dire niente
+   * davanti. */
+  if ((stato & 0x1F) != 0x09 || spad == 0) return -1;
+  return (int)mm;
 }
 
 /* ─── gestori esposti a Linux ──────────────────────────────────────────────── */
@@ -188,20 +342,35 @@ bool set_anello(int r, int g, int b, int lum) {
   return true;
 }
 
-/* Ultima misura valida in millimetri, -1 se il sensore non sa rispondere.
- * Il "non so" è già un buon segnale di "non c'è niente sopra": il VL53L4CD
- * dichiara la misura non valida quando il segnale di ritorno è troppo debole,
- * ed è esattamente ciò che succede con il piatto vuoto. */
 int distanza() { return ultima_mm; }
 
-/* La versione del protocollo, non del firmware: vedi PROTOCOLLO in cima. */
 int versione() { return PROTOCOLLO; }
 
-/* Quali moduli il microcontrollore vede, come somma di bit: 1 anello,
- * 2 sensore. Serve a montare — si collega un pezzo per volta e si chiede al
- * dispositivo se lo vede — e a capire un guasto senza smontare niente. */
+/* Quali moduli si vedono, come somma di bit: 1 anello, 2 sensore. */
 int moduli() {
   return (c_anello ? 1 : 0) | (c_tof ? 2 : 0);
+}
+
+/* CHE COSA C'E' DAVVERO SUL BUS, indirizzo per indirizzo.
+ *
+ * `moduli()` risponde a "vedi i due che mi aspetto?", e quando dice di no non
+ * dice PERCHE'. Questo risponde alla domanda che viene dopo, ed e' quella che
+ * conta con i cavetti in mano: cosa c'e' attaccato? Un modulo scambiato, uno a
+ * un indirizzo inatteso, o proprio niente sono tre guasti diversi che da fuori
+ * si somigliano tutti - e distinguerli a occhio, guardando due schede blu quasi
+ * identiche, e' il modo piu' rapido di sbagliarsi.
+ *
+ * Un blocco di 32 indirizzi per chiamata, perche' il ponte scambia interi: con
+ * quattro chiamate si copre tutto lo spazio a 7 bit. */
+int scansiona(int blocco) {
+  if (blocco < 0 || blocco > 3) return 0;
+  uint32_t trovati = 0;
+  for (uint8_t i = 0; i < 32; i++) {
+    uint8_t indirizzo = (uint8_t)(blocco * 32 + i);
+    if (indirizzo < 0x08 || indirizzo > 0x77) continue;   /* riservati */
+    if (risponde(indirizzo)) trovati |= ((uint32_t)1 << i);
+  }
+  return (int)trovati;
 }
 
 /* ─── ciclo ────────────────────────────────────────────────────────────────── */
@@ -213,9 +382,8 @@ static void applica(ModulinoPixels &p, StatoLed &s) {
   s.da_applicare = false;
 }
 
-/* Un respiro, non una rampa lineare: la luminosità cresce col quadrato, così
- * indugia in basso e sale piena verso il colmo, che è come respira una cosa
- * viva. Tutto in interi — qui non serve virgola mobile per venti passi. */
+/* Un respiro, non una rampa: la luminosità cresce col quadrato, così indugia in
+ * basso e sale piena verso il colmo. Tutto in interi. */
 static void respira() {
   uint8_t x = (fase < 128) ? (uint8_t)(fase * 2) : (uint8_t)((255 - fase) * 2);
   uint16_t curva = ((uint16_t)x * x) >> 8;                     /* 0..254 */
@@ -229,78 +397,54 @@ static void respira() {
 void setup() {
   Bridge.begin();
 
-  /* I METODI SI DICHIARANO PRIMA DI TOCCARE L'I2C.
-   *
-   * Se un Modulino non risponde, begin() può non tornare, e allora setup() non
-   * finisce e Linux non vede MAI i metodi. Il sintomo è identico a un firmware
-   * non caricato: il router risponde e ogni chiamata dice "method not
-   * available". È successo, e ci si perde un'ora a cercare nel posto sbagliato.
-   */
+  /* I METODI SI DICHIARANO PRIMA DI TOCCARE L'I2C: se qualcosa non rispondesse,
+   * setup() non finirebbe e Linux non vedrebbe MAI i metodi. Il sintomo sarebbe
+   * identico a un firmware non caricato. */
   Bridge.provide("set_anello", set_anello);
   Bridge.provide("distanza", distanza);
   Bridge.provide("moduli", moduli);
   Bridge.provide("versione", versione);
+  Bridge.provide("scansiona", scansiona);
 
-  /* Su UNO Q i Modulino stanno su Wire1. Qui si apre il bus e basta: la ricerca
-   * si fa nel loop, così il ponte comincia a rispondere subito e l'anello può
-   * respirare mentre si aspetta che il sensore finisca di avviarsi. */
+  /* Su UNO Q i Modulino stanno su Wire1, che e' l'i2c4 dello STM32.
+   *
+   * PRIMA di aprirlo si sblocca: se un modulo e' stato resettato a meta' di un
+   * byte tiene SDA a zero, e da li' non passa piu' niente - nemmeno verso
+   * l'anello. Vedi `libera_il_bus()`.
+   *
+   * Poi si apre e basta: la ricerca si fa nel loop, cosi' il ponte risponde
+   * subito e l'anello puo' respirare mentre il sensore finisce di avviarsi. */
+  libera_il_bus();
   Wire1.begin();
 }
 
 void loop() {
-  /* Il solo include di Arduino_RouterBridge limita il loop a circa 1 kHz anche
-   * senza chiamate: il ponte si aggancia al loop per sincronizzarsi. */
   uint32_t ora_ms = millis();
 
   /* ── la ricerca, solo nella finestra d'accensione ─────────────────────── */
   if (!ricerca_finita && ora_ms - ultima_ricerca >= PASSO_RICERCA_MS) {
     ultima_ricerca = ora_ms;
     if (!c_anello && risponde(IND_ANELLO)) c_anello = anello.begin();
-    /* Il sensore si consegna al driver solo dopo LETTURE_BUONE letture del
-     * registro d'identità di fila: vedi il commento sulla costante. */
-    if (!c_tof) {
-      if (tof_pronto()) {
-        if (++buone >= LETTURE_BUONE) c_tof = tof.begin();
-      } else {
-        buone = 0;
-      }
+    if (!c_tof && risponde(IND_TOF)) {
+      uint16_t id = 0;
+      if (tof_leggi16(R_IDENTITA, &id) && id == 0xEBAA) c_tof = tof_avvia();
     }
     if ((c_anello && c_tof) || ora_ms > ATTESA_MODULI_MS) ricerca_finita = true;
   }
 
-  /* ── il respiro dell'accensione, finché Linux non prende il comando ───── */
+  /* ── il respiro, finché Linux non prende il comando ───────────────────── */
   if (respiro && c_anello && ora_ms - ultimo_respiro >= RESPIRO_MS) {
     ultimo_respiro = ora_ms;
     respira();
   }
 
-  /* ── il sensore ───────────────────────────────────────────────────────── */
-
-  /* Prima di entrare nel driver, si controlla che il sensore ci sia ancora. Se
-   * un cavetto cede in servizio, la prima lettura fallita manderebbe il driver
-   * nel suo ciclo senza uscita (vincolo 1) e il dispositivo si fermerebbe del
-   * tutto. Meglio una transazione in più ogni due decimi di secondo su un bus
-   * altrimenti fermo. Un solo indirizzo, non l'identità: la lettura del
-   * registro disturberebbe una misura in corso.
-   *
-   * Perso il sensore, NON lo si reinizializza: rientrare nel driver è
-   * esattamente il rischio che si sta evitando. Il dispositivo resta acceso e
-   * racconta, semplicemente non vede più arrivare le bottiglie — e `moduli()`
-   * lo dice. Si recupera togliendo corrente. */
-  if (c_tof && ora_ms - ultima_presenza >= 200) {
-    ultima_presenza = ora_ms;
-    if (risponde(IND_DISTANZA)) {
-      assenze = 0;
-    } else if (++assenze >= ASSENZE_PER_RINUNCIARE) {
-      c_tof = false;
-      ultima_mm = -1;
-    }
-  }
-
-  if (c_tof && tof.available()) {
-    ultima_mm = (int)tof.get();
-  } else if (!c_tof) {
-    ultima_mm = -1;
+  /* ── la misura ────────────────────────────────────────────────────────── */
+  if (c_tof) {
+    int m = tof_misura();
+    if (m >= 0) ultima_mm = m;
+    else if (m == -1) ultima_mm = -1;        /* misura non valida: piatto vuoto */
+    else if (m == -2) { c_tof = false; ultima_mm = -1; }   /* sensore sparito */
+    /* -3: nessuna misura nuova, si tiene l'ultima */
   }
 
   /* Notifica solo i cambiamenti, e non più di dieci volte al secondo: il

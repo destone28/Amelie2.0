@@ -188,6 +188,9 @@ class Amelie:
         # voci non sono caricate, e la prima frase uscirebbe con quindici
         # secondi di ritardo proprio davanti al primo ospite.
         self._pronta = False
+        # Una distanza finta, per il banco: vedi l'endpoint /prova. Quando c'e',
+        # prende il posto del sensore e passa per l'isteresi vera.
+        self._distanza_finta: int | None = None
         self.volume = self._volume_salvato(cfg.volume)
         if self.voce is not None:
             self.voce.volume = self.volume
@@ -863,10 +866,13 @@ class Amelie:
 
     async def _un_battito(self) -> None:
         """Un giro solo: sensore, presenza, timer. Isolato per poterlo provare."""
-        try:
-            mm = self.ponte.distanza_mm()
-        except Exception:                               # noqa: BLE001
-            mm = None
+        if self._distanza_finta is not None:
+            mm = self._distanza_finta
+        else:
+            try:
+                mm = self.ponte.distanza_mm()
+            except Exception:                           # noqa: BLE001
+                mm = None
         c_era = self.presenza.presente
         ora = self.presenza.aggiorna(mm)
         if ora != c_era:
@@ -998,6 +1004,31 @@ def crea_app(amelie: Amelie):
     async def volume(valore: int):
         return JSONResponse({"ok": True, "valore": amelie.imposta_volume(valore),
                              "passo": PASSO_VOLUME})
+
+    @app.post("/prova/{cosa}")
+    async def prova(cosa: str):
+        """Il banco: fa credere al dispositivo che ci sia una bottiglia.
+
+        Serve a provare tutto il resto — camera, lettura, riconoscimento,
+        racconto, voce, schermo, comandi — quando il sensore di distanza non c'è
+        o non risponde. È l'unico pezzo del giro che non si può provare senza
+        hardware, e senza questo bloccherebbe tutti gli altri.
+
+        Non manda l'evento a mano: mette una **distanza finta** al posto di
+        quella del sensore, e lascia che sia il battito normale a passarla per
+        l'isteresi. Così si prova il percorso vero, filtro compreso, non una
+        scorciatoia che gli somiglia — e togliendola il dispositivo se ne
+        accorge da solo, come farebbe con una bottiglia tolta dal piatto.
+        """
+        if cosa == "bottiglia":
+            amelie._distanza_finta = 20      # sotto la soglia dei 40 mm
+        elif cosa == "via":
+            amelie._distanza_finta = None    # torna a leggere il sensore vero
+        else:
+            return JSONResponse({"ok": False,
+                                 "motivo": "prova: 'bottiglia' oppure 'via'"})
+        return JSONResponse({"ok": True, "finta": amelie._distanza_finta,
+                             "stato": amelie.macchina.stato.value})
 
     @app.get("/pronto")
     async def pronto():

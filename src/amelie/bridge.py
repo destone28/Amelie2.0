@@ -29,7 +29,7 @@ import socket
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 log = logging.getLogger(__name__)
 
@@ -182,6 +182,48 @@ class Ponte:
         except (ErroreMCU, PonteNonDisponibile, OSError, TypeError, ValueError):
             return None
 
+    def scansiona(self) -> list[int] | None:
+        """Ogni indirizzo che risponde sul bus Qwiic, in ordine.
+
+        `moduli()` dice se ci sono i due che il dispositivo si aspetta; questo
+        dice **che cosa c'è davvero**, ed è la domanda che viene dopo. Un modulo
+        scambiato, uno a un indirizzo inatteso e nessun modulo sono tre guasti
+        diversi che da fuori si somigliano — e distinguerli guardando due schede
+        blu quasi identiche è il modo più rapido di sbagliarsi.
+
+        `None` se il firmware è troppo vecchio per saperlo fare.
+        """
+        trovati: list[int] = []
+        for blocco in range(4):
+            try:
+                maschera = int(self.chiama("scansiona", blocco))
+            except (ErroreMCU, PonteNonDisponibile, OSError, TypeError, ValueError):
+                return None
+            for i in range(32):
+                if maschera & (1 << i):
+                    trovati.append(blocco * 32 + i)
+        return trovati
+
+    def nomi_noti(self, indirizzi: Iterable[int]) -> dict[int, str]:
+        """Che cos'è ciascun indirizzo, per chi ha i cavetti in mano.
+
+        I Modulino sono schede quasi identiche: stesso blu, stessa forma, stessi
+        due connettori, e a distinguerli c'è solo il componente al centro e una
+        piccola icona serigrafata. Sbagliare scheda è facile e costa un'ora,
+        perché il sintomo — «non fa niente» — è lo stesso di un guasto.
+
+        Qui si nominano solo gli indirizzi di cui si è certi. Tutto il resto è
+        «un altro Modulino», senza inventarsi quale: dire il nome sbagliato
+        sarebbe peggio che non dirlo.
+        """
+        noti = {ANELLO: "Modulino Pixels — l'anello di luce. È QUESTO che serve",
+                DISTANZA: "Modulino Distance — il sensore ToF. Serve",
+                0x37: "Pixels riprogrammato: era il flash, non serve più",
+                0x6C: "indirizzo «Modulino» di un Pixels: lo sketch usa 0x36"}
+        return {a: noti.get(a, "un altro Modulino — non serve a questo "
+                               "dispositivo, toglilo dalla catena")
+                for a in indirizzi}
+
     def moduli(self) -> dict[str, bool]:
         """Quali Modulino il microcontrollore vede in questo momento.
 
@@ -262,6 +304,13 @@ class PonteSimulato(Ponte):
             return (1 << len(NOMI_MODULI)) - 1
         if metodo == "versione":
             return PROTOCOLLO_ATTESO
+        if metodo == "scansiona":
+            blocco = parametri[0] if parametri else 0
+            maschera = 0
+            for a in (ANELLO, DISTANZA):
+                if blocco * 32 <= a < (blocco + 1) * 32:
+                    maschera |= 1 << (a - blocco * 32)
+            return maschera
         return True
 
 

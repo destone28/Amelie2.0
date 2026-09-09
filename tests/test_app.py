@@ -738,7 +738,7 @@ class TestFirmwareEPythonDAccordo:
         from amelie.bridge import ANELLO, DISTANZA
 
         sketch = self._sketch()
-        for nome, atteso in (("IND_ANELLO", ANELLO), ("IND_DISTANZA", DISTANZA)):
+        for nome, atteso in (("IND_ANELLO", ANELLO), ("IND_TOF", DISTANZA)):
             m = re.search(rf"{nome}\s*=\s*(0x[0-9A-Fa-f]+)", sketch)
             assert m, f"{nome} non si trova nello sketch"
             assert int(m.group(1), 16) == atteso, \
