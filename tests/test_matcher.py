@@ -17,6 +17,7 @@ pytest.importorskip("rapidfuzz")
 from amelie.matcher import (  # noqa: E402
     SOGLIA_CERTA,
     SOGLIA_DUBBIA,
+    Candidato,
     DatabaseAssente,
     Fatti,
     Livello,
@@ -480,3 +481,41 @@ class TestProduttoreLetto:
         assert assente == 0.0, f"una parola assente ha preso {assente}"
         refuso = Matcher._copertura("tenuta rocca", "tinuta rocca barolo".split())
         assert refuso > 80, f"un refuso e' costato troppo: {refuso}"
+
+
+class TestDatabasePiuRiccoDelCodice:
+    """Il database cresce, il codice si aggiorna col firmware: non vanno insieme.
+
+    L'indice di ricerca vive nel database. Chi lo ricostruisce puo' metterci
+    righe di un ambito che questo codice non conosce - una tabella nuova, un
+    prodotto da scaffale con un codice a barre. Prima era un `KeyError` dentro
+    `_componi`, che gira nel thread di lavoro: diventava una schermata di
+    guasto davanti all'ospite, su ogni bottiglia che ci finisse sopra.
+
+    Chi legge deve reggere un database piu' ricco di quanto sappia usare.
+    """
+
+    def test_un_ambito_sconosciuto_non_solleva(self, m):
+        f = m._componi(Candidato(ambito="scaffale", ambito_id=1, testo="",
+                                 somiglianza=0.0, peso=0))
+        assert f.livello is Livello.NULLA
+        assert f.origine is None
+
+    def test_un_ambito_sconosciuto_non_entra_in_gara(self, m):
+        """E non basta che non sollevi: non deve nemmeno poter vincere.
+
+        I pesi dell'indice li decide chi lo costruisce, non questo codice: una
+        riga sconosciuta con peso alto scavalcherebbe la denominazione giusta e
+        l'ospite vedrebbe una schermata vuota.
+        """
+        candidati = m._candidati(["barolo"], "barolo")
+        assert candidati, "nessun candidato: la prova non direbbe niente"
+        ignoti = [c.ambito for c in candidati if c.ambito not in Matcher.AMBITI]
+        assert not ignoti, f"ambiti che non si sanno raccontare: {set(ignoti)}"
+
+    def test_gli_ambiti_dichiarati_sono_quelli_che_si_sanno_comporre(self, m):
+        """La tupla e il dizionario di `_componi` devono dire la stessa cosa."""
+        for ambito in Matcher.AMBITI:
+            f = m._componi(Candidato(ambito=ambito, ambito_id=1, testo="",
+                                     somiglianza=0.0, peso=0))
+            assert isinstance(f, Fatti)

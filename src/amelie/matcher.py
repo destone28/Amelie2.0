@@ -321,6 +321,12 @@ def sotto_lucchetto(f):
 class Matcher:
     """Interroga il database. Sola lettura, e non tiene stato fra una ricerca e l'altra."""
 
+    # Gli unici ambiti che il dispositivo sa raccontare. L'indice di ricerca
+    # vive nel database, e il database cresce: chi lo ricostruisce puo'
+    # aggiungerci righe di un ambito che questo codice non conosce. Vedi
+    # `_componi` e il filtro in `_candidati`.
+    AMBITI = ("vino", "tipologia", "denominazione", "vitigno")
+
     def __init__(self, percorso: str | Path | None = None) -> None:
         self.percorso = Path(percorso) if percorso else PERCORSO_DB
         if not self.percorso.exists():
@@ -517,6 +523,10 @@ class Matcher:
             log.warning("query FTS rifiutata (%s): %r", e, query)
             return []
 
+        # Le righe di un ambito che non si sa raccontare non entrano nemmeno in
+        # gara: se entrassero potrebbero vincere - e i pesi li decide chi
+        # costruisce l'indice, non questo codice - e si finirebbe per mostrare
+        # una schermata vuota al posto di un vino.
         grezzi = [
             Candidato(
                 ambito=r["ambito"], ambito_id=r["ambito_id"], testo=r["testo"],
@@ -526,8 +536,11 @@ class Matcher:
                 somiglianza=fuzz.token_set_ratio(testo_norm, r["testo"]),
                 peso=r["peso"],
             )
-            for r in righe
+            for r in righe if r["ambito"] in self.AMBITI
         ]
+        scartate = len(righe) - len(grezzi)
+        if scartate:
+            log.info("%d righe dell'indice ignorate: ambito sconosciuto", scartate)
         grezzi.sort(key=lambda c: c.punteggio, reverse=True)
 
         # Secondo passaggio, ed e' quello che evita le figuracce. token_set_ratio
@@ -716,12 +729,30 @@ class Matcher:
 
     @sotto_lucchetto
     def _componi(self, c: Candidato) -> Fatti:
-        f = {
+        """Da un candidato ai fatti. Un ambito sconosciuto non e' un errore.
+
+        Era un `KeyError`, e non su una riga qualsiasi: `_componi` gira nel
+        thread di lavoro, quindi l'eccezione diventava una schermata di guasto
+        davanti all'ospite. Basta che qualcuno ricostruisca l'indice di ricerca
+        con un ambito in piu' - una tabella nuova, un prodotto da scaffale - e
+        ogni bottiglia che ci finisca sopra manda il dispositivo in errore.
+
+        Il database e il codice hanno cicli di vita diversi: l'uno si rigenera,
+        l'altro si aggiorna col firmware. Chi legge deve reggere un database
+        piu' ricco di quanto sappia usare, e limitarsi a ignorare cio' che non
+        riconosce.
+        """
+        costruttore = {
             "vino": self._fatti_vino,
             "tipologia": self._fatti_tipologia,
             "denominazione": self._fatti_denominazione,
             "vitigno": self._fatti_vitigno,
-        }[c.ambito](c.ambito_id)
+        }.get(c.ambito)
+        if costruttore is None:
+            log.warning("ambito sconosciuto nell'indice: %r (id %s), lo ignoro",
+                        c.ambito, c.ambito_id)
+            return Fatti()
+        f = costruttore(c.ambito_id)
         if f.livello is not Livello.NULLA:
             f.origine = (c.ambito, c.ambito_id)
         return f
