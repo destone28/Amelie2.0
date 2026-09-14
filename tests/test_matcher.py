@@ -10,6 +10,8 @@ vitigni ammessi dal disciplinare che non devono mai finire fra i fatti
 raccontabili.
 """
 
+import re
+
 import pytest
 
 pytest.importorskip("rapidfuzz")
@@ -519,3 +521,79 @@ class TestDatabasePiuRiccoDelCodice:
             f = m._componi(Candidato(ambito=ambito, ambito_id=1, testo="",
                                      somiglianza=0.0, peso=0))
             assert isinstance(f, Fatti)
+
+
+class TestDisciplinare:
+    """Le citazioni del registro UE, e a chi si possono attribuire.
+
+    Le tipologie vengono da figshare, le citazioni dal documento unico
+    eAmbrosia: due fonti che non hanno una chiave in comune. Accostarle per
+    somiglianza del nome sbaglia — «Trentino Manzoni Bianco» si prende la
+    descrizione di «Trentino Bianco» con punteggio pieno, perché le parole ci
+    sono tutte — e il modo in cui sbaglia è il peggiore possibile: attribuisce
+    a un vino la descrizione organolettica di un altro, con sicurezza.
+
+    Per questo si restringe invece di somigliare, e quando non si può
+    restringere abbastanza si tace.
+    """
+
+    def test_la_citazione_arriva(self, m):
+        f = m._fatti_tipologia(2)                     # Abruzzo Rosso
+        assert f.disciplinare["colore"].startswith("rosso rubino")
+        assert f.disciplinare_di == "Abruzzo rosso"
+
+    def test_dice_di_che_cosa_parla(self, m):
+        """Il disciplinare descrive la TIPOLOGIA, non la bottiglia di quel
+        produttore: chi racconta deve poterlo dire."""
+        for tid in range(1, 400):
+            f = m._fatti_tipologia(tid)
+            if f.disciplinare:
+                assert f.disciplinare_di
+
+    def test_nessun_numero_di_servizio_nel_nome(self, m):
+        """Quando due tipologie si chiamano uguale l'archivio le numera per
+        tenerle distinte. Il numero è un identificativo, non un nome."""
+        for tid in range(1, 400):
+            di = m._fatti_tipologia(tid).disciplinare_di
+            if di:
+                assert not re.search(r"\(\d+\)$", di), di
+
+    def test_mai_la_descrizione_di_un_altro_colore(self, m):
+        """L'invariante che conta. Su tutte le tipologie dell'archivio: nessuna
+        riceve una descrizione che contraddica il proprio colore."""
+        rosso = re.compile(r"\b(rosso|rubino|granato|porpora|violaceo)\b", re.I)
+        bianco = re.compile(
+            r"\b(bianco|paglierino|giallo|dorato|verdognolo|verdolino|ambrato)\b", re.I)
+        con, sbagliate = 0, []
+        for tid, colore in m.con.execute("SELECT id, colore FROM tipologia"):
+            d = m._fatti_tipologia(tid).disciplinare
+            if not d:
+                continue
+            con += 1
+            c = d.get("colore", "")
+            if colore == "Red" and bianco.search(c) and not rosso.search(c):
+                sbagliate.append((tid, c))
+            if colore == "White" and rosso.search(c) and not bianco.search(c):
+                sbagliate.append((tid, c))
+        assert con > 2000, f"solo {con} tipologie con citazioni"
+        assert not sbagliate, sbagliate[:3]
+
+    def test_il_pareggio_si_tace(self, m):
+        """Una denominazione con più descrizioni dello stesso colore, e niente
+        che dica quale sia la nostra: si resta in silenzio. Il narratore ha
+        comunque il resto dei fatti."""
+        assert m._disciplinare(None, "qualunque", "Red") is None
+        assert m._disciplinare(1, "qualunque", "Sparkling") is None
+
+    def test_nel_blocco_dei_fatti_sono_separate(self, m):
+        """Il resto dei fatti si può riformulare, queste sono parole altrui."""
+        blocco = m._fatti_tipologia(2).blocco_fatti()
+        assert "DAL DISCIPLINARE" in blocco
+        assert blocco.index("Denominazione:") < blocco.index("DAL DISCIPLINARE")
+
+    def test_in_inglese_sono_dichiarate_traduzione(self, m):
+        """«rosso rubino» reso «ruby red» è parola nostra: dirlo citazione
+        attribuirebbe a un ente pubblico una frase che non ha mai scritto."""
+        blocco = m._fatti_tipologia(2).blocco_fatti(lingua="en")
+        assert "translated from the Italian" in blocco
+        assert "ruby red" in blocco

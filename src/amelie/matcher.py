@@ -64,6 +64,7 @@ from __future__ import annotations
 import functools
 import logging
 import math
+import re
 import sqlite3
 import threading
 from dataclasses import dataclass, field
@@ -184,6 +185,22 @@ class Fatti:
     vitigni_ammessi: list[str] = field(default_factory=list)
 
     abbinamenti: list[str] = field(default_factory=list)
+
+    # Le tre descrizioni ufficiali del disciplinare - colore, odore, sapore -
+    # per la tipologia a cui la bottiglia appartiene. Sono la sola parte dei
+    # fatti che non abbiamo scritto noi: le ha scritte il consorzio, e vanno
+    # riportate con le loro parole (in inglese, tradotte: vedi
+    # `amelie.organolettico`). `disciplinare_di` dice DI CHE COSA parlano, ed
+    # e' necessario: il disciplinare descrive la TIPOLOGIA, non la bottiglia di
+    # quel produttore, e chi racconta deve poterlo dire.
+    #
+    # Restano vuote quando la denominazione ha piu' descrizioni e nulla nel
+    # database dice quale sia la nostra. Vuote e' la risposta giusta: mettere
+    # la descrizione di un passito su un vino secco e' un errore che un
+    # sommelier sente alla prima frase.
+    disciplinare: dict[str, str] = field(default_factory=dict)
+    disciplinare_di: str | None = None
+
     note_vitigno: str | None = None
     # I descrittori sensoriali tipici del vitigno. Vanno nei fatti perche'
     # altrimenti il modello se li inventa: senza, sul Chianti scriveva "sentore
@@ -299,7 +316,44 @@ class Fatti:
         ):
             if valore not in (None, "", []):
                 righe.append(f"{etichetta}: {valore}")
+        righe.extend(self._righe_disciplinare(lingua))
         return "\n".join(righe)
+
+    # Le citazioni stanno in fondo e separate, e la separazione e' il punto: il
+    # resto dei fatti sono dati che il modello puo' riformulare, queste sono
+    # parole di un atto ufficiale. Senza la divisione il modello tratta «rosso
+    # granato» come un suggerimento e scrive «di un bel rosso brillante» - vero
+    # forse, ma non e' cio' che dice il disciplinare.
+    _INTESTAZIONE_DISCIPLINARE = {
+        "it": "DAL DISCIPLINARE di {di} (parole del consorzio, da riportare):",
+        "en": "FROM THE SPECIFICATION for {di} "
+              "(the consortium's own words, translated from the Italian):",
+    }
+    _VOCI_DISCIPLINARE = {
+        "it": {"colore": "Colore", "odore": "Odore", "sapore": "Sapore"},
+        "en": {"colore": "Colour", "odore": "Nose", "sapore": "Palate"},
+    }
+
+    def _righe_disciplinare(self, lingua: str) -> list[str]:
+        if not self.disciplinare:
+            return []
+        from .organolettico import carica as carica_organolettico
+
+        voci = self._VOCI_DISCIPLINARE.get(lingua, self._VOCI_DISCIPLINARE["it"])
+        vocabolario = carica_organolettico()
+        dentro = []
+        for ambito in ("colore", "odore", "sapore"):
+            testo = self.disciplinare.get(ambito)
+            if not testo:
+                continue
+            reso = vocabolario.rendi(testo, ambito, lingua=lingua)
+            if reso:
+                dentro.append(f"{voci[ambito]}: {reso.testo}")
+        if not dentro:
+            return []
+        testa = self._INTESTAZIONE_DISCIPLINARE.get(
+            lingua, self._INTESTAZIONE_DISCIPLINARE["it"])
+        return ["", testa.format(di=self.disciplinare_di or self.denominazione)] + dentro
 
 
 def sotto_lucchetto(f):
@@ -316,6 +370,71 @@ def sotto_lucchetto(f):
         with self._db:
             return f(self, *a, **kw)
     return dentro
+
+
+# Il colore dei due registri e' scritto in lingue diverse: figshare in inglese,
+# il documento unico in italiano. E' il vincolo che non si puo' sbagliare -
+# nessuna descrizione di un bianco vale per un rosso - quindi si traduce qui e
+# si applica per primo.
+# In archivio convivono le due scritture, perche' convivono le due fonti.
+# «Sparkling» e «Dessert» invece NON sono colori: dicono che tipo di vino e',
+# non di che colore, e per un vino cosi' il vincolo non si puo' applicare.
+COLORE_UE = {"Red": "Rosso", "White": "Bianco", "Rosé": "Rosato",
+             "Rosso": "Rosso", "Bianco": "Bianco", "Rosato": "Rosato"}
+
+# Parole che nel nome di una tipologia denotano un PRODOTTO DIVERSO, non una
+# sfumatura: un passito non e' la versione dolce del bianco, e' un altro vino.
+QUALIFICATORI = frozenset((
+    "passito", "liquoroso", "spumante", "frizzante", "riserva", "superiore",
+    "novello", "classico", "vendemmia", "tardiva", "stramature",
+))
+
+# La categoria UE dice la stessa cosa del nome, ma in forma di codice: serve
+# quando il nome tace, «Aleatico di Puglia» che e' un liquoroso e non lo scrive.
+QUALIFICATORE_DI_CATEGORIA = {
+    "Wine From Raisined Grapes": "passito",
+    "Wine From Overripe Grapes": "stramature",
+    "Liqueur Wine": "liquoroso",
+    "Sparkling Wine": "spumante",
+    "Quality Sparkling Wine": "spumante",
+    "Quality Aromatic Sparkling Wine": "spumante",
+    "Semi-Sparkling Wine": "frizzante",
+    "Aerated Semi-Sparkling Wine": "frizzante",
+}
+
+# Quando due tipologie di una denominazione si chiamano uguale, chi costruisce
+# l'archivio le numera per tenerle distinte. Il numero e' un identificativo,
+# non un nome: a schermo e nel racconto non ci va.
+_NUMERO_IN_CODA = re.compile(r"\s*\(\d+\)\s*$")
+
+# Il testo dei parametri di legge a volte e' colato dentro il blocco
+# descrittivo del PDF. Sono pochi casi, ma basta uno per far dire al
+# dispositivo «sapore armonico titolo alcolometrico volumico totale minimo».
+_PARAMETRI_DI_LEGGE = re.compile(
+    r"titolo\s+alcolometric|estratto\s+non\s+ridutt|zuccheri\s+ridutt|"
+    r"\d+[,.]\d+\s*%\s*vol", re.I)
+
+# Una citazione organolettica e' breve: mediana 35 caratteri, novantesimo
+# percentile 79. Oltre i 120 non e' piu' una citazione, e' un paragrafo.
+_CITAZIONE_MASSIMA = 120
+
+
+def _citazioni_utili(r) -> dict[str, str]:
+    fuori = {}
+    for ambito in ("colore", "odore", "sapore"):
+        v = (r[f"desc_{ambito}"] or "").strip().rstrip(".")
+        if v and len(v) <= _CITAZIONE_MASSIMA and not _PARAMETRI_DI_LEGGE.search(v):
+            fuori[ambito] = v
+    return fuori
+
+
+def _confronto(r) -> tuple:
+    """Due righe dicono la stessa cosa? Si guardano le citazioni, non i nomi."""
+    return tuple(sorted(_citazioni_utili(r).items()))
+
+
+def _nome_leggibile(r) -> str:
+    return _NUMERO_IN_CODA.sub("", (r["nome"] or "").strip())
 
 
 class Matcher:
@@ -345,6 +464,7 @@ class Matcher:
             f"file:{self.percorso}?mode=ro", uri=True, check_same_thread=False)
         self.con.row_factory = sqlite3.Row
         self._db = threading.RLock()
+        self._vitigni: tuple[str, ...] | None = None
 
     @sotto_lucchetto
     def chiudi(self) -> None:
@@ -828,6 +948,87 @@ class Matcher:
             nome_norm, r["nome_norm"]))
         return migliore["id"]
 
+    def _aggiungi_disciplinare(self, f: Fatti, den_id, nome, colore, categoria=None):
+        trovato = self._disciplinare(den_id, nome or "", colore, categoria)
+        if trovato:
+            f.disciplinare, f.disciplinare_di = trovato
+
+    @sotto_lucchetto
+    def _vitigni_noti(self) -> tuple[str, ...]:
+        """I nomi dei vitigni, dal piu' lungo al piu' corto.
+
+        Servono a leggere i nomi delle tipologie: dentro una denominazione
+        larga la differenza fra due descrizioni e' quasi sempre il vitigno -
+        «Trentino Superiore Chardonnay» contro «Trentino Superiore Riesling
+        renano» - e senza l'elenco quelle due righe si somigliano e basta.
+        """
+        if self._vitigni is None:
+            self._vitigni = tuple(sorted(
+                (r[0] for r in self.con.execute(
+                    "SELECT nome_norm FROM vitigno WHERE length(nome_norm) >= 5")),
+                key=len, reverse=True))
+        return self._vitigni
+
+    def _vitigni_nel_nome(self, nome: str) -> frozenset[str]:
+        dentro, resto = set(), f" {normalizza(nome)} "
+        for v in self._vitigni_noti():
+            if f" {v} " in resto:
+                dentro.add(v)
+                resto = resto.replace(f" {v} ", " ")
+        return frozenset(dentro)
+
+    @staticmethod
+    def _qualificatori(nome: str, categoria: str | None = None) -> frozenset[str]:
+        q = {p for p in normalizza(nome).split() if p in QUALIFICATORI}
+        if categoria in QUALIFICATORE_DI_CATEGORIA:
+            q.add(QUALIFICATORE_DI_CATEGORIA[categoria])
+        return frozenset(q)
+
+    @sotto_lucchetto
+    def _disciplinare(self, den_id: int | None, nome: str, colore: str | None,
+                      categoria: str | None = None) -> tuple[dict[str, str], str] | None:
+        """Le citazioni del disciplinare per questa tipologia, o None.
+
+        I due registri non hanno una chiave in comune - le tipologie vengono da
+        figshare, le citazioni dal documento unico eAmbrosia - e accostarle per
+        somiglianza del nome sbaglia: «Trentino Manzoni Bianco» si prende la
+        descrizione di «Trentino Bianco» con punteggio pieno, perche' le parole
+        ci sono tutte. Misurato: 729 abbinamenti su 3.315 finivano su un vino
+        di un altro colore.
+
+        Quindi si restringe, non si somiglia. Prima il colore, che e' il
+        vincolo che non si puo' sbagliare; poi il vitigno e i qualificatori,
+        che sono scritti sull'etichetta e quindi gia' letti. Se quel che resta
+        dice tutto la stessa cosa, la si riporta. Se dice cose diverse e nulla
+        distingue quale sia la nostra, si tace: il narratore ha comunque il
+        resto dei fatti, e una descrizione presa a caso fra tre non e' un
+        dettaglio in piu' - e' una cosa falsa detta con sicurezza.
+        """
+        if den_id is None or colore not in COLORE_UE:
+            return None
+        righe = [r for r in self.con.execute(
+            """SELECT nome, nome_incerto, menzione, desc_colore, desc_odore, desc_sapore
+               FROM tipologia_ue WHERE denominazione_id = ? AND colore = ?""",
+            (den_id, COLORE_UE[colore])) if _citazioni_utili(r)]
+        if not righe:
+            return None
+
+        miei_q = self._qualificatori(nome, categoria)
+        miei_v = self._vitigni_nel_nome(nome)
+
+        def suoi(r):
+            n = _NUMERO_IN_CODA.sub("", r["nome"] or "")
+            return self._qualificatori(f"{n} {r['menzione'] or ''}"), self._vitigni_nel_nome(n)
+
+        for tiene in (lambda r: suoi(r) == (miei_q, miei_v),
+                      lambda r: suoi(r)[1] == miei_v,
+                      lambda r: suoi(r)[0] == miei_q,
+                      lambda r: True):
+            restano = [r for r in righe if tiene(r)]
+            if restano and len({_confronto(r) for r in restano}) == 1:
+                return _citazioni_utili(restano[0]), _nome_leggibile(restano[0])
+        return None
+
     @sotto_lucchetto
     def _fatti_vino(self, vid: int) -> Fatti:
         r = self.con.execute(
@@ -849,6 +1050,7 @@ class Matcher:
             " WHERE vv.vino_id = ? ORDER BY vi.nome", (vid,))]
         f.abbinamenti = [x[0] for x in self.con.execute(
             "SELECT abbinamento FROM vino_abbinamento WHERE vino_id = ? LIMIT 6", (vid,))]
+        self._aggiungi_disciplinare(f, r["denominazione_id"], r["nome"], r["tipo"])
         self._aggiungi_nota_vitigno(f)
         return f
 
@@ -875,6 +1077,8 @@ class Matcher:
                 " JOIN vitigno vi ON vi.id = tv.vitigno_id"
                 " WHERE tv.tipologia_id = ? AND tv.ruolo = ? ORDER BY vi.nome",
                 (tid, ruolo)))
+        self._aggiungi_disciplinare(f, r["denominazione_id"], r["nome"],
+                                    r["colore"], r["categoria"])
         self._aggiungi_nota_vitigno(f)
         return f
 
