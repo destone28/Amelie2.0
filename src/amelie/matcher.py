@@ -1020,6 +1020,15 @@ class Matcher:
             n = _NUMERO_IN_CODA.sub("", r["nome"] or "")
             return self._qualificatori(f"{n} {r['menzione'] or ''}"), self._vitigni_nel_nome(n)
 
+        # Il nome identico vale piu' di ogni restrizione, ma solo se e'
+        # affidabile: un nome ricostruito o numerato coincide per costruzione,
+        # non perche' dica qualcosa.
+        mio = normalizza(nome)
+        uguali = [r for r in righe
+                  if not r["nome_incerto"] and normalizza(_nome_leggibile(r)) == mio]
+        if len({_confronto(r) for r in uguali}) == 1:
+            return _citazioni_utili(uguali[0]), _nome_leggibile(uguali[0])
+
         for tiene in (lambda r: suoi(r) == (miei_q, miei_v),
                       lambda r: suoi(r)[1] == miei_v,
                       lambda r: suoi(r)[0] == miei_q,
