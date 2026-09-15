@@ -319,6 +319,62 @@ class Fatti:
         righe.extend(self._righe_disciplinare(lingua))
         return "\n".join(righe)
 
+    def blocco_compatto(self, lessico=None, lingua: str = "it") -> str:
+        """Gli stessi fatti, nella forma piu' corta che li contenga tutti.
+
+        Serve a una cosa sola: il tempo. Sulla board il prefill va a 16 token
+        al secondo e i fatti NON si possono mettere in cache - cambiano a ogni
+        bottiglia - quindi ogni token del prompt e' 60 millisecondi di silenzio
+        prima che il modello cominci. Il blocco esteso ne costa 230, che sono
+        quattordici secondi; questo ne costa 115, che sono sette.
+
+        Non e' il blocco esteso abbreviato: e' lo stesso contenuto senza le
+        etichette, che un modello addestrato su questa forma non gli servono.
+        Il blocco esteso resta per il modello generico, che le etichette le
+        legge davvero.
+
+        La `nota sul vitigno` non c'e', ed e' una scelta, non una dimenticanza:
+        da sola vale 40 token - un quinto del prompt e due secondi e mezzo di
+        attesa - ed e' l'unica parte dei fatti gia' scritta in prosa da una
+        persona. Non serve che un modello la riscriva: il racconto la dice
+        com'e', dal template, mentre il modello lavora sul resto.
+        """
+        if lessico is None:
+            from .lessico import carica
+            lessico = carica()
+
+        def t(vocabolario, valore):
+            return lessico.traduci(vocabolario, valore, lingua=lingua) if valore else None
+
+        pezzi = [
+            self.nome, self.cantina, self.denominazione, self.tipologia,
+            ", ".join(self.vitigni[:3]) or None,
+            t("tipo", self.colore) or t("colore", self.colore),
+            f"{self.abv}%" if self.abv else None,
+            f"{self.temperatura_c}\u00b0" if self.temperatura_c else None,
+            # Come fa il narratore: prima la versione nella lingua chiesta -
+            # gli abbinamenti di un vitigno sono prosa scritta a mano - e poi
+            # il vocabolario, per quelli che sono chiavi di un dataset.
+            ", ".join(lessico.traduci_molti(
+                "abbinamento", self.abbinamenti_in(lingua)[:3],
+                lingua=lingua)) or None,
+            ", ".join(self.sensoriali_in(lingua)[:4]) or None,
+        ]
+        righe = [" \u00b7 ".join(str(x) for x in pezzi if x)]
+        if self.disciplinare:
+            from .organolettico import carica as carica_organolettico
+
+            vocabolario = carica_organolettico()
+            rese = []
+            for ambito in ("colore", "odore", "sapore"):
+                if not (testo := self.disciplinare.get(ambito)):
+                    continue
+                if (reso := vocabolario.rendi(testo, ambito, lingua=lingua)):
+                    rese.append(reso.testo)
+            if rese:
+                righe.append("DISC " + " \u00b7 ".join(rese))
+        return "\n".join(righe)
+
     # Le citazioni stanno in fondo e separate, e la separazione e' il punto: il
     # resto dei fatti sono dati che il modello puo' riformulare, queste sono
     # parole di un atto ufficiale. Senza la divisione il modello tratta «rosso

@@ -604,6 +604,26 @@ class TestDisciplinare:
         assert "DAL DISCIPLINARE" in blocco
         assert blocco.index("Denominazione:") < blocco.index("DAL DISCIPLINARE")
 
+    def test_la_forma_compatta_costa_meno_e_dice_lo_stesso(self, m):
+        """Sulla board ogni token del prompt è 60 millisecondi di silenzio, e i
+        fatti non si possono mettere in cache: cambiano a ogni bottiglia."""
+        f = m._fatti_tipologia(2)
+        compatto = f.blocco_compatto()
+        assert len(compatto) < len(f.blocco_fatti()) / 1.5
+        for pezzo in (f.denominazione, f.tipologia, f.disciplinare["colore"]):
+            assert pezzo in compatto
+
+    def test_la_forma_compatta_non_porta_la_nota(self, m):
+        """Quaranta token per una prosa già scritta da una persona: il racconto
+        la dice com'è, dal template, mentre il modello lavora sul resto."""
+        f = m._fatti_tipologia(2)
+        assert f.note_vitigno
+        assert f.note_vitigno not in f.blocco_compatto()
+
+    def test_la_forma_compatta_segue_la_lingua(self, m):
+        compatto = m._fatti_tipologia(2).blocco_compatto(lingua="en")
+        assert "ruby red" in compatto and "rosso rubino" not in compatto
+
     def test_in_inglese_sono_dichiarate_traduzione(self, m):
         """«rosso rubino» reso «ruby red» è parola nostra: dirlo citazione
         attribuirebbe a un ente pubblico una frase che non ha mai scritto."""
