@@ -578,6 +578,19 @@ class TestDisciplinare:
         assert con > 2000, f"solo {con} tipologie con citazioni"
         assert not sbagliate, sbagliate[:3]
 
+    def test_un_passito_non_descrive_un_vino_secco(self, m):
+        """«Cinque Terre Costa de Campu Riserva» è un bianco secco, lo
+        Sciacchetrà è un passito: stessa denominazione, stesso colore, e nel
+        nome nessuna parola che facesse da freno. Le uve appassite fanno un
+        altro vino, e quella descrizione è esclusa — non rimandata in fondo.
+        """
+        riga = m.con.execute(
+            "SELECT id FROM tipologia WHERE nome = ?",
+            ("Cinque Terre Costa de Campu Riserva",)).fetchone()
+        if riga is None:
+            pytest.skip("la tipologia non c'è in questo archivio")
+        assert not m._fatti_tipologia(riga[0]).disciplinare
+
     def test_il_pareggio_si_tace(self, m):
         """Una denominazione con più descrizioni dello stesso colore, e niente
         che dica quale sia la nostra: si resta in silenzio. Il narratore ha

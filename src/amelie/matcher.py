@@ -389,6 +389,28 @@ QUALIFICATORI = frozenset((
     "novello", "classico", "vendemmia", "tardiva", "stramature",
 ))
 
+# Fra i qualificatori, questi non sono una sfumatura: cambiano il PRODOTTO. Un
+# passito non e' la versione dolce del bianco, e' un altro vino, fatto con uve
+# appassite. Chi ne porta uno e l'altro no non puo' ricevere la sua descrizione
+# in nessun caso - non e' una preferenza, e' un'esclusione.
+#
+# Succede, ed e' stato misurato: «Cinque Terre Costa de Campu Riserva», un
+# bianco secco, si prendeva la descrizione dello «Sciacchetra' Riserva», che e'
+# un passito. Stessa denominazione, stesso colore, e nel nome nessuna parola
+# che facesse da freno finche' «sciacchetra» non e' stata messa in questo
+# elenco. I nomi di menzione valgono quanto gli aggettivi: e' il vino a essere
+# diverso, non il modo di chiamarlo.
+# Spumante e frizzante NON sono qui, e la ragione e' misurata: la cascata li
+# separa gia' da sola, mentre escluderli costava 412 tipologie per correggere
+# quattro attribuzioni. Qui c'e' solo cio' che nasce da uve diverse - appassite,
+# stramature, o fortificate dopo - e che quindi non e' lo stesso vino nemmeno
+# alla lontana.
+PRODOTTO_DIVERSO = frozenset((
+    "passito", "liquoroso", "stramature", "sciacchetra", "vinsanto",
+    "vin santo", "recioto", "amarone", "sforzato", "sfursat",
+    "occhio di pernice", "vendemmia tardiva",
+))
+
 # La categoria UE dice la stessa cosa del nome, ma in forma di codice: serve
 # quando il nome tace, «Aleatico di Puglia» che e' un liquoroso e non lo scrive.
 QUALIFICATORE_DI_CATEGORIA = {
@@ -978,6 +1000,15 @@ class Matcher:
         return frozenset(dentro)
 
     @staticmethod
+    def _prodotto_diverso(nome: str, categoria: str | None = None) -> frozenset[str]:
+        dentro = f" {normalizza(nome)} "
+        q = {p for p in PRODOTTO_DIVERSO if f" {p} " in dentro}
+        segno = QUALIFICATORE_DI_CATEGORIA.get(categoria or "")
+        if segno in PRODOTTO_DIVERSO:
+            q.add(segno)
+        return frozenset(q)
+
+    @staticmethod
     def _qualificatori(nome: str, categoria: str | None = None) -> frozenset[str]:
         q = {p for p in normalizza(nome).split() if p in QUALIFICATORI}
         if categoria in QUALIFICATORE_DI_CATEGORIA:
@@ -1019,6 +1050,15 @@ class Matcher:
         def suoi(r):
             n = _NUMERO_IN_CODA.sub("", r["nome"] or "")
             return self._qualificatori(f"{n} {r['menzione'] or ''}"), self._vitigni_nel_nome(n)
+
+        # Prima di tutto il resto: quel che non e' lo stesso prodotto esce, e
+        # se non resta niente si tace. Meglio nessuna citazione che quella di
+        # un altro vino.
+        mio_tipo = self._prodotto_diverso(nome, categoria)
+        righe = [r for r in righe if self._prodotto_diverso(
+            f"{_nome_leggibile(r)} {r['menzione'] or ''}") == mio_tipo]
+        if not righe:
+            return None
 
         # Il nome identico vale piu' di ogni restrizione, ma solo se e'
         # affidabile: un nome ricostruito o numerato coincide per costruzione,
