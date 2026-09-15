@@ -245,6 +245,26 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str) -> list[str]:
     elif f.vitigni:
         frasi.append(d("nasce_da", vitigni=elenca_in_lingua(f.vitigni[:3], lingua)))
 
+    # Le parole del disciplinare vengono prima dei tratti generici: sono la
+    # descrizione sensoriale VERA di questo vino, mentre «corpo» e «acidita'»
+    # sono due caselle di un vocabolario. Dove ci sono le prime, le seconde
+    # sono il contorno.
+    #
+    # In italiano sono la citazione parola per parola. In inglese sono una
+    # traduzione (vedi `amelie.organolettico`), e per questo la frase dice cosa
+    # il disciplinare CHIEDE invece di virgolettare: quella resa e' nostra, e
+    # metterla fra virgolette attribuirebbe a un ente pubblico parole che non
+    # ha scritto.
+    if f.disciplinare:
+        from .organolettico import carica as carica_organolettico
+
+        vocabolario = carica_organolettico()
+        for ambito in ("colore", "odore", "sapore"):
+            if not (testo := f.disciplinare.get(ambito)):
+                continue
+            if (reso := vocabolario.rendi(testo, ambito, lingua=lingua)):
+                frasi.append(d(f"disciplinare_{ambito}", valore=reso.testo))
+
     corpo = (lex.traduci("corpo", f.corpo, lingua=lingua, forma="narrativa")
              if f.corpo else None)
     acidita = (lex.traduci("acidita", f.acidita, lingua=lingua, forma="narrativa")

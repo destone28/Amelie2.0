@@ -58,6 +58,18 @@
       "it": "Nasce da {vitigni}.",
       "en": "It is made from {vitigni}."
     },
+    "disciplinare_colore": {
+      "it": "Il disciplinare lo vuole {valore}.",
+      "en": "The specification calls for it to be {valore}."
+    },
+    "disciplinare_odore": {
+      "it": "Al naso, {valore}.",
+      "en": "On the nose, {valore}."
+    },
+    "disciplinare_sapore": {
+      "it": "In bocca, {valore}.",
+      "en": "On the palate, {valore}."
+    },
     "tratti_entrambi": {
       "it": "È un vino {corpo}, con {acidita}.",
       "en": "It is {corpo}, with {acidita}."
