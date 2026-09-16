@@ -152,7 +152,86 @@ def verifica(testo: str, fatti: Fatti) -> tuple[bool, list[str]]:
     if contraddizione := _colore_sbagliato(testo, fatti):
         invenzioni.append(contraddizione)
 
+    # Le quattro classi che seguono sono uscite da una rilettura dei testi del
+    # modello addestrato: passavano tutte, e cio' che la verifica non vede
+    # diventa un'abitudine del modello.
+    invenzioni.extend(_gradi_sbagliati(testo, fatti))
+    if "disciplinar" in _senza_accenti(testo) and not fatti.disciplinare:
+        invenzioni.append("disciplinare invocato senza citazioni")
+    invenzioni.extend(_cibi_inventati(testo, ammesso))
+    invenzioni.extend(_provenienze_inventate(testo, ammesso))
+
     return (not invenzioni), invenzioni
+
+
+# I numeri che il modello addestrato dice a voce sono scritti in lettere - e'
+# cosi' che il corpus glieli ha insegnati, perche' una voce sintetica legge
+# «17-19» come «diciassette trattino diciannove». Il controllo sulle cifre non
+# li vedeva. Si guardano solo nelle frasi che parlano di gradi: «due vitigni»
+# e' un conteggio, non un fatto da verificare.
+_IN_LETTERE = {
+    "cinque": 5, "sei": 6, "sette": 7, "otto": 8, "nove": 9, "dieci": 10,
+    "undici": 11, "dodici": 12, "tredici": 13, "quattordici": 14, "quindici": 15,
+    "sedici": 16, "diciassette": 17, "diciotto": 18, "diciannove": 19, "venti": 20,
+}
+_NUMERO_IN_LETTERE = re.compile(
+    r"\b(" + "|".join(sorted(_IN_LETTERE, key=len, reverse=True)) + r")\b(\s+gradi)?(\s+e\s+mezzo)?",
+    re.I)
+
+
+def _gradi_sbagliati(testo: str, fatti: Fatti) -> list[str]:
+    """Gradazione e temperatura dette in lettere, confrontate coi fatti.
+
+    Un intervallo si dice coi suoi estremi: «fra i sedici e i diciotto». Il
+    punto medio - «diciassette» - non e' scritto da nessuna parte, e il mezzo
+    grado va confrontato come mezzo: «tredici gradi e mezzo» di un 12,5% e'
+    sbagliato anche se l'intero torna."""
+    permessi: set[float] = set()
+    if fatti.abv:
+        permessi.add(float(fatti.abv))
+    for n in re.findall(r"\d+(?:[.,]\d+)?", fatti.temperatura_c or ""):
+        permessi.add(float(n.replace(",", ".")))
+    if not permessi:
+        return []
+    fuori = []
+    for frase in spezza_in_frasi(testo):
+        if "grad" not in _senza_accenti(frase):
+            continue
+        for m in _NUMERO_IN_LETTERE.finditer(_senza_accenti(frase)):
+            detto = _IN_LETTERE[m.group(1).lower()] + (0.5 if m.group(3) else 0.0)
+            if detto not in permessi:
+                fuori.append(f"{m.group(0).strip()} (nei fatti: "
+                             f"{', '.join(f'{p:g}' for p in sorted(permessi))})")
+    return fuori
+
+
+_CIBI = re.compile(
+    r"\b(manzo|agnello|maiale|vitello|pollame|pollo|cacciagione|selvaggina|salumi|"
+    r"formagg\w*|pesc[ei]|crostacei|molluschi|frutti di mare|antipasti|stuzzichini|"
+    r"risott\w*|zupp[ae]|verdure|dolci|pasticceria|dessert|cioccolato|funghi|tartufo|"
+    r"pizza|carni? (?:rosse|bianche)|arrost\w*|brasat\w*|grigliat\w+|ostriche|"
+    r"primi piatti|pasta)\b", re.I)
+
+
+def _cibi_inventati(testo: str, ammesso: str) -> list[str]:
+    """Abbinamenti che i fatti non danno: «formaggi» nei fatti copre
+    «formaggio» nel testo, per questo si confronta la radice."""
+    return [m.group(0) for m in _CIBI.finditer(_senza_accenti(testo))
+            if m.group(0)[:5] not in ammesso]
+
+
+# Un modello piccolo non sa da dove venga un vitigno, ma impara benissimo la
+# forma «il vitigno <aggettivo> di <denominazione>» e riempie l'aggettivo a
+# caso: «Catarratto, un grande abruzzese del Piemonte». E' siciliano.
+_PROVENIENZA = re.compile(
+    r"\b(piemontes|toscan|sicilian|abruzzes|puglies|venet|umbr|lazial|marchigian|"
+    r"sard|calabres|campan|lombard|ligur|friulan|trentin|altoatesin|emilian|"
+    r"romagnol|borgognon|bordoles|frances|spagnol|tedesc|austriac)\w*", re.I)
+
+
+def _provenienze_inventate(testo: str, ammesso: str) -> list[str]:
+    return [m.group(0) for m in _PROVENIENZA.finditer(_senza_accenti(testo))
+            if m.group(0)[:6] not in ammesso]
 
 
 _ROSSO = re.compile(r"\b(rosso|rossa|rubino|granato|tannico|tannicit[àa]|tannin)", re.I)

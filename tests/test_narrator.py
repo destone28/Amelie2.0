@@ -566,3 +566,56 @@ class TestDidascalia:
         assert spezza_in_frasi("") == []
         # Un punto dentro una sigla non spezza: non c'e' spazio dopo.
         assert len(spezza_in_frasi("Un Barolo D.O.C.G. del 2016.")) == 1
+
+
+class TestLeQuattroClassiUsciteDallaRilettura:
+    """Passavano tutte. Ciò che la verifica non vede diventa un'abitudine del
+    modello: il modello addestrato invocava il disciplinare senza averlo nel
+    76 % dei casi, perché il maestro lo faceva nel 55 % e nessuno lo fermava."""
+
+    def _fatti(self, **kw):
+        base = dict(livello=Livello.VINO, nome="Rosso di prova", denominazione="Prova",
+                    colore="Red", abv=12.5, temperatura_c="16-18",
+                    abbinamenti=["carni rosse", "formaggi stagionati"])
+        base.update(kw)
+        return Fatti(**base)
+
+    def test_il_punto_medio_dell_intervallo_non_e_scritto(self):
+        ok, inv = verifica("Da servire a diciassette gradi.", self._fatti())
+        assert not ok and any("diciassette" in x for x in inv)
+
+    def test_gli_estremi_dell_intervallo_vanno_bene(self):
+        ok, _ = verifica("Da servire fra i sedici e i diciotto gradi.", self._fatti())
+        assert ok
+
+    def test_il_mezzo_grado_si_confronta_come_mezzo(self):
+        """«tredici gradi e mezzo» di un 12,5 %: l'intero tornava, il vino no."""
+        ok, inv = verifica("Tredici gradi e mezzo, da servire fra i sedici e i diciotto.",
+                           self._fatti())
+        assert not ok and any("tredici gradi e mezzo" in x for x in inv)
+        ok, _ = verifica("Dodici gradi e mezzo, da servire fra i sedici e i diciotto.",
+                         self._fatti())
+        assert ok
+
+    def test_un_conteggio_non_e_un_grado(self):
+        ok, _ = verifica("Nasce da due vitigni. Da servire fra i sedici e i diciotto gradi.",
+                         self._fatti())
+        assert ok
+
+    def test_il_disciplinare_si_nomina_solo_se_c_e(self):
+        ok, inv = verifica("Il disciplinare lo vuole rosso.", self._fatti())
+        assert not ok and "disciplinare invocato senza citazioni" in inv
+        ok, _ = verifica("Il disciplinare lo vuole rosso rubino.",
+                         self._fatti(disciplinare={"colore": "rosso rubino"}))
+        assert ok
+
+    def test_un_cibo_non_scritto_e_un_invenzione(self):
+        ok, inv = verifica("Ideale su crostacei e formaggi.", self._fatti())
+        assert not ok and "crostacei" in inv and "formaggi" not in inv
+
+    def test_l_origine_del_vitigno_va_nei_fatti(self):
+        ok, inv = verifica("Un grande vitigno siciliano.", self._fatti())
+        assert not ok and "siciliano" in inv
+        ok, _ = verifica("Un grande vitigno siciliano.",
+                         self._fatti(note_vitigno="Vitigno siciliano, dell'Etna."))
+        assert ok
