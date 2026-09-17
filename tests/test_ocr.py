@@ -147,3 +147,68 @@ class TestImpostazioni:
     def test_immutabile(self):
         with pytest.raises(Exception):
             ImpostazioniOCR().lato_massimo = 1
+
+
+class TestIlVersoDelFotogramma:
+    """Un verso sbagliato non degrada la lettura: la annulla.
+
+    Misurato nella scocca, stessa bottiglia e stesso fotogramma, dando all'OCR
+    i quattro versi: a 0 gradi `ULISS | CERASUOLO | D'ABRUZZO` e il vino
+    riconosciuto; a 90 gradi solo `D'ABRUZZC`; a 180 e 270 spazzatura. Un'ora
+    di dispositivo che «non riconosce le bottiglie» era questo.
+    """
+
+    @staticmethod
+    def _fotogramma():
+        """Un fotogramma vero serve: `cv2.rotate` non gira un finto."""
+        np = pytest.importorskip("numpy")
+        pytest.importorskip("cv2")
+        return np.zeros((40, 80, 3), dtype=np.uint8)   # largo: il verso sbagliato
+
+    def test_se_il_raccolto_e_povero_si_riprova_girando(self, monkeypatch):
+        from amelie import ocr as modulo
+
+        immagine = self._fotogramma()
+        versi = []
+
+        def finta(self, fotogramma):
+            h, w = fotogramma.shape[:2]
+            versi.append((w, h))
+            # in piedi l'etichetta si legge, coricata no
+            testi = (["CERASUOLO", "D'ABRUZZO", "ULISS"] if h > w
+                     else ["D'ABRUZZC"])
+            return modulo.Lettura(righe=[modulo.Riga(testo=x, confidenza=0.9)
+                                         for x in testi])
+
+        monkeypatch.setattr(modulo.Lettore, "leggi", finta)
+        letta = modulo.Lettore().leggi_comunque(immagine)
+        assert [r.testo for r in letta.righe] == ["CERASUOLO", "D'ABRUZZO", "ULISS"]
+        assert len(versi) > 1, "non ha nemmeno provato a girare"
+
+    def test_se_il_primo_verso_basta_non_si_gira_niente(self, monkeypatch):
+        """Girare costa secondi, e si pagano solo quando servono."""
+        from amelie import ocr as modulo
+
+        immagine = self._fotogramma()
+        versi = []
+
+        def finta(self, fotogramma):
+            versi.append(fotogramma.shape)
+            return modulo.Lettura(righe=[modulo.Riga(testo=x, confidenza=0.9)
+                                         for x in ("CERASUOLO", "D'ABRUZZO", "ULISS")])
+
+        monkeypatch.setattr(modulo.Lettore, "leggi", finta)
+        modulo.Lettore().leggi_comunque(immagine)
+        assert len(versi) == 1
+
+    def test_le_cifre_non_contano_come_parole(self):
+        """Un calendario appeso dietro la bottiglia ne produce a decine, e su
+        quelle il riconoscitore non ci fa niente."""
+        from amelie.ocr import _parole_utili
+
+        cifre = Lettura(righe=[Riga(testo=t, confidenza=0.9)
+                               for t in ("16", "17", "2026", "20")])
+        parole = Lettura(righe=[Riga(testo=t, confidenza=0.9)
+                                for t in ("CERASUOLO", "D'ABRUZZO", "ULISS")])
+        assert _parole_utili(cifre) == 0
+        assert _parole_utili(parole) == 3

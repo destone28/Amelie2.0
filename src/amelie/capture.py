@@ -122,23 +122,45 @@ class ImpostazioniCamera:
     #
     # Si regola dal mirino senza toccare il codice: `--ritaglio 0.9`.
     #
-    # Ora è 1,0, cioè non si ritaglia. Misurato dopo aver introdotto la
-    # rotazione: a fotogramma intero l'etichetta si legge meglio (`NERO D'AVOL |
-    # SICILIA`, sicurezza 87) che ritagliata a 0,80 (`NERO D'AV | SICILIA`, 78).
-    # La distorsione ai bordi c'è, ma l'etichetta di una bottiglia in piedi
-    # occupa il fotogramma per il lungo, e tagliare i bordi taglia le parole.
-    ritaglio: float = 1.0
+    # Ora è 0,85, e il motivo è il TEMPO, non la qualità. Misurato nella scocca
+    # sulla stessa bottiglia, stesso fotogramma:
+    #
+    #     1,00   14,0 s   `UUISS | CERASUOLO | D'ABRUZZO`   87
+    #     0,85    6,1 s   `UUISS | CERASUOLO | D'ABRUZZO`   87
+    #     0,70    3,0 s   `CERASUOLO | D'ABRUZZO`           78
+    #     0,55    2,6 s   `D'ABRUZZO`                       60
+    #
+    # A 0,85 si legge **la stessa cosa in meno della metà del tempo**: quello
+    # che si taglia non è etichetta, è la stanza dietro. E la stanza costa cara
+    # perché il rilevatore trova una regione di testo per ogni numero di un
+    # calendario appeso al muro, e ognuna passa poi dal modello che le legge.
+    #
+    # Sotto 0,85 si scende, e si scende per la ragione di sempre: cadono fuori
+    # le prime e le ultime lettere, e il riconoscimento lavora su parole intere.
+    ritaglio: float = 0.85
 
     # Di quanto ruotare il fotogramma prima di guardarlo, in gradi orari.
     #
-    # La camera è montata ruotata di 90°, ed è la sua posizione GIUSTA: una
-    # bottiglia è alta e stretta, e un sensore 16:9 girato di lato la inquadra
-    # per il lungo. Il fotogramma che ne esce, però, ha il testo dell'etichetta
-    # coricato, e un riconoscitore di testo lavora su righe orizzontali.
+    # ZERO, e viene dal montaggio: nella scocca stampata la camera guarda la
+    # bottiglia di fianco, e il testo dell'etichetta nel fotogramma nativo e'
+    # gia' orizzontale. Raddrizzarlo lo corica, ed e' esattamente il contrario
+    # di cio' che serve.
     #
-    # Raddrizzare qui costa una trasposizione di memoria e fa la differenza fra
-    # `AVOLA | SILIA | NER` e `NERO D'AVOLA | SICILIA`.
-    rotazione: int = 90
+    # Era 90 per il banco, dove la camera stava girata di lato. Misurato sulla
+    # scocca, stessa bottiglia e stesso fotogramma, dando all'OCR i quattro
+    # versi:
+    #
+    #      0°    `ULISS | CERASUOLO | D'ABRUZZO`   riconosciuto, sicurezza 87
+    #     90°    `D'ABRUZZC`                       niente
+    #    180°    `3IMER | DRZZZO | CEAVOLO`        niente
+    #    270°    `3引8到3`                          niente
+    #
+    # Un dispositivo che «non riconosce le bottiglie» era questo, e nient'altro.
+    # Un verso sbagliato non degrada la lettura: la annulla.
+    #
+    # Il verso e il ritaglio si leggono insieme: coricata, la bottiglia occupa
+    # il fotogramma per il lungo, e cio' che avanza ai bordi non e' etichetta.
+    rotazione: int = 0
 
     # Attesa fra accensione della luce dello scatto e primo fotogramma utile.
     assestamento_luce_s: float = 0.15

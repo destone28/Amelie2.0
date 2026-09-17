@@ -832,7 +832,7 @@ class Amelie:
                     pass
 
         try:
-            lettura = self.lettore.leggi(scatto.immagine)
+            lettura = self.lettore.leggi_comunque(scatto.immagine)
         except OCRNonDisponibile as e:
             log.error("OCR: %s", e)
             self.macchina.invia(Evento.ERRORE)

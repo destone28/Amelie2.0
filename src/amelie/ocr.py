@@ -54,6 +54,13 @@ class ImpostazioniOCR:
     # non era la risoluzione.
     lato_massimo: int = 736
 
+    # Quante parole utili bastano per non provare altri versi del fotogramma.
+    # Tre è il minimo che sull'etichetta vera ha dato un riconoscimento:
+    # «ULISS CERASUOLO D'ABRUZZO». Con meno, girare costa qualche secondo e
+    # può far passare il dispositivo dal non riconoscere niente al
+    # riconoscere.
+    parole_che_bastano: int = 3
+
     # Il classificatore di orientamento. Era spento, con la motivazione che la
     # bottiglia sta in piedi e il testo non può essere capovolto.
     #
@@ -105,6 +112,16 @@ class Riga:
             return 0.0
         ys = [p[1] for p in self.riquadro]
         return max(ys) - min(ys)
+
+
+def _parole_utili(lettura: "Lettura") -> int:
+    """Quante righe sono parole, non cifre o frammenti.
+
+    Le cifre non contano: un calendario appeso dietro la bottiglia ne produce
+    a decine, e su quelle il riconoscitore non ci fa niente.
+    """
+    return sum(1 for r in lettura.righe
+               if len(r.testo.strip()) >= 3 and not r.testo.strip().isdigit())
 
 
 @dataclass
@@ -184,6 +201,43 @@ class Lettore:
         righe = [r for r in _estrai_righe(grezzo) if self._tieni(r)]
         log.debug("OCR: %d righe utili in %.2f s", len(righe), durata)
         return Lettura(righe=righe, durata_s=durata)
+
+    def leggi_comunque(self, immagine) -> Lettura:
+        """Legge, e se il raccolto è povero riprova girando il fotogramma.
+
+        Il verso giusto dipende da come la camera è montata, e il montaggio
+        cambia: sul banco era una cosa, nella scocca stampata un'altra. Con la
+        rotazione sbagliata l'OCR non legge quasi niente — misurato sulla
+        stessa bottiglia, stesso fotogramma:
+
+            0 gradi     ULISS · CERASUOLO · D'ABRUZZO   -> riconosciuto, 87
+            90 gradi    D'ABRUZZC                       -> niente
+            180 gradi   3IMER · DRZZZO · CEAVOLO        -> niente
+            270 gradi   3引8到3                          -> niente
+
+        Un'ora di dispositivo che «non riconosce le bottiglie» era questo. Si
+        può correggere il parametro, e si fa; ma il parametro può tornare
+        sbagliato al prossimo montaggio, e allora il dispositivo torna muto
+        senza dire perché.
+
+        Qui si prova, e si prova solo QUANDO SERVE: se il primo verso dà già
+        parole utili non si gira niente e non si paga nulla. Quando invece non
+        dà niente, quei secondi in più si stavano per spendere comunque —
+        per dire all'ospite di girare l'etichetta.
+        """
+        import cv2
+
+        migliore = self.leggi(immagine)
+        if _parole_utili(migliore) >= self.imp.parole_che_bastano:
+            return migliore
+        for codice in (cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180,
+                       cv2.ROTATE_90_COUNTERCLOCKWISE):
+            altra = self.leggi(cv2.rotate(immagine, codice))
+            if _parole_utili(altra) > _parole_utili(migliore):
+                migliore = altra
+                if _parole_utili(migliore) >= self.imp.parole_che_bastano:
+                    break
+        return migliore
 
     def _tieni(self, r: Riga) -> bool:
         return (
