@@ -333,11 +333,26 @@ class Fatti:
         Il blocco esteso resta per il modello generico, che le etichette le
         legge davvero.
 
-        La `nota sul vitigno` non c'e', ed e' una scelta, non una dimenticanza:
-        da sola vale 40 token - un quinto del prompt e due secondi e mezzo di
-        attesa - ed e' l'unica parte dei fatti gia' scritta in prosa da una
-        persona. Non serve che un modello la riscriva: il racconto la dice
-        com'e', dal template, mentre il modello lavora sul resto.
+        La `nota sul vitigno` c'e', e ci e' tornata dopo una misura.
+
+        L'avevo tolta per risparmiare 40 token - due secondi e mezzo di attesa
+        - ragionando che il racconto la dice comunque, dal template. Ma il
+        corpus era gia' stato scritto da un modello che la nota la vedeva, e
+        **498 esempi su 550 (il 91%) usavano sue parole che qui non c'erano**.
+        Addestrare su quel corpus con questo ingresso significa insegnare a
+        dire cose che l'ingresso non contiene: l'unico modo di produrle e'
+        inventarle. Il modello addestrato cosi' scriveva «Catarratto, un grande
+        abruzzese del Piemonte» - e il Catarratto e' siciliano - su meta' dei
+        casi.
+
+        Per la stessa ragione qui NON si taglia nessun elenco. Vitigni,
+        abbinamenti e note sensoriali arrivavano tagliati a tre o quattro voci
+        mentre il blocco esteso li porta tutti, e il 25% dei testi del corpus
+        nominava qualcosa che il taglio aveva tolto. Un tetto che fa risparmiare
+        diciassette token insegna a indovinare il quarto vitigno: non e' un
+        risparmio, e' un debito.
+
+        Due secondi e mezzo di attesa sono il prezzo di un compito imparabile.
         """
         if lessico is None:
             from .lessico import carica
@@ -348,7 +363,7 @@ class Fatti:
 
         pezzi = [
             self.nome, self.cantina, self.denominazione, self.tipologia,
-            ", ".join(self.vitigni[:3]) or None,
+            ", ".join(self.vitigni) or None,
             t("tipo", self.colore) or t("colore", self.colore),
             f"{self.abv}%" if self.abv else None,
             f"{self.temperatura_c}\u00b0" if self.temperatura_c else None,
@@ -356,11 +371,13 @@ class Fatti:
             # gli abbinamenti di un vitigno sono prosa scritta a mano - e poi
             # il vocabolario, per quelli che sono chiavi di un dataset.
             ", ".join(lessico.traduci_molti(
-                "abbinamento", self.abbinamenti_in(lingua)[:3],
+                "abbinamento", self.abbinamenti_in(lingua),
                 lingua=lingua)) or None,
-            ", ".join(self.sensoriali_in(lingua)[:4]) or None,
+            ", ".join(self.sensoriali_in(lingua)) or None,
         ]
         righe = [" \u00b7 ".join(str(x) for x in pezzi if x)]
+        if (nota := self.nota_in(lingua)):
+            righe.append("NOTA " + nota)
         if self.disciplinare:
             from .organolettico import carica as carica_organolettico
 

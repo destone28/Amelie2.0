@@ -609,16 +609,22 @@ class TestDisciplinare:
         fatti non si possono mettere in cache: cambiano a ogni bottiglia."""
         f = m._fatti_tipologia(2)
         compatto = f.blocco_compatto()
-        assert len(compatto) < len(f.blocco_fatti()) / 1.5
+        assert len(compatto) < len(f.blocco_fatti()) / 1.4
         for pezzo in (f.denominazione, f.tipologia, f.disciplinare["colore"]):
             assert pezzo in compatto
 
-    def test_la_forma_compatta_non_porta_la_nota(self, m):
-        """Quaranta token per una prosa già scritta da una persona: il racconto
-        la dice com'è, dal template, mentre il modello lavora sul resto."""
+    def test_la_forma_compatta_porta_la_nota(self, m):
+        """Costa quaranta token, e vanno pagati.
+
+        Toglierla sembrava gratis — il racconto la dice comunque, dal template
+        — ma il corpus d'addestramento è scritto da un modello che la nota la
+        vede: 498 esempi su 550 usano sue parole. Un ingresso che non la porta
+        insegna a dire cose che l'ingresso non contiene, e l'unico modo di
+        produrle è inventarle.
+        """
         f = m._fatti_tipologia(2)
         assert f.note_vitigno
-        assert f.note_vitigno not in f.blocco_compatto()
+        assert f.note_vitigno in f.blocco_compatto()
 
     def test_la_forma_compatta_segue_la_lingua(self, m):
         compatto = m._fatti_tipologia(2).blocco_compatto(lingua="en")
