@@ -137,10 +137,13 @@ class ImpostazioniCamera:
     # due giri in tutti e due i casi, senza mai passare oltre.
     ritocchi_posa: int = 3
     esponente_posa: float = 1.5
-    # Quanti fotogrammi passano prima che la posa nuova si veda. MISURATO, ed è
-    # esattamente tre, nei due versi: senza buttarli, ogni giro rimisura la
-    # posa vecchia e le correzioni si sommano fino al tetto.
-    fotogrammi_di_ritardo: int = 3
+    # Quanti fotogrammi al massimo si aspetta perché la posa nuova arrivi al
+    # sensore. Misurati, sono tre su uno stream letto senza pause; ma nel
+    # servizio lo stream sta fermo fra una sbirciata e l'altra, e contarli non
+    # basta — vedi `_aspetta_la_posa`, che guarda invece di contare. Otto è il
+    # tetto oltre il quale non si sta aspettando, si sta sperando: il caso
+    # normale ne consuma cinque, tre di posa vecchia più due che si accordano.
+    fotogrammi_di_attesa: int = 8
     # I due estremi entro cui si può andare. Sotto il minimo non si legge
     # nemmeno in pieno giorno; sopra il massimo la raffica costa più del
     # racconto, e una bottiglia che oscilla viene mossa.
@@ -260,6 +263,11 @@ class Scatto:
 
 
 SOGLIA_NITIDEZZA = 40.0
+
+# Di quanto deve muoversi la luce media perché si possa dire che la posa nuova
+# è arrivata al sensore. Due livelli su 255: il rumore fra due fotogrammi della
+# stessa scena ferma sta sotto mezzo livello, misurato.
+SCARTO_DI_POSA = 2.0
 
 
 def nitidezza(immagine: np.ndarray) -> float:
@@ -711,6 +719,56 @@ class Camera:
             return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
         return frame
 
+    def _luce(self, cap) -> float | None:
+        """Quanta luce c'è in un fotogramma, misurata dove guarderà l'OCR.
+
+        Sul ritaglio, non sul fotogramma intero: gli angoli scuri
+        abbasserebbero la media di una luce che sull'etichetta c'è.
+        """
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            return None
+        return float(cv2.cvtColor(ritaglia_centro(frame, self.imp.ritaglio),
+                                  cv2.COLOR_BGR2GRAY).mean())
+
+    def _aspetta_la_posa(self, cap, prima: float) -> float | None:
+        """Legge finché la luce non si è **fermata** sul valore nuovo.
+
+        Il driver applica la posa nuova con qualche fotogramma di ritardo —
+        misurato: tre, nei due versi, su uno stream letto senza pause. Contarli
+        non basta, e nel servizio, dove lo stream sta fermo fra una sbirciata e
+        l'altra, il fotogramma dopo i tre scarti tornava ancora con la posa
+        vecchia: la ricerca rimisurava, correggeva una seconda volta nello
+        stesso verso, e finiva contro il tetto **qualunque fosse la luce** —
+        sembrando pure funzionare, perché al buio il tetto è la risposta
+        giusta.
+
+        Aspettare che la luce *cominci* a muoversi non bastava neanche: il
+        primo fotogramma diverso può essere ancora a metà strada, e una misura
+        presa a metà strada porta la correzione successiva ancora più in là.
+        Si aspetta che due fotogrammi di fila dicano la stessa cosa.
+
+        Se non si ferma, o si ferma dov'era, la posa non sta arrivando al
+        sensore: si restituisce `None` e la ricerca smette, invece di sommare
+        correzioni su una misura mai verificata.
+        """
+        precedente = None
+        for _ in range(self.imp.fotogrammi_di_attesa):
+            luce = self._luce(cap)
+            if luce is None:
+                return None
+            ferma = (precedente is not None
+                     and abs(luce - precedente) <= SCARTO_DI_POSA)
+            precedente = luce
+            # Ferma sul valore di prima vuol dire che la posa nuova non e'
+            # ancora arrivata: sono i fotogrammi vecchi, e si continua ad
+            # aspettare. Ferma su un valore diverso vuol dire che e' arrivata.
+            if ferma and abs(luce - prima) > SCARTO_DI_POSA:
+                return luce
+        log.warning("la posa non arriva al sensore: luce ferma a %.0f",
+                    precedente if precedente is not None else -1)
+        return None
+
     def _cerca_la_posa(self, cap) -> float:
         """Regola il tempo di posa sulla luce che c'è davvero, ora, qui.
 
@@ -723,30 +781,17 @@ class Camera:
 
         Quindi la posa resta manuale — si sa sempre qual è e non cambia durante
         la raffica — ma si sceglie guardando: un fotogramma, la sua luce media,
-        un ritocco. Il sensore satura sui punti chiari, quindi la risposta non
-        è lineare e un giro solo sottostima sempre: la correzione tiene conto
-        della curva misurata, e i giri sono al massimo tre. Ognuno costa un
-        fotogramma da misurare più i tre che il driver impiega ad applicare la
-        posa nuova — anche questo misurato, ed è esattamente tre.
+        un ritocco, e la verifica che il ritocco sia arrivato.
 
         La posa trovata si ricorda: la bottiglia dopo arriva nella stessa sala,
         e quasi sempre il primo fotogramma è già dentro la banda buona.
-
-        In una sala illuminata il ritocco va nell'altro verso e la raffica
-        costa meno di prima.
         """
         imp = self.imp
-        luce = 0.0
         posa = imp.esposizione
+        luce = self._luce(cap)
+        if luce is None:
+            return 0.0
         for _ in range(imp.ritocchi_posa):
-            ok, frame = cap.read()
-            if not ok or frame is None:
-                return luce
-            # Si misura sul ritaglio, che e' quello che vedra' l'OCR: gli
-            # angoli scuri del fotogramma intero abbasserebbero la media di
-            # una luce che sull'etichetta c'e'.
-            luce = float(cv2.cvtColor(ritaglia_centro(frame, imp.ritaglio),
-                                      cv2.COLOR_BGR2GRAY).mean())
             if abs(luce - imp.luce_cercata) <= imp.luce_tollerata:
                 break
             nuova = int(posa * (imp.luce_cercata / max(luce, 1.0))
@@ -755,12 +800,12 @@ class Camera:
             if nuova == posa:
                 break
             imposta_posa(self.percorso, nuova)
+            arrivata = self._aspetta_la_posa(cap, luce)
             posa = nuova
-            for _ in range(imp.fotogrammi_di_ritardo):
-                cap.grab()
+            if arrivata is None:
+                break
+            luce = arrivata
         if posa != imp.esposizione:
-            # Si ricorda: la prossima bottiglia arriva nella stessa sala, e
-            # partire dalla posa giusta vuol dire non doverla cercare.
             log.info("posa %d -> %d (luce %.0f)", imp.esposizione, posa, luce)
             self.imp = replace(imp, esposizione=posa)
         return luce
@@ -778,12 +823,16 @@ class Camera:
             cap = self._apri()
             if attesa > 0:
                 time.sleep(attesa)
-            self._cerca_la_posa(cap)
 
             scartati = 0
             for _ in range(self.imp.fotogrammi_da_scartare):
                 if cap.grab():
                     scartati += 1
+            # PRIMA si buttano i fotogrammi vecchi, POI si misura la luce. Al
+            # contrario, la prima misura cadeva su un fotogramma catturato
+            # mentre l'anello era ancora spento, e la posa partiva da un buio
+            # che non c'era.
+            self._cerca_la_posa(cap)
 
             migliore: np.ndarray | None = None
             migliore_n = -1.0

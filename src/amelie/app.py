@@ -1547,6 +1547,17 @@ def crea_app(amelie: Amelie):
             # questa pagina si guarda quando qualcosa non risponde.
             **amelie.ponte.diagnosi(),
             "camera": amelie.camera is not None,
+            # Il piatto, come lo vede la camera. Sono i tre numeri con cui si
+            # verifica il riconoscimento della bottiglia SENZA smontare niente:
+            # si guarda `differenza` a piatto vuoto (deve stare sotto l'uno per
+            # cento), poi ci si appoggia una bottiglia e si riguarda (deve
+            # saltare oltre la soglia). Senza questi, l'unico modo di sapere
+            # perche' il dispositivo non parte e' leggere il giornale di bordo
+            # da un'altra macchina.
+            "bottiglia": amelie.presenza.presente,
+            "differenza": round(amelie.presenza.differenza * 100, 1),
+            "soglia": round(amelie.presenza.soglia_arrivo * 100, 1),
+            "posa": amelie.camera.imp.esposizione if amelie.camera else None,
             "voce": bool(amelie.voce and amelie.voce.disponibile),
             "volume": amelie.volume,
             "racconti_generati": amelie.genera_racconti,

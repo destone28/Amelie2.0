@@ -282,13 +282,16 @@ class TestLaPosaSiCerca:
         posa nuova si vede solo dopo tre fotogrammi, anche questo misurato.
         """
 
-        def __init__(self, posa=900, ritardo=3, esponente=0.54):
+        def __init__(self, posa=900, ritardo=3, esponente=0.54, sorda=False):
             self.posa = self.in_arrivo = posa
             self.ritardo, self.esponente = ritardo, esponente
             self.coda = 0
             self.letti = 0
+            self.sorda = sorda      # una camera che ignora la posa nuova
 
         def imposta(self, posa):
+            if self.sorda:
+                return
             self.in_arrivo, self.coda = posa, self.ritardo
 
         def _avanza(self):
@@ -307,13 +310,13 @@ class TestLaPosaSiCerca:
             luce = 47.0 * (self.posa / 900.0) ** self.esponente
             return True, np.full((100, 200, 3), min(255, luce), dtype=np.uint8)
 
-    def cerca(self, partenza=900, **extra):
+    def cerca(self, partenza=900, sorda=False, ritardo=3, **extra):
         from amelie.capture import Camera
 
         imp = ImpostazioniCamera(esposizione=partenza, ritaglio=1.0, **extra)
         c = Camera(imp)
         c._percorso = "/dev/finto"
-        finta = self.CameraFinta(posa=partenza)
+        finta = self.CameraFinta(posa=partenza, sorda=sorda, ritardo=ritardo)
         applicate = []
 
         import amelie.capture as modulo
@@ -364,6 +367,24 @@ class TestLaPosaSiCerca:
         c, _, applicate, _ = self.cerca(900)
         assert applicate[-1] < ImpostazioniCamera().posa_massima, (
             "la ricerca e' finita contro il tetto: sta rimisurando la posa vecchia")
+
+    def test_con_un_ritardo_lungo_si_aspetta_invece_di_contare(self):
+        """Contare i fotogrammi funziona finché il ritardo è quello misurato.
+        Nel servizio, dove lo stream sta fermo fra una sbirciata e l'altra, non
+        lo era: si guarda la luce, e si corregge solo dopo averla vista muovere.
+        """
+        c, _, applicate, luce = self.cerca(900, ritardo=5)
+        imp = ImpostazioniCamera()
+        assert abs(luce - imp.luce_cercata) <= imp.luce_tollerata
+        assert applicate[-1] < imp.posa_massima
+
+    def test_una_posa_che_non_arriva_al_sensore_ferma_la_ricerca(self):
+        """Se la luce non si muove, la posa non sta arrivando: si smette.
+        Insistere vuol dire sommare correzioni su una misura mai verificata, e
+        finire contro il tetto senza che nessuno se ne accorga."""
+        c, _, applicate, _ = self.cerca(900, sorda=True)
+        assert len(applicate) == 1, "ha corretto di nuovo senza aver verificato"
+        assert applicate[0] < ImpostazioniCamera().posa_massima
 
     def test_una_camera_che_non_da_fotogrammi_non_blocca_lo_scatto(self):
         from amelie.capture import Camera
