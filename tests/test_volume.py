@@ -644,3 +644,91 @@ class TestStimaDellaVoce:
 
         misurate = list(CARATTERI_AL_SECONDO.values())
         assert min(misurate) <= CARATTERI_AL_SECONDO_RIPIEGO <= max(misurate)
+
+
+class TestDescrizioniGenerate:
+    """L'interruttore delle descrizioni generate.
+
+    Sta nello stesso file dei test del volume perché è la stessa cosa: una
+    scelta di chi apre il locale, che deve sopravvivere alla spina staccata.
+    """
+
+    @pytest.fixture
+    def amelie(self, tmp_path, monkeypatch):
+        from amelie import app as modulo
+
+        monkeypatch.setattr(modulo, "PERCORSO_VOLUME", tmp_path / "volume")
+        monkeypatch.setattr(modulo, "PERCORSO_GENERATI", tmp_path / "generati")
+        a = modulo.Amelie(modulo.Configurazione(
+            simula_mcu=True, senza_camera=True, senza_voce=True,
+            senza_modello=True))
+        yield a
+        a.matcher.chiudi()
+        a.narratore.chiudi()
+
+    def test_spente_di_partenza(self, amelie):
+        """Un dispositivo appena acceso deve rispondere subito."""
+        assert amelie.genera_racconti is False
+
+    def test_si_accende_e_si_spegne(self, amelie):
+        assert amelie.imposta_generati(True)["generati"] is True
+        assert amelie.genera_racconti is True
+        assert amelie.imposta_generati(False)["generati"] is False
+
+    def test_si_ricorda_da_una_sera_all_altra(self, tmp_path, monkeypatch):
+        from amelie import app as modulo
+
+        monkeypatch.setattr(modulo, "PERCORSO_VOLUME", tmp_path / "volume")
+        monkeypatch.setattr(modulo, "PERCORSO_GENERATI", tmp_path / "generati")
+        cfg = modulo.Configurazione(simula_mcu=True, senza_camera=True,
+                                    senza_voce=True, senza_modello=True)
+        prima = modulo.Amelie(cfg)
+        prima.imposta_generati(True)
+        prima.matcher.chiudi(); prima.narratore.chiudi()
+
+        dopo = modulo.Amelie(cfg)
+        try:
+            assert dopo.genera_racconti is True
+        finally:
+            dopo.matcher.chiudi(); dopo.narratore.chiudi()
+
+    def test_un_file_illeggibile_costa_le_impostazioni_non_l_avvio(
+            self, tmp_path, monkeypatch):
+        """Come per il volume: un file rovinato non deve impedire di accendere."""
+        from amelie import app as modulo
+
+        rovinato = tmp_path / "generati"
+        rovinato.mkdir()                       # una cartella al posto del file
+        monkeypatch.setattr(modulo, "PERCORSO_VOLUME", tmp_path / "volume")
+        monkeypatch.setattr(modulo, "PERCORSO_GENERATI", rovinato)
+        a = modulo.Amelie(modulo.Configurazione(
+            simula_mcu=True, senza_camera=True, senza_voce=True,
+            senza_modello=True))
+        try:
+            assert a.genera_racconti is False
+        finally:
+            a.matcher.chiudi(); a.narratore.chiudi()
+
+    def test_senza_modello_l_interruttore_non_si_mostra(self, amelie):
+        """Un comando che non fa niente è peggio di nessun comando."""
+        visti = []
+        amelie._pubblica = lambda m: visti.append(m)
+        amelie._manda_impostazioni()
+        assert visti[-1]["modello"] is False
+
+    def test_il_narratore_lo_riceve(self, amelie):
+        """L'interruttore deve arrivare fino a `racconta`, non fermarsi qui."""
+        from amelie.matcher import Fatti, Livello
+
+        chiesto = {}
+        amelie._fatti = Fatti(livello=Livello.VITIGNO, vitigni=["Nebbiolo"])
+
+        def finto(f, **kw):
+            chiesto.update(kw)
+            from amelie.narrator import Racconto
+            return Racconto(testo="x.", origine="template", livello=f.livello)
+
+        amelie.narratore.racconta = finto
+        amelie.imposta_generati(True)
+        amelie._racconta()
+        assert chiesto["preferisci_modello"] is True

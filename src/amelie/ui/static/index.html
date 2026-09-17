@@ -582,6 +582,54 @@ svg { display: block; }
    qualcuno non entrava da remoto - e il flusso degli eventi, cioe' il racconto
    in corso, moriva li'. */
 #angolo { position: absolute; right: 0; bottom: 0; width: 110px; height: 110px; z-index: 7; }
+/* Il pannello delle impostazioni. Ci si arriva dallo stesso gesto da tre
+   secondi nell'angolo in basso a destra che prima apriva lo stato tecnico: un
+   ingresso nascosto basta e avanza, e i tre secondi con lo scarto che annulla
+   sono cio' che tiene fuori la mano dell'ospite che appoggia una bottiglia.
+   Lo stato tecnico e' diventato una riga qui dentro. */
+#impostazioni {
+  position: absolute; inset: 0; z-index: 9; background: var(--carbone);
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: var(--passo);
+  padding: calc(var(--passo) * 2) calc(var(--passo) * 3);
+}
+#impostazioni[hidden] { display: none; }
+#i-titolo {
+  font-size: var(--t-titolo, 46px); color: var(--oro); margin-bottom: var(--passo);
+}
+.i-riga {
+  width: min(860px, 88%); min-height: var(--tocco);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: calc(var(--passo) * 2); padding: calc(var(--passo) / 1.5) var(--passo);
+  background: none; border: 2px solid rgba(200,134,13,.45);
+  border-radius: var(--raggio); color: var(--avorio);
+  font: inherit; text-align: left;
+}
+.i-riga.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
+.i-nome { font-size: var(--t-scelta); }
+/* La spiegazione dice il PREZZO, non la lode: chi accende deve sapere che
+   costa un'attesa, altrimenti la prima bottiglia sembra un guasto. */
+.i-spiega {
+  font-size: calc(var(--t-scelta) * .62); color: rgba(244,237,227,.62);
+  margin-top: calc(var(--passo) / 3); max-width: 620px; line-height: 1.35;
+}
+.i-interruttore {
+  flex: none; width: 104px; height: 56px; border-radius: 28px;
+  background: rgba(244,237,227,.16); border: 2px solid rgba(244,237,227,.3);
+  position: relative; transition: background .18s, border-color .18s;
+}
+.i-pallina {
+  position: absolute; top: 4px; left: 4px; width: 44px; height: 44px;
+  border-radius: 50%; background: var(--avorio); transition: transform .18s;
+}
+.i-riga.acceso .i-interruttore {
+  background: rgba(200,134,13,.55); border-color: var(--oro);
+}
+.i-riga.acceso .i-pallina { transform: translateX(48px); }
+/* Senza modello acceso l'interruttore non si mostra: un comando che non fa
+   niente e' peggio di nessun comando. E' lo stesso criterio del volume. */
+#i-generate[hidden] { display: none; }
+
 #diagnostica {
   position: absolute; inset: 0; z-index: 9; background: var(--carbone);
   display: flex; flex-direction: column; align-items: center;
@@ -593,13 +641,13 @@ svg { display: block; }
   color: var(--avorio); max-height: 70%; overflow: auto; white-space: pre-wrap;
 }
 #d-corpo::-webkit-scrollbar { display: none; }
-#d-chiudi {
+#d-chiudi, #i-chiudi {
   min-width: calc(var(--tocco) * 2.5); height: var(--tocco);
   display: flex; align-items: center; justify-content: center;
   font-size: var(--t-scelta); color: var(--avorio);
   border: 2px solid var(--oro); border-radius: var(--raggio);
 }
-#d-chiudi.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
+#d-chiudi.premuto, #i-chiudi.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
 </style>
 </head>
 <body>
@@ -724,6 +772,21 @@ svg { display: block; }
   <div id="muto"></div>
   <div id="spia"></div>
   <div id="angolo"></div>
+
+  <section id="impostazioni" hidden>
+    <div id="i-titolo">Impostazioni</div>
+    <button class="i-riga" id="i-generate">
+      <div>
+        <div class="i-nome" id="i-generate-nome">Descrizioni generate</div>
+        <div class="i-spiega" id="i-generate-spiega"></div>
+      </div>
+      <div class="i-interruttore"><div class="i-pallina"></div></div>
+    </button>
+    <button class="i-riga" id="i-stato">
+      <div class="i-nome" id="i-stato-nome">Stato tecnico</div>
+    </button>
+    <div id="i-chiudi">chiudi</div>
+  </section>
 
   <section id="diagnostica" hidden>
     <pre id="d-corpo"></pre>
@@ -1088,6 +1151,14 @@ eventi.onmessage = (e) => {
 
     case "lingua":
       disegnaLingue(m);
+      if (m.impostazioni) {
+        $("i-titolo").textContent = m.impostazioni.impostazioni;
+        $("i-generate-nome").textContent = m.impostazioni.descrizioni_generate;
+        $("i-generate-spiega").textContent = m.impostazioni.generate_spiega;
+        $("i-stato-nome").textContent = m.impostazioni.stato_tecnico;
+        $("i-chiudi").textContent = m.impostazioni.chiudi;
+        $("d-chiudi").textContent = m.impostazioni.chiudi;
+      }
       break;
 
     case "volume":
@@ -1097,6 +1168,10 @@ eventi.onmessage = (e) => {
       $("volume").hidden = m.attivo === false;
       if (typeof m.passo === "number") passoVolume = m.passo;
       if (typeof m.valore === "number") disegnaVolume(m.valore);
+      break;
+
+    case "impostazioni":
+      disegnaImpostazioni(m);
       break;
 
     case "salute":
@@ -1126,8 +1201,12 @@ function annullaGesto() {
   if (gesto) { clearTimeout(gesto.t); gesto = null; }
 }
 
-function apriDiagnostica() {
+function apriImpostazioni() {
   gesto = null;
+  $("impostazioni").hidden = false;
+}
+
+function apriDiagnostica() {
   $("d-corpo").textContent = "…";
   fetch("/stato").then(r => r.json())
     .then(d => { $("d-corpo").textContent = JSON.stringify(d, null, 2); })
@@ -1135,12 +1214,39 @@ function apriDiagnostica() {
   $("diagnostica").hidden = false;
 }
 
+/* Le descrizioni generate. `modelloAcceso` e' falso quando il dispositivo gira
+   senza modello: allora la riga non si mostra affatto. */
+let generatiAccesi = false;
+
+function disegnaImpostazioni(m) {
+  if (typeof m.generati === "boolean") generatiAccesi = m.generati;
+  if (typeof m.modello === "boolean") $("i-generate").hidden = !m.modello;
+  $("i-generate").classList.toggle("acceso", generatiAccesi);
+  $("i-generate").setAttribute("aria-pressed", String(generatiAccesi));
+}
+
+(function preparaImpostazioni() {
+  rendiToccabile($("i-generate"), () => {
+    /* Si disegna subito e si chiede dopo: al tocco l'interruttore deve
+       muoversi, non aspettare la rete. Se la richiesta fallisce, il messaggio
+       di ritorno del server rimette le cose come stanno. */
+    generatiAccesi = !generatiAccesi;
+    disegnaImpostazioni({});
+    fetch("/generati/" + (generatiAccesi ? 1 : 0), { method: "POST" })
+      .then(r => r.json())
+      .then(d => disegnaImpostazioni(d))
+      .catch(() => { generatiAccesi = !generatiAccesi; disegnaImpostazioni({}); });
+  });
+  rendiToccabile($("i-stato"), apriDiagnostica);
+  rendiToccabile($("i-chiudi"), () => { $("impostazioni").hidden = true; });
+})();
+
 (function preparaAngolo() {
   const a = $("angolo");
   a.addEventListener("pointerdown", (e) => {
     try { a.setPointerCapture(e.pointerId); } catch { /* poco importa */ }
     gesto = { id: e.pointerId, x: e.clientX, y: e.clientY,
-              t: setTimeout(apriDiagnostica, ANGOLO_TENUTA) };
+              t: setTimeout(apriImpostazioni, ANGOLO_TENUTA) };
   });
   a.addEventListener("pointermove", (e) => {
     if (!gesto || e.pointerId !== gesto.id) return;
@@ -1152,6 +1258,8 @@ function apriDiagnostica() {
   a.addEventListener("pointerup", annullaGesto);
   a.addEventListener("pointercancel", annullaGesto);
   document.addEventListener("visibilitychange", annullaGesto);
+  /* Si torna alle impostazioni, non allo schermo del tavolo: chi e' entrato
+     per guardare lo stato di solito vuole anche l'interruttore. */
   rendiToccabile($("d-chiudi"), () => { $("diagnostica").hidden = true; });
 })();
 </script>

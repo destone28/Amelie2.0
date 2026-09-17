@@ -480,7 +480,8 @@ class Narratore:
         with self._db:
             self.con.close()
 
-    def racconta(self, f: Fatti, *, consenti_modello: bool = True) -> Racconto:
+    def racconta(self, f: Fatti, *, consenti_modello: bool = True,
+                 preferisci_modello: bool = False) -> Racconto:
         """Da dove far venire il racconto, dal piu' specifico al piu' generico.
 
         L'ordine non e' per costo, e' per QUANTO SI SA della bottiglia:
@@ -494,12 +495,29 @@ class Narratore:
            il vitigno - per le bottiglie di cui si sa poco;
         4. il modello dal vivo, se qualcuno l'ha acceso;
         5. la sola apertura, che dice almeno che cosa si ha davanti.
+
+        Con `preferisci_modello` il quarto gradino passa davanti a tutti: vedi
+        sotto.
         """
         if f.vuoto:
             return Racconto(
                 testo=self.lex.frase("schermo", "illeggibile_con_invito",
                                      lingua=self.lingua),
                 origine="template", livello=f.livello)
+
+        # Le «descrizioni generate», se qualcuno le ha accese dalle
+        # impostazioni. Ribaltano l'ordine di proposito: il modello va per
+        # primo, non per ultimo. E' una scelta di chi gestisce il locale, non
+        # nostra - costa l'attesa della generazione e in cambio il racconto e'
+        # scritto per quella bottiglia li'.
+        #
+        # Non e' un salto nel vuoto: `_dal_modello` verifica quel che scrive e
+        # torna None se il modello ha inventato due volte di fila. Allora si
+        # riprende la cascata di sempre, dal gradino piu' specifico. Acceso non
+        # puo' voler dire peggio.
+        if preferisci_modello and consenti_modello and self.genera is not None:
+            if (vivo := self._dal_modello(f)) is not None:
+                return vivo
 
         if (pronto := self._dalla_cache(f, solo_esatto=True)) is not None:
             return pronto

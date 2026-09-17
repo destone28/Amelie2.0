@@ -151,6 +151,34 @@
     "annulla": {
       "it": "Annulla",
       "en": "Cancel"
+    },
+    "impostazioni": {
+      "it": "Impostazioni",
+      "en": "Settings"
+    },
+    "descrizioni_generate": {
+      "it": "Descrizioni generate",
+      "en": "Generated descriptions"
+    },
+    "generate_spiega": {
+      "it": "Il racconto viene scritto sul momento per questa bottiglia. Richiede qualche secondo in più.",
+      "en": "The description is written on the spot for this bottle. It takes a few seconds longer."
+    },
+    "acceso": {
+      "it": "Acceso",
+      "en": "On"
+    },
+    "spento": {
+      "it": "Spento",
+      "en": "Off"
+    },
+    "stato_tecnico": {
+      "it": "Stato tecnico",
+      "en": "Technical state"
+    },
+    "chiudi": {
+      "it": "chiudi",
+      "en": "close"
     }
   },
   "sigle": {

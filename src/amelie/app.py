@@ -91,6 +91,11 @@ TETTO_RACCONTO_S = 900.0
 # ristorante non deve ritararlo ogni sera. Sta in `var`, che e' l'unica cartella
 # del progetto che l'unita' systemd lascia scrivibile.
 PERCORSO_VOLUME = RADICE / "var" / "volume"
+# Le «descrizioni generate»: acceso, il modello scrive il racconto per QUESTA
+# bottiglia; spento, si legge il testo gia' pronto in archivio. Sta accanto al
+# volume e si ricorda allo stesso modo, perche' e' la stessa cosa - una scelta
+# di chi apre il locale, non un parametro di collaudo.
+PERCORSO_GENERATI = RADICE / "var" / "racconti_generati"
 # Dove finiscono le bottiglie che il dispositivo non ha saputo riconoscere,
 # quando qualcuno lo segnala toccando lo schermo. Vedi `segnala()`.
 CARTELLA_SEGNALAZIONI = RADICE / "var" / "segnalazioni"
@@ -209,6 +214,10 @@ class Amelie:
         self.volume = self._volume_salvato(cfg.volume)
         if self.voce is not None:
             self.voce.volume = self.volume
+        # Spente di partenza: un dispositivo appena acceso deve rispondere
+        # subito. Chi vuole la generazione dal vivo la accende sapendo che
+        # costa un'attesa.
+        self.genera_racconti = self._generati_salvati()
 
     # --------------------------------------------------------- comunicazione
 
@@ -339,6 +348,14 @@ class Amelie:
             "avviso_muto": self.lex.frase("schermo", "voce_assente",
                                           lingua=self.lingua),
             "annulla": self.lex.frase("schermo", "annulla", lingua=self.lingua),
+            # Le scritte del pannello delle impostazioni stanno QUI e non nel
+            # messaggio «impostazioni», che porta i valori: cosi' seguono la
+            # lingua da sole, perche' questo messaggio si rimanda a ogni cambio.
+            "impostazioni": {
+                chiave: self.lex.frase("schermo", chiave, lingua=self.lingua)
+                for chiave in ("impostazioni", "descrizioni_generate",
+                               "generate_spiega", "stato_tecnico", "chiudi")
+            },
         })
 
     # -------------------------------------------------------------- volume
@@ -355,8 +372,9 @@ class Amelie:
             return max(0, min(100, int(ripiego)))
         return max(0, min(100, valore))
 
-    def _salva_volume(self, valore: int) -> None:
-        """Scrive il volume in modo che sopravviva alla spina staccata.
+    @staticmethod
+    def _scrivi_durevole(percorso: Path, valore: str, cosa: str) -> None:
+        """Scrive in modo che sopravviva alla spina staccata.
 
         Questo dispositivo non si spegne con un comando: si toglie corrente a
         fine servizio. Fra la `rename` e il disco possono passare secondi, e in
@@ -366,22 +384,63 @@ class Amelie:
         cio' che rende durevole il nome nuovo.
         """
         try:
-            PERCORSO_VOLUME.parent.mkdir(parents=True, exist_ok=True)
+            percorso.parent.mkdir(parents=True, exist_ok=True)
             # Scrittura atomica: un file troncato da uno spegnimento tornerebbe
-            # come volume illeggibile, e il dispositivo ripartirebbe al massimo.
-            tmp = PERCORSO_VOLUME.with_suffix(".parziale")
+            # come valore illeggibile, e si ripartirebbe dal predefinito.
+            tmp = percorso.with_suffix(".parziale")
             with open(tmp, "w", encoding="utf-8") as f:
                 f.write(f"{valore}\n")
                 f.flush()
                 os.fsync(f.fileno())
-            tmp.replace(PERCORSO_VOLUME)
-            cartella = os.open(PERCORSO_VOLUME.parent, os.O_RDONLY)
+            tmp.replace(percorso)
+            cartella = os.open(percorso.parent, os.O_RDONLY)
             try:
                 os.fsync(cartella)
             finally:
                 os.close(cartella)
         except OSError as e:
-            log.warning("volume non salvato: %s", e)
+            log.warning("%s non salvato: %s", cosa, e)
+
+    def _salva_volume(self, valore: int) -> None:
+        self._scrivi_durevole(PERCORSO_VOLUME, str(valore), "volume")
+
+    # ------------------------------------------------------- impostazioni
+
+    def _generati_salvati(self) -> bool:
+        """Le descrizioni generate erano accese l'ultima volta?
+
+        Come il volume, non solleva mai: un file illeggibile deve costare le
+        impostazioni predefinite, non un dispositivo che non si accende.
+        """
+        try:
+            return PERCORSO_GENERATI.read_text(encoding="utf-8").strip() == "1"
+        except OSError:
+            return False
+
+    def imposta_generati(self, acceso: bool) -> dict[str, Any]:
+        """L'interruttore delle descrizioni generate.
+
+        Non tocca il racconto in corso: cambiare a meta' di una lettura
+        significherebbe interromperla, e chi sta ascoltando non ha chiesto
+        nulla. Vale dalla bottiglia dopo.
+        """
+        self.genera_racconti = bool(acceso)
+        self._salva_generati(self.genera_racconti)
+        self._manda_impostazioni()
+        log.info("descrizioni generate: %s", "accese" if acceso else "spente")
+        return {"ok": True, "generati": self.genera_racconti}
+
+    def _salva_generati(self, acceso: bool) -> None:
+        self._scrivi_durevole(PERCORSO_GENERATI, "1" if acceso else "0",
+                              "impostazione delle descrizioni generate")
+
+    def _manda_impostazioni(self) -> None:
+        self._pubblica({"tipo": "impostazioni",
+                        "generati": self.genera_racconti,
+                        # Senza un modello acceso l'interruttore non si mostra:
+                        # un comando che non fa niente e' peggio di nessun
+                        # comando. E' lo stesso criterio del volume senza voce.
+                        "modello": self.narratore.genera is not None})
 
     def imposta_volume(self, valore: int) -> int:
         """Il tocco sui due pulsanti del volume. Restituisce quello effettivo."""
@@ -807,7 +866,8 @@ class Amelie:
 
     def _racconta(self) -> None:
         self._ferma_voce.clear()
-        racconto = self.narratore.racconta(self._fatti)
+        racconto = self.narratore.racconta(
+            self._fatti, preferisci_modello=self.genera_racconti)
         log.info("racconto da %s (%d parole)", racconto.origine,
                  len(racconto.testo.split()))
         frasi = racconto.frasi
@@ -1218,6 +1278,7 @@ def crea_app(amelie: Amelie):
                 amelie._mostra(amelie.macchina.stato)
                 amelie._manda_lingua()
                 amelie._manda_volume()
+                amelie._manda_impostazioni()
                 while True:
                     dati = await coda.get()
                     if dati is None:        # il servizio sta chiudendo
@@ -1260,6 +1321,10 @@ def crea_app(amelie: Amelie):
     async def volume(valore: int):
         return JSONResponse({"ok": True, "valore": amelie.imposta_volume(valore),
                              "passo": PASSO_VOLUME})
+
+    @app.post("/generati/{acceso}")
+    async def generati(acceso: int):
+        return JSONResponse(amelie.imposta_generati(bool(acceso)))
 
     @app.post("/prova/{cosa}")
     async def prova(cosa: str):
@@ -1315,6 +1380,7 @@ def crea_app(amelie: Amelie):
             "camera": amelie.camera is not None,
             "voce": bool(amelie.voce and amelie.voce.disponibile),
             "volume": amelie.volume,
+            "racconti_generati": amelie.genera_racconti,
             "pronta": amelie._pronta,
             "ultimo_livello": amelie._fatti.livello.value,
             "sicurezza": amelie._fatti.sicurezza,
