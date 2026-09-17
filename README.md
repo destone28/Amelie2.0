@@ -20,7 +20,7 @@ dato che esce dal tavolo.
    la telecamera guarda il piatto e la vede arrivare         ~1,5 s
         │
         ▼
-   anello di luce + telecamera ──► OCR dell'etichetta        ~3,8 s
+   anello di luce + telecamera ──► OCR dell'etichetta        ~9 s al buio
         │
         ▼
    ricerca nel database locale (24.686 voci)                 ~5 ms

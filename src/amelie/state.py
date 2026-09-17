@@ -79,8 +79,10 @@ class Effetto(enum.Enum):
     ANELLO_SPENTO = "anello_spento"
     # Si chiamava FLASH_E_SCATTA, quando c'era un secondo Pixels che faceva da
     # flash. Ora la luce dello scatto è l'anello stesso, che sale a bianco per
-    # tutta la raffica — circa 1,7 s, non un lampo. Un nome che promette un
-    # flash che non c'è manderebbe a cercare un modulo inesistente.
+    # tutta la raffica — misurati 2 s quando la posa è già quella giusta, fino
+    # a 8 quando la luce della sala è cambiata e va ricercata. Non un lampo. Un
+    # nome che promette un flash che non c'è manderebbe a cercare un modulo
+    # inesistente.
     ILLUMINA_E_SCATTA = "illumina_e_scatta"
     INTERROGA_DATABASE = "interroga_database"
     AVVIA_RACCONTO = "avvia_racconto"
