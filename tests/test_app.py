@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from amelie.app import COLORE_ANELLO, VISTA, Amelie, Configurazione
-from amelie.bridge import Colore, Presenza
+from amelie.bridge import Colore
 from amelie.state import Effetto, Evento, Stato
 
 
@@ -77,59 +77,9 @@ class TestCiclo:
             amelie._mostra(s)   # non deve sollevare
 
 
-class TestPresenza:
-    def test_serve_piu_di_una_lettura_per_dire_che_c_e(self):
-        p = Presenza(letture_per_arrivare=3)
-        assert not p.aggiorna(20)
-        assert not p.aggiorna(20)
-        assert p.aggiorna(20)
-
-    def test_e_piu_difficile_dire_che_se_n_e_andata(self):
-        """Asimmetria voluta: interrompere un racconto si nota molto di piu'."""
-        p = Presenza(letture_per_arrivare=3, letture_per_andarsene=5)
-        for _ in range(3):
-            p.aggiorna(20)
-        assert p.presente
-        for _ in range(4):
-            p.aggiorna(200)
-        assert p.presente, "quattro letture lontane non bastano"
-        p.aggiorna(200)
-        assert not p.presente
-
-    def test_la_zona_morta_non_fa_tremolare(self):
-        p = Presenza(vicino_mm=100, lontano_mm=140)
-        for _ in range(5):
-            p.aggiorna(20)
-        assert p.presente
-        for _ in range(20):
-            p.aggiorna(120)     # fra le due soglie: non deve cambiare idea
-        assert p.presente
-
-    def test_le_soglie_predefinite_sono_quelle_del_dispositivo(self):
-        """Dieci centimetri, non quattro.
-
-        Il fondo di una bottiglia sul piatto sta a pochi millimetri dal sensore,
-        ma il valore che arriva dipende da quanto e' speculare il vetro e da
-        come e' centrata: una soglia stretta fa perdere bottiglie appoggiate
-        storte, e sul tavolo di un ristorante sono la norma.
-        """
-        p = Presenza()
-        assert (p.vicino, p.lontano) == (100, 140)
-        for _ in range(3):
-            p.aggiorna(90)
-        assert p.presente, "una bottiglia a nove centimetri deve essere vista"
-
-    def test_misura_non_valida_conta_come_assente(self):
-        p = Presenza(letture_per_andarsene=2)
-        for _ in range(3):
-            p.aggiorna(20)
-        p.aggiorna(None); p.aggiorna(None)
-        assert not p.presente
-
-
 class TestLoZeroNonEUnaDistanza:
     """Il sensore dice «non c'è niente» restituendo zero, e zero è sotto ogni
-    soglia: preso per buono, il dispositivo crede di avere sempre una bottiglia
+    soglia: preso per buono, chi lo legge crede di avere sempre una bottiglia
     davanti.
 
     Misurato al banco, con la mano che entra ed esce dal cono:
@@ -138,18 +88,13 @@ class TestLoZeroNonEUnaDistanza:
         mano davanti      25..176 mm     SPAD 392..51528, variabili
 
     Lo stato resta «misura buona» in tutti e due i casi. Il firmware ora
-    restituisce -1 per lo zero, che il ponte traduce in `None`; qui si verifica
-    che da lì in poi la catena si comporti come deve.
-    """
+    restituisce -1 per lo zero, che il ponte traduce in `None`.
 
-    def test_none_conta_come_niente_davanti(self):
-        p = Presenza()
-        for _ in range(5):
-            p.aggiorna(30)
-        assert p.presente
-        for _ in range(6):
-            p.aggiorna(None)
-        assert not p.presente, "senza misura non c'è nessuna bottiglia"
+    La bottiglia non si riconosce più così — la guarda la camera, vedi
+    `PresenzaOttica` — ma `distanza_mm` è rimasta, la usa `scripts/bus.py` per
+    chi ha i cavetti in mano, e uno zero preso per una distanza racconterebbe
+    una bugia anche lì.
+    """
 
     def test_il_ponte_traduce_il_meno_uno(self):
         from amelie.bridge import Ponte
@@ -157,16 +102,6 @@ class TestLoZeroNonEUnaDistanza:
         p = Ponte()
         p.chiama = lambda *a, **k: -1
         assert p.distanza_mm() is None
-
-    def test_una_bottiglia_vera_si_vede_arrivare(self):
-        """Il fronte di salita: è quello che mancava quando lo zero passava per
-        una misura, ed è quello che fa partire la lettura."""
-        p = Presenza()
-        for _ in range(8):
-            p.aggiorna(None)          # piatto vuoto
-        assert not p.presente
-        arrivi = [p.aggiorna(45) for _ in range(4)]
-        assert arrivi[-1] and not arrivi[0], "deve esserci un fronte, non uno stato"
 
 
 class TestColore:
@@ -699,7 +634,7 @@ class TestLaSchermataNonResta:
         """
         import asyncio
 
-        amelie._distanza_finta = 20          # una bottiglia c'e', e resta
+        amelie._bottiglia_finta = True          # una bottiglia c'e', e resta
         # E il filtro l'ha gia' vista: quando un racconto finisce, la presenza
         # e' vera da un pezzo. Senza questo si proverebbe un fronte di salita
         # che nella realta' e' gia' passato.
@@ -725,13 +660,13 @@ class TestLaSchermataNonResta:
         amelie._bottiglia_chiusa = True
         amelie.macchina.stato = Stato.ATTESA
         amelie.presenza.presente = True      # la bottiglia c'era
-        amelie._distanza_finta = None        # e adesso e' tolta
+        amelie._bottiglia_finta = False        # e adesso e' tolta
         for _ in range(6):
             asyncio.run(amelie._un_battito())
         assert not amelie.presenza.presente
         assert not amelie._bottiglia_chiusa
 
-        amelie._distanza_finta = 20          # rimessa
+        amelie._bottiglia_finta = True          # rimessa
         for _ in range(4):
             asyncio.run(amelie._un_battito())
         assert amelie.macchina.stato is not Stato.ATTESA, \
@@ -1608,7 +1543,7 @@ class TestAnnullamento:
         """
         import asyncio
 
-        amelie._distanza_finta = 20          # la bottiglia c'e', e resta
+        amelie._bottiglia_finta = True          # la bottiglia c'e', e resta
         amelie.presenza.presente = True      # il filtro l'ha gia' vista
         amelie.macchina.stato = Stato.RACCONTO
         amelie.annulla()
@@ -1623,17 +1558,17 @@ class TestAnnullamento:
         """Annullare chiude QUESTA bottiglia, non spegne il dispositivo."""
         import asyncio
 
-        amelie._distanza_finta = 20
+        amelie._bottiglia_finta = True
         amelie.presenza.presente = True
         amelie.macchina.stato = Stato.RACCONTO
         amelie.annulla()
 
-        amelie._distanza_finta = None        # tolta
+        amelie._bottiglia_finta = False        # tolta
         for _ in range(6):
             asyncio.run(amelie._un_battito())
         assert not amelie._bottiglia_chiusa
 
-        amelie._distanza_finta = 20          # rimessa
+        amelie._bottiglia_finta = True          # rimessa
         for _ in range(4):
             asyncio.run(amelie._un_battito())
         assert amelie.macchina.stato is not Stato.ATTESA

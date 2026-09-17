@@ -355,6 +355,24 @@ class PresenzaOttica:
             # Fra le due soglie non si cambia idea: è la zona morta.
             self._diverse = self._uguali = 0
 
+        return self._decidi()
+
+    def aggiorna_a_mano(self, c_e: bool) -> bool:
+        """Come `aggiorna`, ma la scena la dichiara chi prova invece della camera.
+
+        Serve al banco e ai test: su un portatile la camera non c'è, e quello
+        che si vuole provare è il ciclo, non il rivelatore. Passa per la stessa
+        isteresi, altrimenti proverebbe qualcosa che il dispositivo non fa.
+        """
+        if c_e:
+            self._diverse += 1
+            self._uguali = 0
+        else:
+            self._uguali += 1
+            self._diverse = 0
+        return self._decidi()
+
+    def _decidi(self) -> bool:
         if not self.presente and self._diverse >= self.n_arrivo:
             self.presente = True
         elif self.presente and self._uguali >= self.n_uscita:
@@ -365,7 +383,7 @@ class PresenzaOttica:
         """Il caso in cui non si è mai visto il piatto vuoto.
 
         Succede quando il dispositivo si accende con una bottiglia già posata:
-        `c_e_gia` ha buttato lo sfondo imparato, che era sbagliato, e finché la
+        `c_e_qualcosa` ha buttato lo sfondo imparato, che era sbagliato, e finché la
         bottiglia non viene tolta non c'è modo di conoscerlo. Nel frattempo
         l'unica cosa che si può riconoscere è il momento in cui quella scena
         cambia del tutto — e cioè quando la bottiglia se ne va, lasciando in
@@ -382,17 +400,61 @@ class PresenzaOttica:
             self._diverse = self._uguali = 0
         return self.presente
 
-    def c_e_gia(self) -> None:
-        """L'etichetta è stata letta: qualunque cosa si credesse, la bottiglia c'è.
+    def c_e_qualcosa(self) -> None:
+        """Sul piatto c'è qualcosa, comunque stessero le cose fin qui.
 
-        Serve all'accensione. Se il dispositivo si accende con una bottiglia già
-        posata, la prima sbirciata impara quella come sfondo e da quel momento
-        il piatto sembrerebbe vuoto per sempre. Quando l'OCR legge un'etichetta
-        si sa con certezza il contrario, e lo sfondo imparato va buttato: si
-        tornerà a conoscerlo quando la bottiglia verrà tolta.
+        Lo dicono due voci, ed è la stessa notizia. L'OCR, quando legge
+        un'etichetta: quello che si vede non è lo sfondo. E l'accensione di una
+        installazione nuova, quando il dispositivo decide di guardare per bene
+        invece di indovinare.
+
+        In tutti e due i casi lo sfondo che il rivelatore ha in mano è
+        sbagliato — se il dispositivo si è acceso con la bottiglia già posata,
+        ha imparato quella, e da lì in poi il piatto gli sembrerebbe vuoto per
+        sempre. Si butta, e si tornerà a conoscerlo quando la bottiglia verrà
+        tolta.
         """
+
         self.presente = True
         self._sfondo = self._scena = None
+        self._diverse = self._uguali = 0
+
+    def non_e_una_bottiglia(self, fascia: np.ndarray) -> None:
+        """L'OCR ha guardato e riguardato e non ha trovato niente da leggere.
+
+        Serve a sbloccarsi. Lo sfondo che il rivelatore ha in mano può essere
+        sbagliato — ricaricato da un'installazione precedente, imparato con una
+        bottiglia davanti — e allora la differenza resta alta per sempre e il
+        dispositivo crede di avere una bottiglia davanti che non c'è. Qui si
+        dichiara che qualunque cosa ci sia, non è una bottiglia con
+        un'etichetta, e quel che si vede diventa lo sfondo.
+
+        Se invece era una bottiglia con l'etichetta girata, si paga una
+        scansione in più quando verrà tolta: la scena cambierà, non ci sarà
+        niente da leggere, e lo sfondo tornerà quello giusto. Meglio una
+        scansione di troppo che un dispositivo fermo.
+        """
+        self.presente = False
+        self.differenza = 0.0
+        self._sfondo = fascia
+        self._scena = None
+        self._diverse = self._uguali = 0
+
+    @property
+    def sfondo(self) -> np.ndarray | None:
+        """Il piatto vuoto, per chi lo vuole ricordare fra un avvio e l'altro."""
+        return None if self.presente else self._sfondo
+
+    def ricorda(self, sfondo: np.ndarray) -> None:
+        """Riparte da uno sfondo conosciuto, invece che da quello che si vede.
+
+        Il piatto vuoto è una proprietà dell'installazione, non del processo:
+        se non si ricorda, un dispositivo acceso con la bottiglia già posata
+        impara quella come sfondo e resta fermo a guardarla per sempre.
+        """
+        self.presente = False
+        self._sfondo = sfondo
+        self._scena = self._ultima = None
         self._diverse = self._uguali = 0
 
     def reimposta(self) -> None:

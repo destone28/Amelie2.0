@@ -10,7 +10,7 @@ cosa che dallo schermo del dispositivo non si vede. Non mostra il fotogramma e
 basta: mostra le **tre cose che decidono se l'etichetta verrà letta**.
 
 1. IL RIQUADRO. Il codice ritaglia la parte centrale prima di darla all'OCR
-   (`ImpostazioniCamera.ritaglio`, oggi l'80%): fuori da quel rettangolo non
+   (`ImpostazioniCamera.ritaglio`, oggi l'85%): fuori da quel rettangolo non
    viene mai letto niente. Il rettangolo è disegnato dove sta davvero, e con
    `--ritaglio` si può stringere o allargare per capire quanto conta.
 
@@ -33,8 +33,10 @@ basta: mostra le **tre cose che decidono se l'etichetta verrà letta**.
    fotogramma: gira sull'ultimo disponibile e aggiorna quando ha finito. Il
    video resta fluido.
 
-**Va lanciato a servizio FERMO.** La camera si apre un processo per volta, e
-`amelie.capture` la apre solo per il tempo dello scatto proprio per questo.
+**Va lanciato a servizio FERMO**, e ora è obbligatorio invece che consigliato:
+la camera si apre un processo per volta, e da quando è lei a riconoscere la
+bottiglia sul piatto il dispositivo tiene lo stream acceso fra una sbirciata e
+l'altra. A servizio acceso questo mirino non vede niente.
 
 **E cambia l'esposizione**: la mette in manuale come fa il dispositivo, con gli
 stessi valori. Quando si chiude, il servizio la rimette da sé al primo scatto.

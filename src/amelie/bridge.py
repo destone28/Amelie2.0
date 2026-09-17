@@ -120,6 +120,9 @@ class Ponte:
         trova una board appena preparata, prima di caricare il firmware.
         """
         try:
+            # Si chiede la distanza non perche' serva - la bottiglia la
+            # riconosce la camera - ma perche' e' il metodo piu' innocuo che
+            # lo sketch di Amelie espone: se risponde, lo sketch c'e'.
             self.chiama("distanza")
         except ErroreMCU:
             log.warning("il router risponde ma lo sketch di Amelie non c'e': "
@@ -217,7 +220,8 @@ class Ponte:
         sarebbe peggio che non dirlo.
         """
         noti = {ANELLO: "Modulino Pixels — l'anello di luce. È QUESTO che serve",
-                DISTANZA: "Modulino Distance — il sensore ToF. Serve",
+                DISTANZA: "Modulino Distance — il sensore ToF. NON serve "
+                          "piu': la bottiglia la riconosce la camera",
                 0x37: "Pixels riprogrammato: era il flash, non serve più",
                 0x6C: "indirizzo «Modulino» di un Pixels: lo sketch usa 0x36"}
         return {a: noti.get(a, "un altro Modulino — non serve a questo "
@@ -348,54 +352,6 @@ class PonteSimulato(Ponte):
                     maschera |= 1 << (a - blocco * 32)
             return maschera
         return True
-
-
-class Presenza:
-    """Decide se c'è una bottiglia, filtrando il sensore.
-
-    Il fondo di una bottiglia è quasi speculare: se non è centrato, il lobo
-    riflesso esce dal cono di ricezione e la misura salta. Per questo la
-    decisione non si prende su una lettura sola.
-
-    L'isteresi è **asimmetrica** di proposito: bastano poche letture vicine per
-    dire che è arrivata, ne servono molte lontane per dire che è andata via.
-    Sbagliare in un senso fa partire una scansione di troppo; sbagliare
-    nell'altro interrompe un racconto a metà, che si nota molto di più.
-    """
-
-    def __init__(
-        self,
-        vicino_mm: int = 100,
-        lontano_mm: int = 140,
-        letture_per_arrivare: int = 3,
-        letture_per_andarsene: int = 5,
-    ) -> None:
-        self.vicino, self.lontano = vicino_mm, lontano_mm
-        self.n_arrivo, self.n_uscita = letture_per_arrivare, letture_per_andarsene
-        self.presente = False
-        self._vicine = 0
-        self._lontane = 0
-
-    def aggiorna(self, mm: int | None) -> bool:
-        """Aggiunge una lettura e restituisce se ora la bottiglia c'è."""
-        if mm is not None and mm < self.vicino:
-            self._vicine += 1
-            self._lontane = 0
-        elif mm is None or mm > self.lontano:
-            self._lontane += 1
-            self._vicine = 0
-        # Fra vicino e lontano non si cambia idea: è la zona morta che evita il
-        # tremolio quando la bottiglia è appoggiata sul bordo della soglia.
-
-        if not self.presente and self._vicine >= self.n_arrivo:
-            self.presente = True
-        elif self.presente and self._lontane >= self.n_uscita:
-            self.presente = False
-        return self.presente
-
-    def reimposta(self) -> None:
-        self.presente = False
-        self._vicine = self._lontane = 0
 
 
 class PonteNonDisponibile(RuntimeError):

@@ -17,7 +17,7 @@ dato che esce dal tavolo.
    bottiglia appoggiata
         │
         ▼
-   sensore di distanza ──► l'MCU sveglia Linux
+   la telecamera guarda il piatto e la vede arrivare         ~1,5 s
         │
         ▼
    anello di luce + telecamera ──► OCR dell'etichetta        ~3,8 s

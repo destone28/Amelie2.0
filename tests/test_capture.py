@@ -252,7 +252,7 @@ class TestPresenzaOttica:
         p = PresenzaOttica()
         bottiglia = self.con_bottiglia()
         assert self.posa(p, bottiglia) is False      # creduta sfondo
-        p.c_e_gia()                                  # l'etichetta e' stata letta
+        p.c_e_qualcosa()                             # l'etichetta e' stata letta
         assert p.presente is True
         assert self.posa(p, bottiglia) is True       # finche' resta li', c'e'
         assert self.posa(p, self.vuoto()) is False   # tolta: ora si sa il vuoto
@@ -265,3 +265,46 @@ class TestPresenzaOttica:
         p.reimposta()
         assert p.presente is False
         assert self.posa(p, self.con_bottiglia()) is False   # ora e' lo sfondo
+
+
+class TestLoSfondoSiRicorda:
+    """Il piatto vuoto è una proprietà dell'installazione, non del processo."""
+
+    @staticmethod
+    def fascia(seme=0):
+        return np.random.default_rng(seme).integers(0, 255, (128, 96)).astype(np.float32)
+
+    def test_ripartire_da_uno_sfondo_conosciuto(self):
+        """Senza, un dispositivo acceso con la bottiglia già posata impara
+        quella come sfondo e resta fermo a guardarla per sempre."""
+        p = PresenzaOttica()
+        p.ricorda(self.fascia(0))
+        assert p.presente is False
+        for _ in range(6):
+            fuori = p.aggiorna(self.fascia(9))      # la bottiglia, gia' li'
+        assert fuori is True
+
+    def test_lo_sfondo_non_si_offre_mentre_c_e_una_bottiglia(self):
+        """Salvare lo sfondo con la bottiglia davanti vuol dire non vederla
+        mai più, nemmeno dopo un riavvio."""
+        p = PresenzaOttica()
+        for _ in range(6):
+            p.aggiorna(self.fascia(0))
+        assert p.sfondo is not None
+        for _ in range(6):
+            p.aggiorna(self.fascia(9))
+        assert p.presente and p.sfondo is None
+
+    def test_tre_letture_a_vuoto_rimettono_a_posto_lo_sfondo(self):
+        """L'uscita di sicurezza: se lo sfondo è sbagliato la differenza resta
+        alta per sempre, e il dispositivo crede di avere davanti qualcosa che
+        non c'è. Tre scansioni senza una parola dicono che non è così."""
+        p = PresenzaOttica()
+        p.ricorda(self.fascia(0))
+        for _ in range(6):
+            p.aggiorna(self.fascia(9))
+        assert p.presente
+        p.non_e_una_bottiglia(self.fascia(9))
+        assert p.presente is False
+        for _ in range(6):
+            assert p.aggiorna(self.fascia(9)) is False

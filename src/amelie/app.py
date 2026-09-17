@@ -43,9 +43,11 @@ from typing import Any
 
 from .bridge import (
     AMBRA, BIANCO_SCATTO, ROSSO, SPENTO, VERDE,
-    Colore, ErroreMCU, Ponte, PonteNonDisponibile, PonteSimulato, Presenza,
+    Colore, ErroreMCU, Ponte, PonteNonDisponibile, PonteSimulato,
 )
-from .capture import Camera, CameraNonDisponibile, blocca_esposizione
+from .capture import (
+    Camera, CameraNonDisponibile, PresenzaOttica, blocca_esposizione,
+)
 from .matcher import Fatti, Livello, Matcher
 from .narrator import Narratore, spezza_in_frasi
 from .ocr import Lettore, OCRNonDisponibile
@@ -99,6 +101,16 @@ PERCORSO_GENERATI = RADICE / "var" / "racconti_generati"
 # Dove finiscono le bottiglie che il dispositivo non ha saputo riconoscere,
 # quando qualcuno lo segnala toccando lo schermo. Vedi `segnala()`.
 CARTELLA_SEGNALAZIONI = RADICE / "var" / "segnalazioni"
+# Il piatto vuoto, com'e' quando non c'e' niente sopra. E' una proprieta'
+# dell'installazione, non del processo: senza ricordarlo, un dispositivo acceso
+# con la bottiglia gia' posata imparerebbe quella come sfondo e resterebbe
+# fermo a guardarla. Vedi `PresenzaOttica.ricorda`.
+PERCORSO_SFONDO = RADICE / "var" / "sfondo.npy"
+# Ogni quanto si puo' riscrivere lo sfondo, e di quanto deve essere cambiato
+# perche' valga la pena. La memoria della board e' flash: un aggiornamento al
+# minuto sarebbero settanta megabyte al giorno per un file che quasi non cambia.
+RIPOSO_SFONDO_S = 600.0
+SFONDO_DA_RISCRIVERE = 0.20
 # Di quanto sale e scende a ogni tocco. Dieci passi da un capo all'altro: meno
 # non si sente, di piu' non si regola.
 PASSO_VOLUME = 10
@@ -149,6 +161,12 @@ class Configurazione:
     device_audio: str = "plughw:0,3"
     porta: int = 8080
     periodo_sensore_s: float = 0.15
+    # Ogni quanto si guarda il piatto. Non e' il battito: il battito resta a
+    # 0,15 s perche' fa scadere i timer, e una sbirciata costa novanta
+    # millesimi di camera. Mezzo secondo vuol dire accorgersi di una bottiglia
+    # in un secondo e mezzo - due letture d'accordo piu' una di assestamento -
+    # spendendo un quinto della camera e niente d'altro.
+    periodo_sbirciata_s: float = 0.5
     # La lingua di partenza. Si cambia a schermo, con un tocco, e il
     # dispositivo torna a questa quando la bottiglia viene tolta: il tavolo
     # dopo trova il dispositivo come lo trova sempre.
@@ -163,7 +181,7 @@ class Amelie:
         self.cfg = cfg
         self.macchina = Macchina(su_transizione=self._su_transizione)
         self.ponte: Ponte = PonteSimulato() if cfg.simula_mcu else Ponte()
-        self.presenza = Presenza()
+        self.presenza = PresenzaOttica()
         self.camera = None if cfg.senza_camera else Camera()
         self.lettore = None if cfg.senza_camera else Lettore()
         self.matcher = Matcher()
@@ -206,9 +224,20 @@ class Amelie:
         # voci non sono caricate, e la prima frase uscirebbe con quindici
         # secondi di ritardo proprio davanti al primo ospite.
         self._pronta = False
-        # Una distanza finta, per il banco: vedi l'endpoint /prova. Quando c'e',
-        # prende il posto del sensore e passa per l'isteresi vera.
-        self._distanza_finta: int | None = None
+        # Una bottiglia finta, per il banco e per i test: vedi l'endpoint
+        # /prova. Quando c'e' prende il posto di quello che vede la camera, e
+        # passa comunque per l'isteresi vera.
+        self._bottiglia_finta: bool | None = None
+        # Quando tocca guardare di nuovo il piatto.
+        self._prossima_sbirciata = 0.0
+        # Lo sfondo scritto su disco, e quando si potra' riscrivere.
+        self._sfondo_scritto = None
+        self._prossimo_sfondo = 0.0
+        # Vero finche' non si e' capito che cosa c'e' sul piatto. Succede solo
+        # al primo avvio di una installazione, quando nessuno sfondo e' stato
+        # ancora imparato: l'unico modo di saperlo e' guardare per bene una
+        # volta, cioe' accendere la luce e leggere.
+        self._da_capire = False
         # Questa bottiglia e' gia' stata raccontata. Serve da quando la
         # schermata conclusa torna da sola all'invito: in attesa, con la
         # bottiglia ancora sul piatto, il rilancio qui sotto farebbe ripartire
@@ -410,6 +439,61 @@ class Amelie:
 
     def _salva_volume(self, valore: int) -> None:
         self._scrivi_durevole(PERCORSO_VOLUME, str(valore), "volume")
+
+    # ------------------------------------------------------------- sfondo
+
+    def _sfondo_ricordato(self):
+        """Il piatto vuoto dell'ultima volta, se c'è ed è ancora della forma giusta.
+
+        Non solleva mai: un file illeggibile, o scritto quando la fascia era
+        grande diversamente, deve costare una scansione in più all'avvio, non
+        un dispositivo che non si accende.
+        """
+        try:
+            import numpy as np
+
+            sfondo = np.load(PERCORSO_SFONDO)
+        except Exception as e:                              # noqa: BLE001
+            log.info("nessuno sfondo ricordato (%s): guardo una volta per capire", e)
+            return None
+        atteso = (self.camera.imp.sbirciata[1], self.camera.imp.sbirciata[0])
+        if sfondo.shape != atteso:
+            log.warning("sfondo ricordato di forma %s invece di %s: lo ignoro",
+                        sfondo.shape, atteso)
+            return None
+        return sfondo.astype("float32")
+
+    def _ricorda_sfondo(self) -> None:
+        """Scrive il piatto vuoto, ma solo se è cambiato e non troppo spesso."""
+        import numpy as np
+
+        from .capture import quanto_diverso
+
+        sfondo = self.presenza.sfondo
+        if sfondo is None or time.monotonic() < self._prossimo_sfondo:
+            return
+        if (self._sfondo_scritto is not None
+                and quanto_diverso(self._sfondo_scritto, sfondo) < SFONDO_DA_RISCRIVERE):
+            return
+        try:
+            PERCORSO_SFONDO.parent.mkdir(parents=True, exist_ok=True)
+            tmp = PERCORSO_SFONDO.with_suffix(".parziale.npy")
+            with open(tmp, "wb") as f:
+                np.save(f, sfondo)
+                f.flush()
+                os.fsync(f.fileno())
+            tmp.replace(PERCORSO_SFONDO)
+            cartella = os.open(PERCORSO_SFONDO.parent, os.O_RDONLY)
+            try:
+                os.fsync(cartella)
+            finally:
+                os.close(cartella)
+        except OSError as e:
+            log.warning("sfondo non salvato: %s", e)
+            return
+        self._sfondo_scritto = sfondo
+        self._prossimo_sfondo = time.monotonic() + RIPOSO_SFONDO_S
+        log.info("sfondo del piatto vuoto aggiornato")
 
     # ------------------------------------------------------- impostazioni
 
@@ -740,6 +824,14 @@ class Amelie:
             elif e is Effetto.INTERROGA_DATABASE:
                 self._avvia(self._riconosci)
             elif e is Effetto.AVVIA_RACCONTO:
+                # Lo stream della camera si spegne PRIMA di parlare. Con il
+                # DisplayPort attivo il link USB scende a 2.0 e camera e audio
+                # si dividono un bus solo: e' la ragione per cui questo modulo
+                # apriva e chiudeva la camera a ogni scatto, e resta valida
+                # adesso che la tiene accesa per guardare il piatto. Si
+                # riaccende da sola alla prima sbirciata dopo il racconto.
+                if self.camera is not None:
+                    self.camera.chiudi()
                 self._avvia(self._racconta)
             elif e is Effetto.FERMA_RACCONTO:
                 # Non una copia: la fermata e' UNA. Ce n'erano due, e quella
@@ -846,6 +938,10 @@ class Amelie:
                  len(self._righe), lettura.durata_s, scatto.nitidezza)
         if self._righe:
             self._tentativi = 0
+            # Un'etichetta letta e' la prova che sul piatto c'e' qualcosa, e
+            # vale piu' di qualunque sbirciata: se il dispositivo si e' acceso
+            # con la bottiglia gia' posata, e' l'unica cosa che glielo dice.
+            self.presenza.c_e_qualcosa()
             self.macchina.invia(Evento.LETTURA_RIUSCITA)
             return
         self._tentativi += 1
@@ -855,6 +951,21 @@ class Amelie:
             # di riaccendere la luce ogni quattro secondi finche' qualcuno non
             # toglie l'oggetto dal piatto.
             log.info("rinuncio dopo %d tentativi", self._tentativi)
+            # E si impara: tre volte con la luce accesa senza trovare una
+            # parola vuol dire che quel che si vede non e' un'etichetta. Se lo
+            # sfondo era sbagliato - ricaricato da un'altra installazione,
+            # imparato con una bottiglia davanti - questo e' cio' che lo
+            # rimette a posto, invece di lasciare il dispositivo a credere per
+            # sempre di avere qualcosa davanti.
+            if self.camera is not None:
+                fascia = self.camera.sbircia()
+                if fascia is not None:
+                    self.presenza.non_e_una_bottiglia(fascia)
+                    # Senza aspettare il riposo: questo e' proprio il caso in
+                    # cui lo sfondo su disco e' quello sbagliato, e deve
+                    # smettere di esserlo anche dopo un riavvio.
+                    self._prossimo_sfondo = 0.0
+                    self._ricorda_sfondo()
             self.macchina.invia(Evento.RINUNCIA)
 
     def _riconosci(self) -> None:
@@ -1158,6 +1269,16 @@ class Amelie:
                 blocca_esposizione(self.camera.imp, self.camera.percorso)
             except Exception as e:                          # noqa: BLE001
                 log.warning("esposizione non bloccata: %s", e)
+            sfondo = self._sfondo_ricordato()
+            if sfondo is not None:
+                self.presenza.ricorda(sfondo)
+                self._sfondo_scritto = sfondo
+            else:
+                # Prima accensione di questa installazione. Senza uno sfondo
+                # non c'e' modo di sapere se il piatto e' vuoto o se c'e' una
+                # bottiglia gia' posata: si guarda per bene una volta, con la
+                # luce, e poi si sapra' per sempre.
+                self._da_capire = True
 
         while True:
             try:
@@ -1169,16 +1290,9 @@ class Amelie:
             await asyncio.sleep(self.cfg.periodo_sensore_s)
 
     async def _un_battito(self) -> None:
-        """Un giro solo: sensore, presenza, timer. Isolato per poterlo provare."""
-        if self._distanza_finta is not None:
-            mm = self._distanza_finta
-        else:
-            try:
-                mm = self.ponte.distanza_mm()
-            except Exception:                           # noqa: BLE001
-                mm = None
+        """Un giro solo: sbirciata, presenza, timer. Isolato per poterlo provare."""
         c_era = self.presenza.presente
-        ora = self.presenza.aggiorna(mm)
+        ora = await self._chi_c_e()
         if ora != c_era:
             if ora:
                 self._tentativi = 0     # bottiglia nuova, si riparte da capo
@@ -1207,6 +1321,45 @@ class Amelie:
         if self._scadenza and time.monotonic() >= self._scadenza:
             self._scadenza = None
             self.macchina.invia(Evento.SCADENZA)
+
+    async def _chi_c_e(self) -> bool:
+        """Guarda il piatto, se e' il momento, e dice se c'e' una bottiglia.
+
+        Fra una sbirciata e l'altra non si cambia idea: il battito e' otto
+        volte piu' fitto perche' deve far scadere i timer, non perche' serva
+        guardare otto volte al secondo.
+        """
+        if self._bottiglia_finta is not None:
+            return self.presenza.aggiorna_a_mano(self._bottiglia_finta)
+        if self.camera is None:
+            return self.presenza.presente
+        ora = time.monotonic()
+        if ora < self._prossima_sbirciata:
+            return self.presenza.presente
+        self._prossima_sbirciata = ora + self.cfg.periodo_sbirciata_s
+        # In un thread: novanta millesimi di camera fermerebbero anche le
+        # pagine che il tablet sta caricando.
+        fascia = await asyncio.to_thread(self.camera.sbircia)
+        if fascia is None:
+            # La camera sta scattando, o non ha dato il fotogramma. Una
+            # sbirciata saltata non e' un'informazione: non si decide niente.
+            return self.presenza.presente
+        if self._da_capire:
+            self._da_capire = False
+            # Si dichiara che qualcosa c'e', anche se non si sa cosa: senza,
+            # la sbirciata successiva - mezzo secondo dopo, a scansione gia'
+            # avviata - imparerebbe come «piatto vuoto» proprio la bottiglia
+            # che si sta per fotografare, e la salverebbe pure.
+            self.presenza.c_e_qualcosa()
+            return True
+        c_e = self.presenza.aggiorna(fascia)
+        if not c_e and self.macchina.stato is Stato.ATTESA:
+            # Lo sfondo si impara solo da fermi. Durante una scansione il
+            # rivelatore vede una scena che il dispositivo sta gia' guardando
+            # per conto suo, e prenderla per sfondo vuol dire dimenticare la
+            # bottiglia che ha davanti.
+            self._ricorda_sfondo()
+        return c_e
 
     async def salute(self) -> None:
         while True:
@@ -1256,6 +1409,12 @@ def crea_app(amelie: Amelie):
                     pass
             for c in compiti:
                 c.cancel()
+            # Lo stream della camera resta acceso fra una sbirciata e l'altra:
+            # se il servizio si ferma senza spegnerlo, il device resta occupato
+            # fino a che il kernel non se ne accorge, e il riavvio successivo
+            # trova una camera che non si apre.
+            if amelie.camera is not None:
+                amelie.camera.chiudi()
 
     # docs_url e redoc_url spenti: il dispositivo espone solo cio' che serve.
     app = FastAPI(title="Amelie", docs_url=None, redoc_url=None,
@@ -1337,25 +1496,28 @@ def crea_app(amelie: Amelie):
     async def prova(cosa: str):
         """Il banco: fa credere al dispositivo che ci sia una bottiglia.
 
-        Serve a provare tutto il resto — camera, lettura, riconoscimento,
-        racconto, voce, schermo, comandi — quando il sensore di distanza non c'è
-        o non risponde. È l'unico pezzo del giro che non si può provare senza
-        hardware, e senza questo bloccherebbe tutti gli altri.
+        Serve a provare tutto il resto — lettura, riconoscimento, racconto,
+        voce, schermo, comandi — su una macchina che la camera non ce l'ha, o
+        davanti a una camera che in quel momento non guarda il piatto.
 
-        Non manda l'evento a mano: mette una **distanza finta** al posto di
-        quella del sensore, e lascia che sia il battito normale a passarla per
-        l'isteresi. Così si prova il percorso vero, filtro compreso, non una
-        scorciatoia che gli somiglia — e togliendola il dispositivo se ne
-        accorge da solo, come farebbe con una bottiglia tolta dal piatto.
+        Non manda l'evento a mano: dichiara che cosa c'è sul piatto e lascia
+        che sia il battito normale a passarlo per l'isteresi. Così si prova il
+        percorso vero, filtro compreso, e non una scorciatoia che gli somiglia.
+
+        Tre parole, perché «non c'è una bottiglia» e «guarda tu» sono due cose
+        diverse: con il sensore erano la stessa, perché una distanza finta tolta
+        lasciava il posto a un sensore che diceva «lontano».
+
+            bottiglia   sul piatto c'è una bottiglia
+            via         il piatto è vuoto
+            camera      basta con le bugie, si torna a guardare
         """
-        if cosa == "bottiglia":
-            amelie._distanza_finta = 20      # ben sotto la soglia del vicino
-        elif cosa == "via":
-            amelie._distanza_finta = None    # torna a leggere il sensore vero
-        else:
+        finte = {"bottiglia": True, "via": False, "camera": None}
+        if cosa not in finte:
             return JSONResponse({"ok": False,
-                                 "motivo": "prova: 'bottiglia' oppure 'via'"})
-        return JSONResponse({"ok": True, "finta": amelie._distanza_finta,
+                                 "motivo": "prova: 'bottiglia', 'via' o 'camera'"})
+        amelie._bottiglia_finta = finte[cosa]
+        return JSONResponse({"ok": True, "finta": amelie._bottiglia_finta,
                              "stato": amelie.macchina.stato.value})
 
     @app.get("/pronto")
