@@ -102,13 +102,20 @@ def _senza_accenti(s: str) -> str:
     ).lower()
 
 
-def verifica(testo: str, fatti: Fatti) -> tuple[bool, list[str]]:
+def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[str]]:
     """Il testo afferma solo cose presenti nei fatti?
 
     Restituisce (va bene, elenco delle invenzioni). Il controllo è volutamente
     grossolano ma **deterministico**: cerca numeri e nomi propri che non
     compaiano da nessuna parte nel blocco dei fatti. Preferisce un falso
     allarme — che costa una rigenerazione — a una bugia detta all'ospite.
+
+    **La lingua conta**, ed è costato scoprirlo: i fatti si componevano sempre
+    in italiano, e un racconto inglese veniva confrontato con parole italiane.
+    «Tuscany» non sta in un blocco che dice «Toscana», e nemmeno «Italy»,
+    «Piedmont», «Bordeaux»: sui 9.660 racconti in archivio la verifica ne
+    bocciava 3.401, quasi tutti per questo. Un controllo che grida sempre non
+    è un controllo severo, è un controllo spento.
 
     >>> f = Fatti(livello=Livello.VINO, nome="Cannubi", cantina="Marchesi")
     >>> verifica("Il Cannubi di Marchesi.", f)[0]
@@ -118,9 +125,12 @@ def verifica(testo: str, fatti: Fatti) -> tuple[bool, list[str]]:
     """
     ammesso = _senza_accenti(
         " ".join(filter(None, [
-            fatti.blocco_fatti(),
+            fatti.blocco_fatti(lingua=lingua),
             " ".join(fatti.vitigni),
+            fatti.nota_in(lingua) or "",
             fatti.note_vitigno or "",
+            " ".join(fatti.sensoriali_in(lingua)),
+            " ".join(fatti.abbinamenti_in(lingua)),
             fatti.denominazione or "",
             fatti.tipologia or "",
             fatti.nome or "",
@@ -149,7 +159,7 @@ def verifica(testo: str, fatti: Fatti) -> tuple[bool, list[str]]:
     # facile da intercettare: se i fatti dicono bianco e il testo dice rosso,
     # e' falso e basta. Un modello piccolo ci casca spesso, perche' "vino" e
     # "rosso" stanno vicini nella sua testa.
-    if contraddizione := _colore_sbagliato(testo, fatti):
+    if contraddizione := _colore_sbagliato(testo, fatti, ammesso):
         invenzioni.append(contraddizione)
 
     # Le quattro classi che seguono sono uscite da una rilettura dei testi del
@@ -238,8 +248,15 @@ _ROSSO = re.compile(r"\b(rosso|rossa|rubino|granato|tannico|tannicit[àa]|tannin
 _BIANCO = re.compile(r"\b(bianco|bianca|paglierino|dorat[oa]|verdolino)", re.I)
 
 
-def _colore_sbagliato(testo: str, fatti: Fatti) -> str | None:
-    """Il testo dice di un colore che i fatti smentiscono?"""
+def _colore_sbagliato(testo: str, fatti: Fatti, ammesso: str = "") -> str | None:
+    """Il testo dice di un colore che i fatti smentiscono?
+
+    `ammesso` è il testo dei fatti: una parola che sta LÌ non è una
+    contraddizione, è una citazione. La scheda del Friulano dice «passito di
+    grande dolcezza sostenuta da un tannino insolito», e il tannino faceva
+    gridare al rosso su un vino bianco — ma quelle parole le abbiamo scritte
+    noi, nei fatti, apposta.
+    """
     dichiarato = " ".join(filter(None, [
         _senza_accenti(fatti.colore or ""),
         _senza_accenti(fatti.colore_bacca or ""),
@@ -249,10 +266,13 @@ def _colore_sbagliato(testo: str, fatti: Fatti) -> str | None:
     e_bianco = ("white" in dichiarato or "bianc" in dichiarato)
     e_rosso = ("red" in dichiarato or "ner" in dichiarato or "ross" in dichiarato)
 
-    if e_bianco and not e_rosso and _ROSSO.search(testo):
-        return f"colore contraddetto ({_ROSSO.search(testo).group(1)}, ma è bianco)"
-    if e_rosso and not e_bianco and _BIANCO.search(testo):
-        return f"colore contraddetto ({_BIANCO.search(testo).group(1)}, ma è rosso)"
+    def fuori_dai_fatti(trovato):
+        return trovato and _senza_accenti(trovato.group(1)) not in ammesso
+
+    if e_bianco and not e_rosso and fuori_dai_fatti(t := _ROSSO.search(testo)):
+        return f"colore contraddetto ({t.group(1)}, ma è bianco)"
+    if e_rosso and not e_bianco and fuori_dai_fatti(t := _BIANCO.search(testo)):
+        return f"colore contraddetto ({t.group(1)}, ma è rosso)"
     return None
 
 
@@ -435,8 +455,8 @@ dalla sostanza.
 """
 
 
-def prompt(f: Fatti, *, per_cache: bool = False) -> str:
-    testo = ISTRUZIONI.format(fatti=f.blocco_fatti())
+def prompt(f: Fatti, *, per_cache: bool = False, lingua: str = "it") -> str:
+    testo = ISTRUZIONI.format(fatti=f.blocco_fatti(lingua=lingua))
     if per_cache:
         testo = testo.replace("\nFATTI:", ISTRUZIONI_CACHE + "\nFATTI:")
     elif f.livello is not Livello.VINO:
@@ -582,14 +602,14 @@ class Narratore:
         """
         for tentativo in (1, 2):
             try:
-                testo = (self.genera(prompt(f)) or "").strip()
+                testo = (self.genera(prompt(f, lingua=self.lingua)) or "").strip()
             except Exception as e:                       # noqa: BLE001
                 log.warning("generazione fallita: %s", e)
                 return None
             if not testo:
                 continue
             testo = _ripulisci(testo)
-            ok, invenzioni = verifica(testo, f)
+            ok, invenzioni = verifica(testo, f, self.lingua)
             if ok:
                 return Racconto(testo=testo, origine="modello", livello=f.livello)
             log.warning("tentativo %d scartato, ha inventato: %s", tentativo, invenzioni)
