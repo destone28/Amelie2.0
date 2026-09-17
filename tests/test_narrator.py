@@ -124,13 +124,13 @@ class TestTemplate:
         f = Fatti(livello=Livello.TIPOLOGIA, tipologia="Barolo Riserva",
                   denominazione="Barolo", sicurezza=80.0)
         t = template(f)
-        assert "non riesco a leggere" in t.lower()
+        assert t.startswith("Questo è un Barolo Riserva")
         assert "Barolo Riserva" in t
 
     def test_il_livello_vitigno_non_attribuisce_al_produttore(self):
         f = Fatti(livello=Livello.VITIGNO, vitigni=["Nebbiolo"], sicurezza=80.0)
         t = template(f)
-        assert "produttore non sono sicuro" in t.lower()
+        assert "Nebbiolo" in t and "non sono sicuro" not in t.lower()
 
     def test_un_vino_certo_si_annuncia_come_certo(self):
         f = Fatti(livello=Livello.VINO, nome="Barolo Cannubi",
@@ -143,11 +143,14 @@ class TestTemplate:
                   cantina="Marchesi di Barolo", annata=2016, sicurezza=80.0)
         t = template(f)
         assert not t.startswith("Questo è il")
-        assert "Direi che è il" in t
+        assert t.startswith("Direi il")
         assert "Barolo Cannubi" in t
 
     def test_una_somiglianza_bassa_si_dichiara_tale(self):
         """Il difetto piu' insidioso: un record perfetto trovato male.
+
+        Non si scusa della lettura - quello non interessa a nessuno - ma non
+        annuncia nemmeno come certo un produttore che ha attribuito al 60%.
 
         MATCH_ASSENTE porta al racconto anche sotto la soglia dubbia. Se
         l'apertura guardasse solo il livello, il dispositivo direbbe al tavolo
@@ -156,12 +159,12 @@ class TestTemplate:
         f = Fatti(livello=Livello.VINO, nome="Barolo Cannubi",
                   cantina="Marchesi di Barolo", sicurezza=60.0)
         t = template(f)
-        assert "non è nitida" in t
-        assert "potrebbe essere" in t.lower()
+        assert t.startswith("Direi il")
+        assert "non è nitida" not in t
 
     def test_anche_i_livelli_deboli_si_smorzano_sotto_la_soglia(self):
         f = Fatti(livello=Livello.VITIGNO, vitigni=["Nebbiolo"], sicurezza=50.0)
-        assert "non è nitida" in template(f)
+        assert template(f).startswith("Direi")
 
     def test_il_template_supera_sempre_la_verifica(self, barolo):
         """La rete di sicurezza non puo' essere quella che inventa."""

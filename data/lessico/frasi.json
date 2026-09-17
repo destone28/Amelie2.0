@@ -9,12 +9,12 @@
       "en": "This is the {cosa}."
     },
     "vino_dubbio": {
-      "it": "Direi che è il {cosa}.",
-      "en": "I'd say this is the {cosa}."
+      "it": "Direi il {cosa}.",
+      "en": "I'd say the {cosa}."
     },
     "vino_incerto": {
-      "it": "L'etichetta non è nitida: potrebbe essere il {cosa}.",
-      "en": "The label isn't sharp: it could be the {cosa}."
+      "it": "Direi il {cosa}.",
+      "en": "I'd say the {cosa}."
     },
     "pezzo_nome": {
       "it": "«{nome}»",
@@ -29,28 +29,28 @@
       "en": "{annata} vintage"
     },
     "tipologia_nota": {
-      "it": "Non riesco a leggere l'etichetta con certezza, ma questo è {cosa}.",
-      "en": "I can't read the label with certainty, but this is {cosa}."
+      "it": "Questo è {cosa}.",
+      "en": "This is {cosa}."
     },
     "tipologia_incerta": {
-      "it": "L'etichetta non è nitida. Potrebbe essere {cosa}.",
-      "en": "The label isn't sharp. This could be {cosa}."
+      "it": "Direi {cosa}.",
+      "en": "I'd say {cosa}."
     },
     "denominazione": {
-      "it": "L'etichetta non è nitida, ma riconosco la denominazione: {denominazione}, {sigla}.",
-      "en": "The label isn't sharp, but I recognise the appellation: {denominazione}, {sigla}."
+      "it": "Questo è un {denominazione}, {sigla}.",
+      "en": "This is a {denominazione}, {sigla}."
     },
     "vitigno_noto": {
-      "it": "Del produttore non sono sicuro, ma il vitigno sì: {vitigno}.",
-      "en": "I'm not sure of the producer, but I am of the grape: {vitigno}."
+      "it": "Questo è un vino di {vitigno}.",
+      "en": "This is a {vitigno} wine."
     },
     "vitigno_incerto": {
-      "it": "L'etichetta non è nitida. Mi pare {cosa}.",
-      "en": "The label isn't sharp. It looks like {cosa}."
+      "it": "Direi {cosa}.",
+      "en": "I'd say {cosa}."
     },
     "illeggibile": {
-      "it": "Non riesco a leggere questa etichetta.",
-      "en": "I can't read this label."
+      "it": "Provi a girare l'etichetta verso di me.",
+      "en": "Please turn the label towards me."
     }
   },
   "corpo": {
@@ -105,12 +105,12 @@
   "schermo": {
     "_nota": "Qui il dispositivo parla all'ospite, non del vino: si dà del lei.",
     "invito_a_girare": {
-      "it": "Non riesco a leggere l'etichetta. Provi a girarla verso di me?",
-      "en": "I can't read the label. Could you turn it towards me?"
+      "it": "Provi a girare l'etichetta verso di me?",
+      "en": "Could you turn the label towards me?"
     },
     "rinuncia": {
-      "it": "Non sono riuscito a leggere questa etichetta. Può togliere la bottiglia.",
-      "en": "I couldn't read this label. You can take the bottle away."
+      "it": "Può togliere la bottiglia.",
+      "en": "You can take the bottle away."
     },
     "guasto": {
       "it": "Qualcosa non ha funzionato. Riprovo fra un istante.",
@@ -129,8 +129,8 @@
       "en": "Let me have a look…"
     },
     "illeggibile_con_invito": {
-      "it": "Non riesco a leggere questa etichetta. Provi a girarla verso di me.",
-      "en": "I can't read this label. Please try turning it towards me."
+      "it": "Provi a girare l'etichetta verso di me.",
+      "en": "Please turn the label towards me."
     },
     "quale_di_questi": {
       "it": "Quale di questi?",
