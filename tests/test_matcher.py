@@ -649,11 +649,14 @@ class TestCandidatiCheNonAggiungonoNiente:
     scendere al vino generico.
     """
 
-    def test_lo_stesso_vino_di_un_altro_produttore_non_si_propone(self, m):
+    def test_senza_cantina_letta_non_si_propone_nessuna_cantina(self, m):
+        """Qualunque riga l'ospite tocchi, il dispositivo stamperebbe il nome
+        di un'azienda che non ha letto: è proprio ciò che la regola del
+        produttore vieta."""
         f = m.cerca(["CERASUOLO", "D'ABRUZZO", "DENOMINAZIONE DI ORIGINE PROTETTA"])
-        assert "Cerasuolo" in (f.denominazione or "") or "Cerasuolo" in (f.tipologia or "")
+        assert f.cantina is None
         for proposta in f.candidati:
-            assert "Cerasuolo d'Abruzzo —" not in proposta, proposta
+            assert " — " not in proposta, proposta
 
     def test_un_vino_davvero_diverso_si_propone_ancora(self, m):
         """La schermata serve: toglierla del tutto sarebbe l'errore opposto."""

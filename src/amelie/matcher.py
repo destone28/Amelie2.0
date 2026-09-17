@@ -636,15 +636,32 @@ class Matcher:
         tipologia, la stessa denominazione - non e' un'alternativa: e' la
         stessa risposta con sopra il nome di un'azienda che non abbiamo letto.
 
-        Non serve chiedersi PERCHE' si e' su un record generico - se il
-        produttore non si e' letto, o se l'etichetta non nominava nessun vino
-        in particolare. Basta la catena: se il candidato, ripiegando, passa da
-        dove siamo gia', non porta niente. E quando invece si e' su un vino
-        preciso, la catena di un altro vino non ci passa mai, e la domanda
-        torna ad avere senso da sola.
+        Due criteri, e il secondo e' quello che morde.
+
+        Il primo e' la catena: se il candidato, ripiegando, passa da dove siamo
+        gia', non porta niente - e' la stessa risposta con sopra un nome.
+
+        Il secondo: **se non stiamo nominando un produttore, un candidato che
+        ne nomina uno non e' un'alternativa, e' una tentazione.** Qualunque
+        cosa l'ospite tocchi, il dispositivo stamperebbe il nome di
+        un'azienda che non ha letto - cioe' proprio cio' che la regola del
+        produttore vieta. E la catena da sola non basta a fermarlo: «Origine
+        Cerasuolo d'Abruzzo» di Passione Natura in archivio sta sotto
+        Montepulciano d'Abruzzo, non sotto Cerasuolo, quindi la sua catena non
+        passa da dove siamo - ma a un tavolo quella riga si legge come lo
+        stesso vino con una cantina appiccicata.
+
+        Quando invece la cantina l'abbiamo letta, tutto resta: due cantine
+        diverse sono due risposte diverse, e l'etichetta in mano all'ospite le
+        distingue.
         """
         if not f.origine:
             return False
+        if f.cantina is None and c.ambito == "vino":
+            r = self.con.execute("SELECT cantina FROM vino WHERE id = ?",
+                                 (c.ambito_id,)).fetchone()
+            if r and r["cantina"]:
+                return True
         suo = Fatti(origine=(c.ambito, c.ambito_id))
         return f.origine in self.catena_di_ripiego(suo)
 
