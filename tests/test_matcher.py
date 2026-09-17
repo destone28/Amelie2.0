@@ -636,3 +636,33 @@ class TestDisciplinare:
         blocco = m._fatti_tipologia(2).blocco_fatti(lingua="en")
         assert "translated from the Italian" in blocco
         assert "ruby red" in blocco
+
+
+class TestCandidatiCheNonAggiungonoNiente:
+    """Sull'etichetta c'è «Cerasuolo d'Abruzzo» e basta.
+
+    In archivio ce ne sono tre, di Filari, Lepore e Valori, e il dispositivo li
+    mostrava tutti e tre chiedendo di scegliere. Quella domanda non ha
+    risposta: la bottiglia non dice di chi è, e nessuno al tavolo lo sa meglio
+    di lei. Chiedere sposta su un ospite una scelta che il riconoscitore ha
+    appena dichiarato impossibile, quando la regola del produttore l'ha fatto
+    scendere al vino generico.
+    """
+
+    def test_lo_stesso_vino_di_un_altro_produttore_non_si_propone(self, m):
+        f = m.cerca(["CERASUOLO", "D'ABRUZZO", "DENOMINAZIONE DI ORIGINE PROTETTA"])
+        assert "Cerasuolo" in (f.denominazione or "") or "Cerasuolo" in (f.tipologia or "")
+        for proposta in f.candidati:
+            assert "Cerasuolo d'Abruzzo —" not in proposta, proposta
+
+    def test_un_vino_davvero_diverso_si_propone_ancora(self, m):
+        """La schermata serve: toglierla del tutto sarebbe l'errore opposto."""
+        f = m.cerca(["CERASUOLO", "D'ABRUZZO"])
+        assert f.candidati, "senza alternative non si può chiedere niente"
+
+    def test_col_produttore_letto_le_alternative_restano(self, m):
+        """Se l'etichetta nomina la cantina, due cantine diverse sono due
+        risposte diverse e la domanda ha senso eccome."""
+        f = m.cerca(["MARCHESI DI BAROLO", "Barolo", "Cannubi", "2016"])
+        assert f.cantina
+        assert f.candidati

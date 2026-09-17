@@ -201,6 +201,12 @@ class Fatti:
     disciplinare: dict[str, str] = field(default_factory=dict)
     disciplinare_di: str | None = None
 
+    # Il produttore e' stato LETTO sull'etichetta, o si e' sceso al vino
+    # generico perche' non c'era? Serve a chi decide se ha senso chiedere
+    # all'ospite di scegliere fra piu' candidati: se la cantina non si e'
+    # letta, i candidati che differiscono solo per quella non sono alternative.
+    produttore_letto_davvero: bool = True
+
     note_vitigno: str | None = None
     # I descrittori sensoriali tipici del vitigno. Vanno nei fatti perche'
     # altrimenti il modello se li inventa: senza, sul Chianti scriveva "sentore
@@ -595,23 +601,52 @@ class Matcher:
         # La garanzia: un produttore non si nomina se non lo si e' letto.
         if not migliore.produttore_letto:
             fatti = self._senza_produttore(fatti, testo_norm, tetto)
+            fatti.produttore_letto_davvero = False
         if self._c_e_un_altro_produttore(candidati):
             fatti.sicurezza = min(fatti.sicurezza, SOGLIA_CERTA - 0.5)
         fatti.annata = annata
+        fatti.ripiego = self.catena_di_ripiego(fatti)
         # Per la schermata di conferma servono alternative DIVERSE fra loro:
         # tre righe che dicono quasi la stessa cosa non aiutano a scegliere.
         visti = {migliore.testo}
         for c in candidati[1:]:
             if len(fatti.candidati) >= 3:
                 break
-            if c.testo in visti:
+            if c.testo in visti or self._stesso_vino(fatti, c):
                 continue
             visti.add(c.testo)
             fatti.candidati.append(self.etichetta(c.ambito, c.ambito_id)
                                    or c.testo)
             fatti.riferimenti.append((c.ambito, c.ambito_id))
-        fatti.ripiego = self.catena_di_ripiego(fatti)
         return fatti
+
+    def _stesso_vino(self, f: Fatti, c: Candidato) -> bool:
+        """Questo candidato e' lo stesso vino di un altro produttore?
+
+        Sull'etichetta c'e' scritto «Cerasuolo d'Abruzzo» e basta. In archivio
+        ce ne sono tre, di Filari, Lepore e Valori, e il dispositivo li
+        mostrava tutti e tre chiedendo di scegliere. Ma quella domanda non ha
+        risposta: **la bottiglia non dice di chi e'**, e nessuno al tavolo lo
+        sa meglio di lei. Chiedere sposta su un ospite una scelta che noi
+        abbiamo gia' dichiarato impossibile un secondo prima, quando la regola
+        del produttore ci ha fatto scendere al vino generico.
+
+        Un candidato «aggiunge» qualcosa solo se porta a un vino DIVERSO. Se
+        ripiegando finisce sullo stesso record su cui siamo gia' - la stessa
+        tipologia, la stessa denominazione - non e' un'alternativa: e' la
+        stessa risposta con sopra il nome di un'azienda che non abbiamo letto.
+
+        Non serve chiedersi PERCHE' si e' su un record generico - se il
+        produttore non si e' letto, o se l'etichetta non nominava nessun vino
+        in particolare. Basta la catena: se il candidato, ripiegando, passa da
+        dove siamo gia', non porta niente. E quando invece si e' su un vino
+        preciso, la catena di un altro vino non ci passa mai, e la domanda
+        torna ad avere senso da sola.
+        """
+        if not f.origine:
+            return False
+        suo = Fatti(origine=(c.ambito, c.ambito_id))
+        return f.origine in self.catena_di_ripiego(suo)
 
     def _c_e_un_altro_produttore(self, candidati: list[Candidato]) -> bool:
         """C'e' un ALTRO produttore quasi altrettanto plausibile?
