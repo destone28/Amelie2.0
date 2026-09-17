@@ -464,6 +464,28 @@ def prompt(f: Fatti, *, per_cache: bool = False, lingua: str = "it") -> str:
     return testo
 
 
+# Il prompt del modello ADDESTRATO. Deve essere identico a quello su cui e'
+# stato addestrato, parola per parola: un modello affinato su una forma e
+# interrogato con un'altra e' un modello che non hai affinato.
+#
+# Misurato sulla board dandogli per sbaglio il prompt del modello generico -
+# le istruzioni lunghe piu' il blocco esteso: 63,8 secondi invece di 27, e la
+# prosa tornata sgrammaticata («Il Abruzzo Spumante Bianco Charmat e' un solo
+# vitigno»). Le regole non gli servono: le ha imparate. Gli serve la forma.
+ISTRUZIONE_ADDESTRATA = {
+    "it": "Scrivi la scheda di sala di questo vino, in quattro frasi.",
+    "en": "Write this wine's tasting note, in four sentences.",
+}
+
+
+def prompt_addestrato(f: Fatti, lingua: str = "it") -> str:
+    """I fatti compatti nel formato di chat di Qwen, come all'addestramento."""
+    istruzione = ISTRUZIONE_ADDESTRATA.get(lingua, ISTRUZIONE_ADDESTRATA["it"])
+    return (f"<|im_start|>system\n{istruzione}<|im_end|>\n"
+            f"<|im_start|>user\n{f.blocco_compatto(lingua=lingua)}<|im_end|>\n"
+            f"<|im_start|>assistant\n")
+
+
 # ---------------------------------------------------------------- narratore
 
 class Narratore:
@@ -474,12 +496,17 @@ class Narratore:
         percorso_db: str | Path | None = None,
         genera: Callable[[str], str] | None = None,
         lingua: str = "it",
+        modello_addestrato: bool = False,
     ) -> None:
         from .matcher import PERCORSO_DB
 
         self.percorso = Path(percorso_db) if percorso_db else PERCORSO_DB
         self.genera = genera          # None = nessun modello disponibile
         self.lingua = lingua
+        # Quale forma di prompt vuole il modello che c'e' dietro: vedi
+        # `prompt_addestrato`. Sbagliarla costa il doppio del tempo e tutta la
+        # qualita' che l'addestramento aveva comprato.
+        self.modello_addestrato = modello_addestrato
         self.lex = carica()
         # Sola lettura: il dispositivo non deve poter corrompere il proprio sapere.
         #
@@ -602,7 +629,9 @@ class Narratore:
         """
         for tentativo in (1, 2):
             try:
-                testo = (self.genera(prompt(f, lingua=self.lingua)) or "").strip()
+                domanda = (prompt_addestrato(f, self.lingua) if self.modello_addestrato
+                           else prompt(f, lingua=self.lingua))
+                testo = (self.genera(domanda) or "").strip()
             except Exception as e:                       # noqa: BLE001
                 log.warning("generazione fallita: %s", e)
                 return None

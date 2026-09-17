@@ -140,6 +140,12 @@ class Configurazione:
     # template, che e' vero per costruzione. Con --con-modello si riaccende la
     # generazione dal vivo per l'ignoto.
     senza_modello: bool = True
+    # Il modello caricato e' quello affinato su questo progetto? Cambia la
+    # FORMA del prompt, non solo il contenuto: il modello addestrato vuole i
+    # fatti compatti e una riga di istruzione, quello generico le istruzioni
+    # per esteso. Darne una per l'altra costa il doppio del tempo e la
+    # qualita' che l'addestramento aveva comprato.
+    modello_addestrato: bool = False
     device_audio: str = "plughw:0,3"
     porta: int = 8080
     periodo_sensore_s: float = 0.15
@@ -163,7 +169,8 @@ class Amelie:
         self.matcher = Matcher()
         self.voce = None if cfg.senza_voce else Voce(
             ImpostazioniVoce(device_alsa=cfg.device_audio))
-        self.narratore = Narratore(genera=self._genera if not cfg.senza_modello else None,
+        self.narratore = Narratore(modello_addestrato=cfg.modello_addestrato,
+                                   genera=self._genera if not cfg.senza_modello else None,
                                    lingua=cfg.lingua)
         self.lex = self.narratore.lex
         self.lingua = cfg.lingua
@@ -1396,6 +1403,9 @@ def main() -> None:
     ap.add_argument("--simula-mcu", action="store_true")
     ap.add_argument("--senza-camera", action="store_true")
     ap.add_argument("--senza-voce", action="store_true")
+    ap.add_argument("--modello-addestrato", action="store_true",
+                    help="il modello caricato e' quello affinato su questo "
+                         "progetto: vuole il prompt compatto")
     ap.add_argument("--con-modello", action="store_true",
                     help="genera dal vivo per cio' che non e' in cache "
                          "(lento e di qualita' incerta: vedi docs/04-QUALITA.md)")
@@ -1413,6 +1423,7 @@ def main() -> None:
     cfg = Configurazione(
         simula_mcu=args.simula_mcu, senza_camera=args.senza_camera,
         senza_voce=args.senza_voce, senza_modello=not args.con_modello,
+        modello_addestrato=args.modello_addestrato,
         device_audio=args.audio, porta=args.porta, volume=args.volume)
 
     import uvicorn

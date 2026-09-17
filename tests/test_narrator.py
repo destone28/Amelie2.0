@@ -619,3 +619,46 @@ class TestLeQuattroClassiUsciteDallaRilettura:
         ok, _ = verifica("Un grande vitigno siciliano.",
                          self._fatti(note_vitigno="Vitigno siciliano, dell'Etna."))
         assert ok
+
+
+class TestIlPromptSegueIlModello:
+    """Un modello affinato su una forma e interrogato con un'altra è un modello
+    che non hai affinato. Misurato sulla board dandogli per sbaglio il prompt
+    del modello generico: 63,8 secondi invece di 27, e la prosa tornata
+    sgrammaticata — «Il Abruzzo Spumante Bianco Charmat è un solo vitigno»."""
+
+    def _fatti(self):
+        return Fatti(livello=Livello.TIPOLOGIA, denominazione="Prova",
+                     tipologia="Prova Rosso", colore="Red", vitigni=["Nebbiolo"],
+                     temperatura_c="16-18")
+
+    def test_il_prompt_addestrato_e_molto_piu_corto(self):
+        from amelie.narrator import prompt, prompt_addestrato
+        f = self._fatti()
+        assert len(prompt_addestrato(f)) < len(prompt(f)) / 2
+
+    def test_porta_i_fatti_compatti_e_una_riga_di_istruzione(self):
+        from amelie.narrator import ISTRUZIONE_ADDESTRATA, prompt_addestrato
+        f = self._fatti()
+        p = prompt_addestrato(f)
+        assert ISTRUZIONE_ADDESTRATA["it"] in p
+        assert f.blocco_compatto() in p
+        assert p.rstrip().endswith("<|im_start|>assistant")
+
+    def test_segue_la_lingua(self):
+        from amelie.narrator import ISTRUZIONE_ADDESTRATA, prompt_addestrato
+        p = prompt_addestrato(self._fatti(), "en")
+        assert ISTRUZIONE_ADDESTRATA["en"] in p
+
+    def test_il_narratore_sceglie_la_forma_giusta(self):
+        from amelie.narrator import ISTRUZIONE_ADDESTRATA, Narratore
+        visti = []
+        for addestrato in (False, True):
+            n = Narratore(genera=lambda p: (visti.append(p), "x.")[1],
+                          modello_addestrato=addestrato)
+            try:
+                n._dal_modello(self._fatti())
+            finally:
+                n.chiudi()
+        assert ISTRUZIONE_ADDESTRATA["it"] not in visti[0]
+        assert ISTRUZIONE_ADDESTRATA["it"] in visti[-1]
