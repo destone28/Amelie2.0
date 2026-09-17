@@ -302,6 +302,9 @@ class TestCicloCompleto:
             def leggi(self, _immagine):
                 return Lettura(righe=[Riga(testo=t, confidenza=0.95)
                                       for t in self.righe], durata_s=0.1)
+            # Il ciclo chiede `leggi_comunque`, che sul lettore vero riprova
+            # girando il fotogramma: qui non c'e' niente da girare.
+            leggi_comunque = leggi
 
         a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
                                   senza_voce=True, senza_modello=True))

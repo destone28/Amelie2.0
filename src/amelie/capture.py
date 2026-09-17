@@ -41,6 +41,7 @@ from __future__ import annotations
 import glob
 import logging
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -143,7 +144,7 @@ class ImpostazioniCamera:
     #
     # ZERO, e viene dal montaggio: nella scocca stampata la camera guarda la
     # bottiglia di fianco, e il testo dell'etichetta nel fotogramma nativo e'
-    # gia' orizzontale. Raddrizzarlo lo corica, ed e' esattamente il contrario
+    # già orizzontale. Raddrizzarlo lo corica, ed è esattamente il contrario
     # di cio' che serve.
     #
     # Era 90 per il banco, dove la camera stava girata di lato. Misurato sulla
@@ -159,11 +160,29 @@ class ImpostazioniCamera:
     # Un verso sbagliato non degrada la lettura: la annulla.
     #
     # Il verso e il ritaglio si leggono insieme: coricata, la bottiglia occupa
-    # il fotogramma per il lungo, e cio' che avanza ai bordi non e' etichetta.
+    # il fotogramma per il lungo, e ciò che avanza ai bordi non è etichetta.
     rotazione: int = 0
 
     # Attesa fra accensione della luce dello scatto e primo fotogramma utile.
     assestamento_luce_s: float = 0.15
+
+    # La fascia del fotogramma dove sta la bottiglia, in frazioni di larghezza.
+    #
+    # La camera è fissa e la bottiglia arriva sempre nello stesso posto: in
+    # piedi, al centro, dal bordo di sopra a quello di sotto. Misurata sul
+    # fotogramma vero, occupa da 0,32 a 0,70 della larghezza; qui si tiene un
+    # po' più larga perché l'ospite la posa «poco più a destra o a sinistra».
+    #
+    # Guardare solo questa fascia non è un'ottimizzazione: è la differenza fra
+    # accorgersi di una bottiglia e accorgersi di un cameriere che passa.
+    fascia_bottiglia: tuple[float, float] = (0.28, 0.72)
+
+    # A quanto si rimpicciolisce la fascia prima di confrontarla.
+    #
+    # Novantasei per centoventotto: un ventesimo di lato. Piccola apposta - a
+    # questa scala un tremolio del tavolo sposta la scena di un decimo di pixel
+    # e sparisce, mentre una bottiglia resta grande come prima.
+    sbirciata: tuple[int, int] = (96, 128)
 
 
 @dataclass
@@ -214,6 +233,176 @@ def ritaglia_centro(immagine: np.ndarray, frazione: float) -> np.ndarray:
     nh, nw = int(h * frazione), int(w * frazione)
     y0, x0 = (h - nh) // 2, (w - nw) // 2
     return immagine[y0 : y0 + nh, x0 : x0 + nw]
+
+
+def quanto_diverso(a: np.ndarray, b: np.ndarray, tolleranza: float = 20.0) -> float:
+    """Che frazione della fascia è cambiata, senza farsi ingannare dalla luce.
+
+    Confrontare due fotogrammi pixel per pixel sembra ovvio e non funziona: in
+    un locale la luce cambia, e una differenza di luce si presenta come una
+    differenza di scena. Misurato sulla fascia vera, abbassando la luce del 20 %
+    l'80 % dei pixel cambiava di più di venti livelli — con la scena identica.
+
+    Quindi prima si riporta `b` alla luce di `a` — stessa media, stessa
+    deviazione — e solo dopo si contano i pixel diversi. Un cambio di luce è
+    proprio una trasformazione di questo tipo, e dopo la normalizzazione
+    scompare. Misurato, stessa fascia:
+
+        scena ferma                       0,2 %
+        luce ×0,7 · ×0,85 · +40 livelli   0,0-2,2 %
+        luce ×1,3                         4,4 %   (qui il bianco satura)
+        bottiglia spostata di 2 mm        14,6 %
+        bottiglia spostata di 16 mm       53,3 %
+        al posto della bottiglia, la stanza   61-75 %
+
+    Fra «la luce è cambiata» e «al posto della bottiglia c'è la stanza» ci sono
+    più di quindici volte, ed è lì che sta la soglia.
+    """
+    if a.shape != b.shape:
+        raise ValueError(f"fasce di forma diversa: {a.shape} e {b.shape}")
+    a = a.astype(np.float32)
+    b = b.astype(np.float32)
+    sa, sb = float(a.std()), float(b.std())
+    # Una fascia senza contrasto — un muro bianco, il buio pieno — non si può
+    # normalizzare senza moltiplicare il rumore per il proprio contrario. Lì
+    # l'unica cosa che si può confrontare è quanto è chiara.
+    if sa < 1.0 or sb < 1.0:
+        return float(abs(a.mean() - b.mean()) > tolleranza)
+    b = (b - b.mean()) * (sa / sb) + a.mean()
+    return float((np.abs(a - b) > tolleranza).mean())
+
+
+class PresenzaOttica:
+    """Decide se c'è una bottiglia guardandola, invece di misurarne la distanza.
+
+    Il sensore di distanza faceva questo lavoro e lo faceva male: il fondo di
+    una bottiglia è quasi speculare e il lobo riflesso esce dal cono di
+    ricezione appena la bottiglia non è centrata, così la misura salta. La
+    camera invece la bottiglia la vede, e la vede grande: a dieci centimetri
+    dalla lente occupa quasi tutta la fascia centrale del fotogramma.
+
+    Non si riconosce «una bottiglia»: si riconosce che al posto della stanza
+    c'è **qualcosa d'altro**. È una distinzione onesta — il dispositivo non sa
+    dire se sia una bottiglia o un vaso — e non è un problema, perché chi
+    decide davvero è l'OCR subito dopo: se non c'è un'etichetta, non c'è nulla
+    da raccontare.
+
+    L'isteresi resta **asimmetrica**, come sul sensore e per lo stesso motivo:
+    per dire che è arrivata basta che la scena sia cambiata; per dire che è
+    andata via bisogna che la scena sia tornata quella di prima. Una bottiglia
+    spostata di un dito cambia la fascia del 15-30 %, abbastanza da non
+    somigliare più allo sfondo ma non abbastanza da somigliargli di nuovo:
+    così un racconto non si interrompe perché qualcuno ha versato da bere.
+    """
+
+    def __init__(
+        self,
+        soglia_arrivo: float = 0.45,
+        soglia_uscita: float = 0.20,
+        letture_per_arrivare: int = 2,
+        letture_per_andarsene: int = 3,
+        soglia_fermo: float = 0.20,
+        tolleranza: float = 20.0,
+    ) -> None:
+        self.soglia_arrivo = soglia_arrivo
+        self.soglia_uscita = soglia_uscita
+        self.soglia_fermo = soglia_fermo
+        self.n_arrivo, self.n_uscita = letture_per_arrivare, letture_per_andarsene
+        self.tolleranza = tolleranza
+        self.presente = False
+        self.differenza = 0.0            # l'ultima misura, per la diagnostica
+        # Lo sfondo: la fascia com'è quando sul piatto non c'è niente. `None`
+        # vuol dire «non lo so ancora», e capita due volte: all'accensione, e
+        # quando si scopre che la bottiglia c'era già prima di accendere.
+        self._sfondo: np.ndarray | None = None
+        # La scena con la bottiglia, usata solo finché lo sfondo è ignoto.
+        self._scena: np.ndarray | None = None
+        self._ultima: np.ndarray | None = None
+        self._diverse = 0
+        self._uguali = 0
+
+    def aggiorna(self, fascia: np.ndarray) -> bool:
+        """Aggiunge una sbirciata e restituisce se ora la bottiglia c'è."""
+        precedente, self._ultima = self._ultima, fascia
+        if precedente is None:
+            if self._sfondo is None and not self.presente:
+                self._sfondo = fascia
+            return self.presente
+
+        # Una scena che si sta ancora muovendo non si giudica: è la mano che
+        # posa la bottiglia. Costa una sbirciata di ritardo e vale
+        # l'assestamento che prima si aspettava a tempo.
+        if self._diverso(fascia, precedente) >= self.soglia_fermo:
+            self._diverse = self._uguali = 0
+            return self.presente
+
+        if self._sfondo is None:
+            return self._aspetta_che_se_ne_vada(fascia)
+
+        self.differenza = self._diverso(fascia, self._sfondo)
+        if self.differenza >= self.soglia_arrivo:
+            self._diverse += 1
+            self._uguali = 0
+        elif self.differenza < self.soglia_uscita:
+            self._uguali += 1
+            self._diverse = 0
+            if not self.presente:
+                # Il piatto è vuoto e si vede: si aggiorna lo sfondo, così la
+                # luce che cala nel pomeriggio, la tovaglia cambiata e il
+                # calendario girato di pagina non diventano una bottiglia.
+                self._sfondo = fascia
+        else:
+            # Fra le due soglie non si cambia idea: è la zona morta.
+            self._diverse = self._uguali = 0
+
+        if not self.presente and self._diverse >= self.n_arrivo:
+            self.presente = True
+        elif self.presente and self._uguali >= self.n_uscita:
+            self.presente = False
+        return self.presente
+
+    def _aspetta_che_se_ne_vada(self, fascia: np.ndarray) -> bool:
+        """Il caso in cui non si è mai visto il piatto vuoto.
+
+        Succede quando il dispositivo si accende con una bottiglia già posata:
+        `c_e_gia` ha buttato lo sfondo imparato, che era sbagliato, e finché la
+        bottiglia non viene tolta non c'è modo di conoscerlo. Nel frattempo
+        l'unica cosa che si può riconoscere è il momento in cui quella scena
+        cambia del tutto — e cioè quando la bottiglia se ne va, lasciando in
+        vista proprio lo sfondo che mancava.
+        """
+        if self._scena is None:
+            self._scena = fascia
+            return self.presente
+        self.differenza = self._diverso(fascia, self._scena)
+        if self.differenza >= self.soglia_arrivo:
+            self.presente = False
+            self._sfondo = fascia
+            self._scena = None
+            self._diverse = self._uguali = 0
+        return self.presente
+
+    def c_e_gia(self) -> None:
+        """L'etichetta è stata letta: qualunque cosa si credesse, la bottiglia c'è.
+
+        Serve all'accensione. Se il dispositivo si accende con una bottiglia già
+        posata, la prima sbirciata impara quella come sfondo e da quel momento
+        il piatto sembrerebbe vuoto per sempre. Quando l'OCR legge un'etichetta
+        si sa con certezza il contrario, e lo sfondo imparato va buttato: si
+        tornerà a conoscerlo quando la bottiglia verrà tolta.
+        """
+        self.presente = True
+        self._sfondo = self._scena = None
+        self._diverse = self._uguali = 0
+
+    def reimposta(self) -> None:
+        self.presente = False
+        self.differenza = 0.0
+        self._sfondo = self._scena = self._ultima = None
+        self._diverse = self._uguali = 0
+
+    def _diverso(self, a: np.ndarray, b: np.ndarray) -> float:
+        return quanto_diverso(a, b, self.tolleranza)
 
 
 def trova_camera(nome: str = "U20CAM") -> str:
@@ -294,6 +483,10 @@ class Camera:
     def __init__(self, impostazioni: ImpostazioniCamera | None = None) -> None:
         self.imp = impostazioni or ImpostazioniCamera()
         self._percorso: str | None = None
+        # Lo stream, quando è acceso. Lo condividono la sbirciata e lo scatto,
+        # e il lucchetto serve perché arrivano da due thread diversi.
+        self._cap: cv2.VideoCapture | None = None
+        self._lucchetto = threading.Lock()
 
     @property
     def percorso(self) -> str:
@@ -304,6 +497,27 @@ class Camera:
         return self._percorso
 
     def _apri(self) -> cv2.VideoCapture:
+        """Accende lo stream, se non è già acceso.
+
+        Lo stream si tiene acceso fra una sbirciata e l'altra, e il motivo è
+        una misura: **aprire costa più di cento fotogrammi**. Sulla board,
+        stesso device, stessa risoluzione:
+
+            apri + leggi + chiudi, ogni volta     1,4 s
+            stream già acceso, un fotogramma      0,09 s
+
+        Il primo fotogramma dopo l'accensione ne costa 1,1 da solo: è il tempo
+        che ci mette il sensore a partire, e si paga una volta. Tenerlo acceso
+        costa invece **0,9 % di CPU e nessun grado** — misurato con lo stream
+        aperto dodici secondi senza leggere niente, e la temperatura non si è
+        mossa da 48 °C. Il timore era di caricare una board senza ventola; il
+        conto dice che caricava molto di più riaprire ogni volta.
+
+        Si spegne quando parla la voce (`chiudi`): lì la banda USB serve
+        all'audio, ed è la ragione per cui questo modulo apriva e chiudeva.
+        """
+        if self._cap is not None:
+            return self._cap
         cap = cv2.VideoCapture(self.percorso, cv2.CAP_V4L2)
         if not cap.isOpened():
             raise CameraNonDisponibile(f"impossibile aprire {self.percorso}")
@@ -313,7 +527,52 @@ class Camera:
         # Un buffer corto riduce, ma non elimina, i fotogrammi vecchi: lo
         # scarto esplicito qui sotto resta necessario.
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        self._cap = cap
         return cap
+
+    def chiudi(self) -> None:
+        """Spegne lo stream. Si riaccende da solo alla prossima richiesta."""
+        with self._lucchetto:
+            self._spegni()
+
+    def _spegni(self) -> None:
+        if self._cap is not None:
+            self._cap.release()
+            self._cap = None
+
+    def fascia(self, frame) -> np.ndarray:
+        """La striscia verticale dove sta la bottiglia, in grigio e piccola."""
+        frame = self._raddrizza(frame)
+        grigio = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        da, a = self.imp.fascia_bottiglia
+        w = grigio.shape[1]
+        striscia = grigio[:, int(w * da) : int(w * a)]
+        return cv2.resize(striscia, self.imp.sbirciata).astype(np.float32)
+
+    def sbircia(self) -> np.ndarray | None:
+        """Un fotogramma solo, ridotto alla fascia della bottiglia.
+
+        Restituisce `None` quando la camera è occupata dallo scatto: una
+        sbirciata saltata non è un guasto, è una sbirciata saltata. Chi guarda
+        non deve mai mettersi in coda dietro a chi lavora.
+        """
+        if not self._lucchetto.acquire(blocking=False):
+            return None
+        try:
+            cap = self._apri()
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                # Uno stream che non dà più fotogrammi non guarisce da solo:
+                # si spegne, e la prossima sbirciata lo riaccende.
+                log.warning("sbirciata a vuoto: riaccendo lo stream")
+                self._spegni()
+                return None
+            return self.fascia(frame)
+        except CameraNonDisponibile as e:
+            log.warning("sbirciata impossibile: %s", e)
+            return None
+        finally:
+            self._lucchetto.release()
 
     def _raddrizza(self, frame):
         """Rimette il fotogramma per il verso in cui si legge."""
@@ -332,8 +591,10 @@ class Camera:
         com'era **dopo**: questo modulo non parla con l'MCU.
         """
         attesa = self.imp.assestamento_luce_s if attesa_luce is None else attesa_luce
-        cap = self._apri()
-        try:
+        # Qui si aspetta, invece di rinunciare come fa la sbirciata: lo scatto
+        # è il lavoro, e una sbirciata dura novanta millesimi.
+        with self._lucchetto:
+            cap = self._apri()
             if attesa > 0:
                 time.sleep(attesa)
 
@@ -355,11 +616,13 @@ class Camera:
                     migliore_n, migliore = n, frame
 
             if migliore is None:
+                # Lo stream resta acceso fra uno scatto e l'altro, ma uno che
+                # non dà fotogrammi non è uno stream: si spegne, e il
+                # prossimo tentativo riparte da zero invece di insistere.
+                self._spegni()
                 raise CameraNonDisponibile(
                     f"nessun fotogramma letto da {self.percorso}"
                 )
-        finally:
-            cap.release()
 
         # Prima si raddrizza, poi si ritaglia: il ritaglio è centrato, e su
         # un'immagine coricata terrebbe la fascia sbagliata della bottiglia.

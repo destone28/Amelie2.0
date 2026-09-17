@@ -10,9 +10,11 @@ import pytest
 
 from amelie.capture import (
     ImpostazioniCamera,
+    PresenzaOttica,
     Scatto,
     SOGLIA_NITIDEZZA,
     nitidezza,
+    quanto_diverso,
     ritaglia_centro,
 )
 
@@ -64,20 +66,25 @@ class TestRitaglio:
         assert imp.ritaglio >= 0.8
         assert imp.ritaglio ** 2 > 0.6, "sotto questa area si perdono parole"
 
-    def test_il_fotogramma_si_raddrizza(self):
-        """La camera è montata ruotata di 90°, ed è la sua posizione giusta:
-        una bottiglia è alta e stretta, e un sensore 16:9 girato di lato la
-        inquadra per il lungo. Ma il testo dell'etichetta arriva coricato, e un
-        riconoscitore di testo lavora su righe orizzontali."""
+    def test_il_fotogramma_arriva_gia_per_il_verso_giusto(self):
+        """Nella scocca stampata la camera guarda la bottiglia di fianco e il
+        testo dell'etichetta è già orizzontale: non c'è niente da raddrizzare.
+
+        Era 90, dal banco, dove la camera stava girata di lato. Misurato sulla
+        stessa bottiglia e sullo stesso fotogramma: a 0° l'etichetta si legge e
+        il vino si riconosce, a 90° resta `D'ABRUZZC` e non si riconosce niente.
+        """
         assert ImpostazioniCamera().rotazione in (0, 90, 180, 270)
-        assert ImpostazioniCamera().rotazione == 90
+        assert ImpostazioniCamera().rotazione == 0
 
     def test_raddrizzare_scambia_i_lati(self):
         from amelie.capture import Camera
 
-        c = Camera()
+        c = Camera(ImpostazioniCamera(rotazione=90))
         alto = c._raddrizza(immagine(40, 90))
         assert alto.shape[:2] == (90, 40), "novanta gradi scambiano i lati"
+        fermo = Camera(ImpostazioniCamera(rotazione=0))
+        assert fermo._raddrizza(immagine(40, 90)).shape[:2] == (40, 90)
 
 
 class TestNitidezza:
@@ -123,3 +130,138 @@ class TestImpostazioni:
     def test_immutabile(self):
         with pytest.raises(Exception):
             ImpostazioniCamera().esposizione = 999
+
+
+class TestQuantoDiverso:
+    """La metrica deve distinguere «è cambiata la scena» da «è cambiata la luce».
+
+    I numeri di riferimento sono quelli misurati sul dispositivo, sulla fascia
+    vera, con la bottiglia al suo posto: vedi il docstring di `quanto_diverso`.
+    """
+
+    @staticmethod
+    def scena(seme=0):
+        r = np.random.default_rng(seme)
+        return r.integers(0, 255, (128, 96)).astype(np.float32)
+
+    def test_la_stessa_scena_non_e_cambiata(self):
+        a = self.scena()
+        assert quanto_diverso(a, a.copy()) == 0.0
+
+    def test_un_po_di_rumore_non_e_un_cambiamento(self):
+        a = self.scena()
+        r = np.random.default_rng(1)
+        b = np.clip(a + r.normal(0, 3, a.shape), 0, 255)
+        assert quanto_diverso(a, b) < 0.05
+
+    def test_la_luce_che_cala_non_e_una_bottiglia(self):
+        """Il caso per cui la normalizzazione esiste: senza, l'80 % dei pixel
+        risultava cambiato abbassando la luce del 20 %, a scena identica."""
+        a = self.scena()
+        for fattore in (0.7, 0.85, 1.15):
+            assert quanto_diverso(a, a * fattore) < 0.05, fattore
+        assert quanto_diverso(a, a - 40) < 0.05
+
+    def test_una_scena_diversa_e_diversa(self):
+        assert quanto_diverso(self.scena(0), self.scena(1)) > 0.5
+
+    def test_una_fascia_senza_contrasto_si_giudica_sulla_luce(self):
+        """Un muro bianco non si può normalizzare: dividere per la propria
+        deviazione vorrebbe dire moltiplicare il rumore per il suo inverso."""
+        piatta = np.full((128, 96), 100.0, dtype=np.float32)
+        assert quanto_diverso(piatta, piatta + 1) == 0.0
+        assert quanto_diverso(piatta, piatta + 60) == 1.0
+
+    def test_due_fasce_di_forma_diversa_sono_un_errore(self):
+        with pytest.raises(ValueError):
+            quanto_diverso(self.scena(), np.zeros((64, 48), dtype=np.float32))
+
+
+class TestPresenzaOttica:
+    """Arrivo, permanenza e partenza di una bottiglia vista dalla camera."""
+
+    @staticmethod
+    def vuoto(seme=0):
+        return np.random.default_rng(seme).integers(0, 255, (128, 96)).astype(np.float32)
+
+    @staticmethod
+    def con_bottiglia(seme=99):
+        return np.random.default_rng(seme).integers(0, 255, (128, 96)).astype(np.float32)
+
+    def posa(self, p, fascia, volte=6):
+        for _ in range(volte):
+            fuori = p.aggiorna(fascia)
+        return fuori
+
+    def test_il_piatto_vuoto_resta_vuoto(self):
+        p = PresenzaOttica()
+        assert self.posa(p, self.vuoto()) is False
+
+    def test_una_bottiglia_posata_si_vede(self):
+        p = PresenzaOttica()
+        self.posa(p, self.vuoto())
+        assert self.posa(p, self.con_bottiglia()) is True
+
+    def test_e_quando_viene_tolta_si_vede_che_non_c_e_piu(self):
+        p = PresenzaOttica()
+        self.posa(p, self.vuoto())
+        self.posa(p, self.con_bottiglia())
+        assert self.posa(p, self.vuoto()) is False
+
+    def test_la_luce_che_cambia_non_e_una_bottiglia(self):
+        """Il locale abbassa le luci a cena: il dispositivo non deve svegliarsi."""
+        p = PresenzaOttica()
+        vuoto = self.vuoto()
+        self.posa(p, vuoto)
+        assert self.posa(p, vuoto * 0.7) is False
+
+    def test_una_bottiglia_spostata_non_e_una_bottiglia_tolta(self):
+        """Qualcuno versa da bere e riappoggia la bottiglia un dito piu' in la'.
+
+        La scena non somiglia piu' a quella di prima, ma non somiglia nemmeno
+        al piatto vuoto: il racconto non si interrompe. E' la stessa isteresi
+        asimmetrica del sensore di distanza, per la stessa ragione.
+        """
+        p = PresenzaOttica()
+        self.posa(p, self.vuoto())
+        self.posa(p, self.con_bottiglia())
+        spostata = np.roll(self.con_bottiglia(), 3, axis=1)
+        assert self.posa(p, spostata) is True
+
+    def test_una_mano_che_si_muove_non_fa_decidere(self):
+        """Ogni sbirciata diversa dalla precedente: non si giudica mai."""
+        p = PresenzaOttica()
+        self.posa(p, self.vuoto())
+        for k in range(8):
+            fuori = p.aggiorna(self.con_bottiglia(seme=100 + k))
+        assert fuori is False
+
+    def test_lo_sfondo_si_aggiorna_quando_il_piatto_e_vuoto(self):
+        """La sala cambia lentamente e lo sfondo la deve seguire, altrimenti
+        una tovaglia nuova diventa una bottiglia per sempre."""
+        p = PresenzaOttica()
+        self.posa(p, self.vuoto())
+        for passo in range(10):                      # la luce cala piano
+            self.posa(p, self.vuoto() * (1 - 0.03 * passo), volte=3)
+        assert p.presente is False
+
+    def test_acceso_con_la_bottiglia_gia_posata(self):
+        """Il caso che il sensore di distanza non aveva: la prima sbirciata
+        impara la bottiglia come se fosse lo sfondo. Lo dice l'OCR, e quando lo
+        dice si butta via lo sfondo sbagliato."""
+        p = PresenzaOttica()
+        bottiglia = self.con_bottiglia()
+        assert self.posa(p, bottiglia) is False      # creduta sfondo
+        p.c_e_gia()                                  # l'etichetta e' stata letta
+        assert p.presente is True
+        assert self.posa(p, bottiglia) is True       # finche' resta li', c'e'
+        assert self.posa(p, self.vuoto()) is False   # tolta: ora si sa il vuoto
+        assert self.posa(p, self.con_bottiglia(7)) is True   # e si riparte
+
+    def test_reimposta_dimentica_tutto(self):
+        p = PresenzaOttica()
+        self.posa(p, self.vuoto())
+        self.posa(p, self.con_bottiglia())
+        p.reimposta()
+        assert p.presente is False
+        assert self.posa(p, self.con_bottiglia()) is False   # ora e' lo sfondo
