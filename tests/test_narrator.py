@@ -10,6 +10,7 @@ import pytest
 from amelie.matcher import Fatti, Livello
 from amelie.narrator import (
     PAROLE_MAX,
+    Narratore,
     Racconto,
     _ripulisci,
     a_frasi,
@@ -662,3 +663,85 @@ class TestIlPromptSegueIlModello:
                 n.chiudi()
         assert ISTRUZIONE_ADDESTRATA["it"] not in visti[0]
         assert ISTRUZIONE_ADDESTRATA["it"] in visti[-1]
+
+
+class TestRaccontoAFrasi:
+    """Il racconto che esce una frase per volta, mentre il modello lo scrive.
+
+    Serve a coprire i dodici secondi di prefill che sulla board passano prima
+    che esca la prima lettera. La prima frase è l'apertura, che è un template:
+    vera, pronta subito, e l'unica che il modello non scrive mai perché dipende
+    dalla certezza, che si conosce solo al momento.
+    """
+
+    def _fatti(self):
+        return Fatti(livello=Livello.TIPOLOGIA, sicurezza=0.95,
+                     denominazione="Prova", tipologia="Prova Rosso",
+                     colore="Red", vitigni=["Nebbiolo"], temperatura_c="16-18",
+                     note_vitigno="Vitigno piemontese, delle Langhe.")
+
+    def _narratore(self, pezzi):
+        return Narratore(genera=lambda p: "".join(pezzi),
+                         genera_a_flusso=lambda p: iter(list(pezzi)))
+
+    def test_la_prima_frase_arriva_prima_del_modello(self):
+        """Il modello non ha ancora detto una parola e la voce ha già di che
+        parlare: è tutto il punto."""
+        n = self._narratore(["Nasce dal Nebbiolo. "])
+        try:
+            frasi = n.racconta_a_frasi(self._fatti())
+            prima = next(frasi)
+            assert prima and "Nebbiolo" not in prima      # è l'apertura, non il modello
+        finally:
+            n.chiudi()
+
+    def test_le_frasi_del_modello_seguono(self):
+        n = self._narratore(["Nasce dal Nebbiolo. ", "Da servire fra i sedici e i diciotto gradi. "])
+        try:
+            frasi = list(n.racconta_a_frasi(self._fatti()))
+            assert any("Nebbiolo" in f for f in frasi)
+            assert any("sedici" in f for f in frasi)
+        finally:
+            n.chiudi()
+
+    def test_una_frase_inventata_si_lascia_cadere(self):
+        """Le altre restano vere una per una, anche se il periodo è più corto."""
+        n = self._narratore(["Nasce dal Nebbiolo. ",
+                             "Ha vinto tre stelle al Gambero Rosso nel 1998. ",
+                             "Da servire fra i sedici e i diciotto gradi. "])
+        try:
+            frasi = list(n.racconta_a_frasi(self._fatti()))
+            assert not any("Gambero" in f for f in frasi)
+            assert any("Nebbiolo" in f for f in frasi)
+            assert any("sedici" in f for f in frasi)
+        finally:
+            n.chiudi()
+
+    def test_se_il_modello_non_da_niente_di_buono_si_finisce_col_template(self):
+        """Chi ascolta non deve accorgersi che qualcosa non ha funzionato."""
+        n = self._narratore(["Ha vinto tre stelle nel 1998. "])
+        try:
+            frasi = list(n.racconta_a_frasi(self._fatti()))
+            assert not any("1998" in f for f in frasi)
+            assert len(frasi) > 1                  # l'apertura più il template
+            assert any("piemontese" in f for f in frasi)
+        finally:
+            n.chiudi()
+
+    def test_senza_modello_si_racconta_lo_stesso(self):
+        n = Narratore()
+        try:
+            frasi = list(n.racconta_a_frasi(self._fatti()))
+            assert any("piemontese" in f for f in frasi)
+        finally:
+            n.chiudi()
+
+    def test_senza_flusso_degrada_invece_di_rompersi(self):
+        """Un modello che non sa dare i pezzi dà tutto insieme: più tardi, non
+        mai."""
+        n = Narratore(genera=lambda p: "Nasce dal Nebbiolo. Da servire fra i sedici e i diciotto gradi.")
+        try:
+            frasi = list(n.racconta_a_frasi(self._fatti()))
+            assert any("Nebbiolo" in f for f in frasi)
+        finally:
+            n.chiudi()

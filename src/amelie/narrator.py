@@ -497,6 +497,7 @@ class Narratore:
         genera: Callable[[str], str] | None = None,
         lingua: str = "it",
         modello_addestrato: bool = False,
+        genera_a_flusso: Callable[[str], Iterator[str]] | None = None,
     ) -> None:
         from .matcher import PERCORSO_DB
 
@@ -507,6 +508,10 @@ class Narratore:
         # `prompt_addestrato`. Sbagliarla costa il doppio del tempo e tutta la
         # qualita' che l'addestramento aveva comprato.
         self.modello_addestrato = modello_addestrato
+        # Chi sa dare il testo a pezzi. Senza, `racconta_a_frasi` funziona
+        # lo stesso ma aspetta la fine: e' il modo in cui degrada, non un caso
+        # da evitare.
+        self._flusso = genera_a_flusso
         self.lex = carica()
         # Sola lettura: il dispositivo non deve poter corrompere il proprio sapere.
         #
@@ -620,6 +625,68 @@ class Narratore:
         if f.ripiego:
             return f.ripiego
         return [f.origine] if f.origine else []
+
+    def racconta_a_frasi(self, f: Fatti) -> Iterator[str]:
+        """Le frasi del racconto, una per volta, appena sono pronte E verificate.
+
+        Serve a coprire l'attesa. Sulla board il prefill dei fatti costa dodici
+        secondi prima che esca la prima lettera, e sono dodici secondi di
+        silenzio davanti a un ospite. Qui la prima frase e' l'APERTURA, che e'
+        un template: nasce dai fatti, e' pronta in millisecondi e dice gia'
+        qualcosa di vero - che bottiglia si ha davanti e quanto se ne e' sicuri.
+        Mentre la voce la pronuncia, il modello lavora.
+
+        L'apertura e' anche l'unica frase che il modello non scrive mai: dipende
+        dalla CERTEZZA, che si conosce solo al momento. Dirla noi e lasciare a
+        lui il resto non e' una ripetizione, e' la divisione naturale.
+
+        **Ogni frase si verifica prima di uscire di qui.** Una frase detta non
+        si riprende: aspettare il testo intero per verificarlo tutto insieme
+        sarebbe piu' comodo, ma allora non si potrebbe cominciare a parlare
+        prima della fine, che e' tutto il punto. Una frase che non passa si
+        lascia cadere e si va avanti con le altre - restano vere una per una,
+        anche se il periodo ne esce piu' corto.
+
+        Se il modello non da' nemmeno una frase buona, si finisce col template:
+        chi ascolta non deve accorgersi che qualcosa non ha funzionato.
+        """
+        apertura = _apertura(f, self.lex, self.lingua)
+        if apertura:
+            yield apertura
+        if f.vuoto or self.genera is None:
+            yield from spezza_in_frasi(corpo_neutro(f, self.lex, self.lingua))
+            return
+
+        domanda = (prompt_addestrato(f, self.lingua) if self.modello_addestrato
+                   else prompt(f, lingua=self.lingua))
+        buone = scartate = 0
+        try:
+            for frase in a_frasi(self.genera_a_flusso(domanda)):
+                frase = _ripulisci(frase)
+                if not frase:
+                    continue
+                ok, invenzioni = verifica(frase, f, self.lingua)
+                if ok:
+                    buone += 1
+                    yield frase
+                else:
+                    scartate += 1
+                    log.warning("frase scartata, ha inventato: %s", invenzioni)
+        except Exception as e:                               # noqa: BLE001
+            log.warning("generazione a flusso fallita: %s", e)
+        if not buone:
+            # Nemmeno una frase buona: si racconta col template, e chi ascolta
+            # sente solo un racconto normale un po' piu' tardi.
+            log.info("nessuna frase dal modello (%d scartate): si va di template",
+                     scartate)
+            yield from spezza_in_frasi(corpo_neutro(f, self.lex, self.lingua))
+
+    def genera_a_flusso(self, domanda: str) -> Iterator[str]:
+        """Il modello a pezzi. Senza uno che li sappia dare, si da' tutto insieme."""
+        if (flusso := getattr(self, "_flusso", None)) is not None:
+            yield from flusso(domanda)
+        else:
+            yield self.genera(domanda) or ""
 
     def _dal_modello(self, f: Fatti) -> Racconto | None:
         """Genera e verifica. Un solo secondo tentativo, poi si rinuncia.
