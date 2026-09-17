@@ -201,6 +201,35 @@ class TestIlVersoDelFotogramma:
         modulo.Lettore().leggi_comunque(immagine)
         assert len(versi) == 1
 
+    def test_su_un_piatto_vuoto_non_si_gira_niente(self):
+        """Il vuoto è il piatto vuoto, ed è il caso più frequente di tutti.
+
+        Un verso sbagliato non dà il vuoto, dà spazzatura: `D'ABRUZZC` a 90
+        gradi, `3IMER · DRZZZO · CEAVOLO` a 180. Zero righe vuol dire che
+        davanti alla camera non c'è scritto niente, e girare il fotogramma non
+        ci scriverà nulla. Senza questa distinzione ogni scansione a vuoto
+        costava quattro passaggi di OCR invece di uno — sul dispositivo,
+        ventiquattro secondi contro sei, abbastanza da far scadere la scansione
+        e dichiarare un guasto al posto di un piatto vuoto.
+        """
+        from amelie import ocr as modulo
+
+        immagine = self._fotogramma()
+        versi = []
+
+        def finta(self, fotogramma):
+            versi.append(fotogramma.shape)
+            return modulo.Lettura(righe=[])
+
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(modulo.Lettore, "leggi", finta)
+        try:
+            letta = modulo.Lettore().leggi_comunque(immagine)
+        finally:
+            monkeypatch.undo()
+        assert letta.vuota
+        assert len(versi) == 1, "ha girato un fotogramma su cui non c'era nulla"
+
     def test_le_cifre_non_contano_come_parole(self):
         """Un calendario appeso dietro la bottiglia ne produce a decine, e su
         quelle il riconoscitore non ci fa niente."""

@@ -43,7 +43,7 @@ import logging
 import subprocess
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import cv2
@@ -91,6 +91,61 @@ class ImpostazioniCamera:
     esposizione: int = 900
     guadagno: int = 0
     temperatura_colore: int = 4600
+
+    # La posa di partenza vale per la stanza in cui si è misurata. In un locale
+    # la sera la stanza è un'altra, e la posa giusta cambia con lei: prima di
+    # ogni raffica si guarda quanta luce c'è davvero e si corregge.
+    #
+    # Misurato sul dispositivo nella scocca, con l'anello bianco e la luce
+    # della stanza SPENTA — che è la condizione di un ristorante a cena:
+    #
+    #      900   luce 47   `` (niente)
+    #     1500   luce 62   `` (niente)
+    #     2200   luce 76   `ULIEET · TEITLITHE`
+    #     3000   luce 88   `ULIGSA · TENUTH · CERASUOLO · D'ABRUZZO`
+    #     4000   luce 99   `ULISSE · TENLITA · CERASUOLO · D'ABRUZZO`
+    #
+    # A 900 — la posa che il dispositivo aveva — non si legge NIENTE. A 3000
+    # compare la denominazione, a 4000 anche il nome del produttore, che è
+    # quello che decide se il racconto sarà del vino o della cantina.
+    #
+    # Novanta è il bersaglio, e la tolleranza tiene la banda fra 82 e 98:
+    # sotto, la lettura si sfalda («ULIEET · TEITLITHE» a luce 76, e a 80 il
+    # nome del produttore comincia a perdersi), sopra si brucerebbe
+    # un'etichetta bianca in una sala illuminata.
+    luce_cercata: float = 90.0
+    luce_tollerata: float = 8.0
+    # Quante correzioni al massimo, e quanto è ripida la correzione.
+    #
+    # La luce NON è proporzionale alla posa: il sensore satura sui punti
+    # chiari, e raddoppiare il tempo non raddoppia la media. Misurato su
+    # questa camera, stessa scena, quattro pose:
+    #
+    #      900   luce 47
+    #     2000   luce 73
+    #     3000   luce 89
+    #     4000   luce 99
+    #
+    # che è `luce ∝ posa^0,54`. Correggere in proporzione diretta, come
+    # verrebbe naturale, sottostima ogni volta: da 47 a 90 servirebbero tre
+    # giri, e il primo tentativo fatto così finiva sempre contro il tetto.
+    #
+    # L'esponente qui è 1,5 e non 1,85 — cioè meno di quanto la misura
+    # chiederebbe — perché quel 0,54 è una proprietà della scena, non solo
+    # della camera: una scena senza punti chiari risponde quasi in modo
+    # lineare, e la correzione piena la brucerebbe. Con 1,5 si arriva in uno o
+    # due giri in tutti e due i casi, senza mai passare oltre.
+    ritocchi_posa: int = 3
+    esponente_posa: float = 1.5
+    # Quanti fotogrammi passano prima che la posa nuova si veda. MISURATO, ed è
+    # esattamente tre, nei due versi: senza buttarli, ogni giro rimisura la
+    # posa vecchia e le correzioni si sommano fino al tetto.
+    fotogrammi_di_ritardo: int = 3
+    # I due estremi entro cui si può andare. Sotto il minimo non si legge
+    # nemmeno in pieno giorno; sopra il massimo la raffica costa più del
+    # racconto, e una bottiglia che oscilla viene mossa.
+    posa_minima: int = 300
+    posa_massima: int = 4000
 
     # Raffica. Erano cinque e cinque, scelti quando un fotogramma costava 30 ms.
     # A 90 ms costavano un secondo intero, e la scena è FERMA: bottiglia e
@@ -414,7 +469,6 @@ class PresenzaOttica:
         sempre. Si butta, e si tornerà a conoscerlo quando la bottiglia verrà
         tolta.
         """
-
         self.presente = True
         self._sfondo = self._scena = None
         self._diverse = self._uguali = 0
@@ -533,6 +587,11 @@ def blocca_esposizione(imp: ImpostazioniCamera, device: str | None = None) -> No
     )
 
 
+def imposta_posa(device: str, centesimi_di_ms: int) -> None:
+    """Cambia il solo tempo di posa, lasciando stare tutto il resto."""
+    _v4l2(device, f"exposure_time_absolute={centesimi_di_ms}")
+
+
 class Camera:
     """Apre il device solo per il tempo dello scatto.
 
@@ -589,6 +648,12 @@ class Camera:
         # Un buffer corto riduce, ma non elimina, i fotogrammi vecchi: lo
         # scarto esplicito qui sotto resta necessario.
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        # La posa si riafferma a ogni accensione. Alcuni driver UVC
+        # reimpostano i controlli quando il device si riapre, e la ricerca
+        # della posa fa i suoi conti a partire da quella che CREDE di avere:
+        # se l'hardware ne ha un'altra, il primo passo va nella direzione
+        # giusta ma della misura sbagliata.
+        imposta_posa(self.percorso, self.imp.esposizione)
         self._cap = cap
         return cap
 
@@ -646,6 +711,60 @@ class Camera:
             return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
         return frame
 
+    def _cerca_la_posa(self, cap) -> float:
+        """Regola il tempo di posa sulla luce che c'è davvero, ora, qui.
+
+        La posa fissa era la scelta giusta e resta giusta: con
+        l'auto-esposizione servono 500-800 ms di assestamento dopo ogni cambio
+        di luce e i risultati non sono ripetibili. Ma «fissa» voleva dire fissa
+        alla stanza in cui si è misurata, e il dispositivo va in una sala che
+        la sera abbassa le luci. Misurato al buio con l'anello bianco, a posa
+        900 l'OCR non leggeva **niente**; a 3000 leggeva la denominazione.
+
+        Quindi la posa resta manuale — si sa sempre qual è e non cambia durante
+        la raffica — ma si sceglie guardando: un fotogramma, la sua luce media,
+        un ritocco. Il sensore satura sui punti chiari, quindi la risposta non
+        è lineare e un giro solo sottostima sempre: la correzione tiene conto
+        della curva misurata, e i giri sono al massimo tre. Ognuno costa un
+        fotogramma da misurare più i tre che il driver impiega ad applicare la
+        posa nuova — anche questo misurato, ed è esattamente tre.
+
+        La posa trovata si ricorda: la bottiglia dopo arriva nella stessa sala,
+        e quasi sempre il primo fotogramma è già dentro la banda buona.
+
+        In una sala illuminata il ritocco va nell'altro verso e la raffica
+        costa meno di prima.
+        """
+        imp = self.imp
+        luce = 0.0
+        posa = imp.esposizione
+        for _ in range(imp.ritocchi_posa):
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                return luce
+            # Si misura sul ritaglio, che e' quello che vedra' l'OCR: gli
+            # angoli scuri del fotogramma intero abbasserebbero la media di
+            # una luce che sull'etichetta c'e'.
+            luce = float(cv2.cvtColor(ritaglia_centro(frame, imp.ritaglio),
+                                      cv2.COLOR_BGR2GRAY).mean())
+            if abs(luce - imp.luce_cercata) <= imp.luce_tollerata:
+                break
+            nuova = int(posa * (imp.luce_cercata / max(luce, 1.0))
+                        ** imp.esponente_posa)
+            nuova = max(imp.posa_minima, min(imp.posa_massima, nuova))
+            if nuova == posa:
+                break
+            imposta_posa(self.percorso, nuova)
+            posa = nuova
+            for _ in range(imp.fotogrammi_di_ritardo):
+                cap.grab()
+        if posa != imp.esposizione:
+            # Si ricorda: la prossima bottiglia arriva nella stessa sala, e
+            # partire dalla posa giusta vuol dire non doverla cercare.
+            log.info("posa %d -> %d (luce %.0f)", imp.esposizione, posa, luce)
+            self.imp = replace(imp, esposizione=posa)
+        return luce
+
     def scatta(self, *, attesa_luce: float | None = None) -> Scatto:
         """Esegue una raffica e restituisce il fotogramma più nitido.
 
@@ -659,6 +778,7 @@ class Camera:
             cap = self._apri()
             if attesa > 0:
                 time.sleep(attesa)
+            self._cerca_la_posa(cap)
 
             scartati = 0
             for _ in range(self.imp.fotogrammi_da_scartare):

@@ -267,6 +267,116 @@ class TestPresenzaOttica:
         assert self.posa(p, self.con_bottiglia()) is False   # ora e' lo sfondo
 
 
+class TestLaPosaSiCerca:
+    """La posa fissa era fissa alla stanza in cui è stata misurata.
+
+    Misurato sul dispositivo, al buio, con l'anello bianco: a posa 900 l'OCR
+    non leggeva NIENTE; a 3000 leggeva la denominazione. Una sala che la sera
+    abbassa le luci è la condizione normale, non un caso limite.
+    """
+
+    class CameraFinta:
+        """Una camera in cui la luce segue la posa come su quella vera.
+
+        `luce ∝ posa^0,54`, misurata: 900→47, 2000→73, 3000→89, 4000→99. E la
+        posa nuova si vede solo dopo tre fotogrammi, anche questo misurato.
+        """
+
+        def __init__(self, posa=900, ritardo=3, esponente=0.54):
+            self.posa = self.in_arrivo = posa
+            self.ritardo, self.esponente = ritardo, esponente
+            self.coda = 0
+            self.letti = 0
+
+        def imposta(self, posa):
+            self.in_arrivo, self.coda = posa, self.ritardo
+
+        def _avanza(self):
+            if self.coda:
+                self.coda -= 1
+                if not self.coda:
+                    self.posa = self.in_arrivo
+
+        def grab(self):
+            self._avanza()
+            return True
+
+        def read(self):
+            self._avanza()
+            self.letti += 1
+            luce = 47.0 * (self.posa / 900.0) ** self.esponente
+            return True, np.full((100, 200, 3), min(255, luce), dtype=np.uint8)
+
+    def cerca(self, partenza=900, **extra):
+        from amelie.capture import Camera
+
+        imp = ImpostazioniCamera(esposizione=partenza, ritaglio=1.0, **extra)
+        c = Camera(imp)
+        c._percorso = "/dev/finto"
+        finta = self.CameraFinta(posa=partenza)
+        applicate = []
+
+        import amelie.capture as modulo
+        vero = modulo.imposta_posa
+        modulo.imposta_posa = lambda _d, p: (applicate.append(p), finta.imposta(p))
+        try:
+            luce = c._cerca_la_posa(finta)
+        finally:
+            modulo.imposta_posa = vero
+        return c, finta, applicate, luce
+
+    def test_al_buio_la_posa_sale_e_la_luce_arriva_a_bersaglio(self):
+        c, _, applicate, luce = self.cerca(900)
+        assert applicate, "da 47 di luce non ha corretto niente"
+        atteso = ImpostazioniCamera().luce_cercata
+        assert abs(luce - atteso) <= ImpostazioniCamera().luce_tollerata
+        assert c.imp.esposizione > 900
+
+    def test_in_piena_luce_la_posa_scende(self):
+        """Il ritocco va nei due versi: in una sala illuminata la raffica
+        finisce per costare meno di prima, non di più."""
+        c, _, applicate, _ = self.cerca(4000)
+        assert applicate and applicate[-1] < 4000
+        assert c.imp.esposizione < 4000
+
+    def test_se_la_luce_e_gia_giusta_non_si_tocca_niente(self):
+        """La seconda bottiglia della sera: un fotogramma e via."""
+        c, finta, applicate, _ = self.cerca(2900)
+        assert applicate == [], "ha corretto una posa che andava bene"
+        assert finta.letti == 1, "un fotogramma solo per dire che va bene"
+        assert c.imp.esposizione == 2900
+
+    def test_non_si_esce_dagli_estremi(self):
+        """Sotto il minimo non si legge nemmeno di giorno; sopra il massimo la
+        raffica dura più del racconto."""
+        imp = ImpostazioniCamera()
+        c, _, applicate, _ = self.cerca(900)
+        for p in applicate:
+            assert imp.posa_minima <= p <= imp.posa_massima
+
+    def test_il_ritardo_del_driver_non_manda_la_correzione_al_tetto(self):
+        """Il difetto vero, e costava il tetto ogni volta.
+
+        Il driver applica la posa nuova dopo tre fotogrammi. Chi rimisura prima
+        legge ancora la posa vecchia, corregge una seconda volta nello stesso
+        verso, e finisce contro l'estremo qualunque fosse la luce.
+        """
+        c, _, applicate, _ = self.cerca(900)
+        assert applicate[-1] < ImpostazioniCamera().posa_massima, (
+            "la ricerca e' finita contro il tetto: sta rimisurando la posa vecchia")
+
+    def test_una_camera_che_non_da_fotogrammi_non_blocca_lo_scatto(self):
+        from amelie.capture import Camera
+
+        class Muta:
+            def read(self): return False, None
+            def grab(self): return False
+
+        c = Camera(ImpostazioniCamera())
+        c._percorso = "/dev/finto"
+        assert c._cerca_la_posa(Muta()) == 0.0
+
+
 class TestLoSfondoSiRicorda:
     """Il piatto vuoto è una proprietà dell'installazione, non del processo."""
 

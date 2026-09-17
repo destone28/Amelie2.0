@@ -230,6 +230,17 @@ class Lettore:
         migliore = self.leggi(immagine)
         if _parole_utili(migliore) >= self.imp.parole_che_bastano:
             return migliore
+        if migliore.vuota:
+            # NIENTE, nemmeno un frammento: davanti alla camera non c'è
+            # scritto niente, e girare il fotogramma non ci scriverà nulla.
+            # Il verso sbagliato non dà il vuoto, dà spazzatura - misurato:
+            # `D'ABRUZZC` a 90 gradi, `3IMER · DRZZZO · CEAVOLO` a 180. Il
+            # vuoto è il piatto vuoto, ed è il caso più frequente di tutti:
+            # senza questa riga ogni scansione a vuoto costava quattro
+            # passaggi di OCR invece di uno, e sul dispositivo sono ventiquattro
+            # secondi contro sei - abbastanza da far scadere la scansione e
+            # dichiarare un guasto al posto di un piatto vuoto.
+            return migliore
         for codice in (cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180,
                        cv2.ROTATE_90_COUNTERCLOCKWISE):
             altra = self.leggi(cv2.rotate(immagine, codice))
