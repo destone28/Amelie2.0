@@ -181,6 +181,13 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
     invenzioni.extend(_vitigni_che_non_lo_sono(testo, fatti, lingua))
     if contraddizione := _categoria_sbagliata(testo, fatti, ammesso):
         invenzioni.append(contraddizione)
+    # Seconda rilettura, dopo la prima stretta: «da servire con amarena,
+    # prugna o tannino morbido», «nasce dall'incontro di mela verde e fiori
+    # bianchi, il vitigno Prosecco», «gradevole, fine, delicato, delicate».
+    # Le note olfattive finivano nei posti delle uve e dei cibi, in
+    # minuscolo, dove il controllo sui nomi propri non guarda.
+    invenzioni.extend(_note_al_posto_sbagliato(testo, fatti, lingua))
+    invenzioni.extend(_parole_ripetute(testo))
 
     return (not invenzioni), invenzioni
 
@@ -261,8 +268,12 @@ _CONTESTO_VITIGNI = re.compile(
     # «dall'incontro»: dopo l'apostrofo non c'e' spazio, e la prima versione
     # di questa espressione lo pretendeva - e non prendeva proprio la frase
     # che l'ha fatta nascere.
+    # L'elenco delle uve finisce alla prima virgola o a un «con»/«che»: dopo
+    # comincia un'altra cosa - «Nasce dal Sangiovese, con note di amarena» ha
+    # l'amarena al posto giusto, e il controllo non deve leggerla come uva.
     r"(?:nasce\s+(?:dall'|dalla\s+|dalle\s+|dal\s+|dai\s+)\s*(?:solo\s+|incontro\s+di\s+)?"
-    r"|vitign[oi]\s+|uv[ae]\s+(?:di\s+)?|grapes?\s+|from\s+the\s+)([^.;:!?]*)", re.I)
+    r"|vitign[oi]\s+|uv[ae]\s+(?:di\s+)?|grapes?\s+|from\s+the\s+)"
+    r"((?:(?!\s+(?:con|che|with|which)\s)[^.;:!?,])*)", re.I)
 _UN_VITIGNO = re.compile(r"\b(un|a)\s+(?:grande\s+)?(vitigno|grape)\b", re.I)
 
 
@@ -296,6 +307,47 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
             if v and v in prima and not any(v in u for u in uve):
                 fuori.append(f"«{v}» detto vitigno, ma e' il vino")
     return fuori
+
+
+# Dove un testo dice con che cosa si beve: quel che segue e' un elenco di cibi.
+_CONTESTO_ABBINAMENTI = re.compile(
+    r"(?:si\s+accompagna\s+(?:bene\s+)?(?:a|con)\s+|da\s+(?:servire|accompagnare|abbinare)\s+con\s+"
+    r"|(?:ideale|perfett[oa]|adatt[oa])\s+(?:per|su|a|con)\s+|abbinat[oa]\s+a\s+"
+    r"|pairs?\s+(?:well\s+)?with\s+|serve\s+with\s+)([^.;:!?]*)", re.I)
+_TANNINO = re.compile(r"\btannin\w*", re.I)
+
+
+def _note_al_posto_sbagliato(testo: str, fatti: Fatti, lingua: str) -> list[str]:
+    """Note olfattive dette come uve o come cibi.
+
+    In minuscolo: il controllo sui nomi propri non le vede, e il modello le
+    scrive cosi'. «Nasce dall'incontro di mela verde e fiori bianchi» e «da
+    servire con amarena, prugna o tannino morbido» sono frasi fatte di parole
+    dei fatti, messe dove non possono stare.
+    """
+    note = {_senza_accenti(n).lower()
+            for n in list(fatti.note_sensoriali) + list(fatti.sensoriali_in(lingua))}
+    note = {n for n in note if len(n) >= 4}
+    fuori: list[str] = []
+    for contesto, dove in ((_CONTESTO_VITIGNI, "vitigno"),
+                           (_CONTESTO_ABBINAMENTI, "cibo")):
+        for m in contesto.finditer(testo):
+            pezzo = _senza_accenti(m.group(1)).lower()
+            for n in note:
+                if re.search(r"\b" + re.escape(n) + r"\b", pezzo):
+                    fuori.append(f"«{n}» detta come {dove}")
+            if dove == "cibo" and _TANNINO.search(pezzo):
+                fuori.append("tannino servito come cibo")
+    return fuori
+
+
+_RIPETUTA = re.compile(r"\b(\w{4,})\W+\1\b", re.I)
+
+
+def _parole_ripetute(testo: str) -> list[str]:
+    """«delicato, delicate», «bella acidita' e buona acidita'»: il modello che
+    gira a vuoto. Una parola ripetuta di seguito non e' una frase."""
+    return [f"ripetizione: {m.group(0)}" for m in _RIPETUTA.finditer(testo)]
 
 
 _SPUMANTE = re.compile(r"\b(spumante|frizzante|bollicin\w*|perlage|sparkling|bubbles?)\b", re.I)

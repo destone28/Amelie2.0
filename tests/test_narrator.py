@@ -935,3 +935,47 @@ class TestAncheLaCacheSiVerifica:
             assert "Borgognone" not in r.testo
         finally:
             n.chiudi()
+
+
+class TestLeNoteOlfattiveNonSonoNeUveNeCibi:
+    """Seconda rilettura, dopo la prima stretta: le note finivano nei posti
+    delle uve e dei cibi, in minuscolo, dove i nomi propri non si guardano."""
+
+    def _fatti(self, **kw):
+        from amelie.matcher import Fatti, Livello
+        return Fatti(livello=Livello.TIPOLOGIA, sicurezza=85.0, **kw)
+
+    def test_mela_verde_non_e_un_vitigno(self):
+        from amelie.narrator import verifica
+
+        f = self._fatti(tipologia="Prosecco", colore="Bianco", vitigni=["Glera"],
+                        note_sensoriali=["mela verde", "fiori bianchi"])
+        ok, inv = verifica("Nasce dall'incontro di mela verde e fiori bianchi, "
+                           "il vitigno Prosecco.", f)
+        assert not ok and any("vitigno" in x for x in inv)
+
+    def test_l_amarena_non_si_serve_a_tavola(self):
+        from amelie.narrator import verifica
+
+        f = self._fatti(tipologia="Cerasuolo d'Abruzzo", colore="Rosato",
+                        vitigni=["Montepulciano"], note_sensoriali=["amarena", "prugna"],
+                        abbinamenti=["pizza"])
+        ok, inv = verifica("Da servire con amarena, prugna o tannino morbido.", f)
+        assert not ok
+        assert any("cibo" in x for x in inv) and any("tannino" in x for x in inv)
+
+    def test_ma_le_note_al_naso_passano(self):
+        from amelie.narrator import verifica
+
+        f = self._fatti(tipologia="Cerasuolo d'Abruzzo", colore="Rosato",
+                        vitigni=["Montepulciano"], note_sensoriali=["amarena", "prugna"],
+                        abbinamenti=["pizza"])
+        ok, inv = verifica("Al naso amarena e prugna. Si accompagna bene a pizza.", f)
+        assert ok, inv
+
+    def test_una_parola_ripetuta_di_seguito(self):
+        from amelie.narrator import verifica
+
+        f = self._fatti(tipologia="Nero d'Avola", colore="Rosso")
+        ok, inv = verifica("In bocca è gradevole, delicato, delicato, fruttato.", f)
+        assert not ok and any("ripetizione" in x for x in inv)
