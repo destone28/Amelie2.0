@@ -230,6 +230,36 @@ class TestIlVersoDelFotogramma:
         assert letta.vuota
         assert len(versi) == 1, "ha girato un fotogramma su cui non c'era nulla"
 
+    def test_su_una_parete_piena_di_scritte_non_si_gira_niente(self):
+        """Tante righe non sono un'etichetta girata male: sono una parete.
+
+        Misurato sul dispositivo, bottiglia tolta e un calendario dietro:
+        trentotto righe di numeri e 39 secondi per leggerle. Girare altre tre
+        volte vorrebbe dire due minuti e mezzo, e per niente — qualunque verso,
+        quella parete resta piena di scritte.
+        """
+        from amelie import ocr as modulo
+
+        immagine = self._fotogramma()
+        versi = []
+
+        def finta(self, fotogramma):
+            versi.append(fotogramma.shape)
+            # cifre: nessuna conta come parola utile, quindi il raccolto e'
+            # «povero» e senza questa regola si girerebbe
+            return modulo.Lettura(righe=[
+                modulo.Riga(testo=str(10 + k), confidenza=0.9)
+                for k in range(38)])
+
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(modulo.Lettore, "leggi", finta)
+        try:
+            letta = modulo.Lettore().leggi_comunque(immagine)
+        finally:
+            monkeypatch.undo()
+        assert len(letta.righe) == 38
+        assert len(versi) == 1, "ha girato un fotogramma pieno di scritte"
+
     def test_le_cifre_non_contano_come_parole(self):
         """Un calendario appeso dietro la bottiglia ne produce a decine, e su
         quelle il riconoscitore non ci fa niente."""

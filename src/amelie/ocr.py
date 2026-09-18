@@ -61,6 +61,11 @@ class ImpostazioniOCR:
     # riconoscere.
     parole_che_bastano: int = 3
 
+    # Oltre quante righe si smette di cercare un verso migliore. Un'etichetta
+    # letta bene ne da' tre o cinque, un verso sbagliato una o tre: sopra otto
+    # non si sta guardando un'etichetta, si sta guardando una stanza.
+    righe_che_bastano: int = 8
+
     # Il classificatore di orientamento. Era spento, con la motivazione che la
     # bottiglia sta in piedi e il testo non può essere capovolto.
     #
@@ -229,6 +234,15 @@ class Lettore:
 
         migliore = self.leggi(immagine)
         if _parole_utili(migliore) >= self.imp.parole_che_bastano:
+            return migliore
+        if len(migliore.righe) >= self.imp.righe_che_bastano:
+            # Tante righe non sono un'etichetta girata male: sono una PARETE.
+            # Misurato sul dispositivo con la bottiglia tolta e un calendario
+            # dietro: trentotto righe di numeri e **39 secondi** per leggerle,
+            # perche' ogni regione trovata passa poi dal modello che la
+            # riconosce. Girare il fotogramma altre tre volte vorrebbe dire
+            # due minuti e mezzo, e il verso non c'entra niente - qualunque
+            # verso, quella parete resta piena di scritte.
             return migliore
         if migliore.vuota:
             # NIENTE, nemmeno un frammento: davanti alla camera non c'è

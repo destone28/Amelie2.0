@@ -102,7 +102,14 @@ DURATE_S: dict[Stato, float | None] = {
     # Nessuno stato che dipende da un thread puo' restare senza tetto: se il
     # lavoro non torna, la macchina resterebbe li' per sempre con il calice che
     # gira. Succede davvero, togliendo e rimettendo la bottiglia mentre parla.
-    Stato.SCANSIONE: 25.0,
+    # Cinquanta secondi, ed e' un cane da guardia, non un limite di qualita':
+    # deve scattare quando il lavoro NON torna, mai sul lavoro piu' lento che
+    # puo' tornare davvero. Era 25, e scattava: misurato sul dispositivo, un
+    # fotogramma pieno di scritte - un calendario dietro al piatto vuoto - da'
+    # trentotto righe e **39 secondi** di OCR, perche' ogni regione trovata
+    # passa poi dal modello che la riconosce. Piu' lo scatto, che con la luce
+    # cambiata arriva a otto. Il tetto sta sopra la somma delle due.
+    Stato.SCANSIONE: 50.0,
     Stato.RICONOSCIMENTO: 15.0,
     # Se nessuno tocca lo schermo si prende il primo candidato: meglio
     # raccontare il vino più probabile che restare fermi.
