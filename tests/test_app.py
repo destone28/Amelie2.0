@@ -236,6 +236,15 @@ class TestCicloCompleto:
                 return Scatto(immagine=np.zeros((8, 8, 3), dtype=np.uint8),
                               nitidezza=420.0)
 
+            # La via normale: la camera e' gia' in moto e lo scatto si prende
+            # dal flusso invece di farlo.
+            def al_volo(self, **_):
+                return self.scatta()
+
+            def sorveglia(self): pass
+            def sbircia(self): return None
+            riquadro = None
+
         class LettoreFinto:
             def __init__(self, righe): self.righe = righe
             def leggi(self, _immagine):
@@ -1109,6 +1118,9 @@ class TestLuceDelloScatto:
             from amelie.capture import CameraNonDisponibile
             raise CameraNonDisponibile("staccata")
 
+        def al_volo(self, **_):
+            return None
+
     class CameraFinta:
         """Registra il colore dell'anello NELL'ISTANTE dello scatto.
 
@@ -1130,6 +1142,11 @@ class TestLuceDelloScatto:
             anelli = [p for m, p in self.ponte.comandi if m == "set_anello"]
             self.acceso_quando_ho_scattato = anelli[-1] if anelli else None
             return Scatto(immagine=None, nitidezza=99.0)
+
+        # Il guardiano non gira: la camera vera risponde `None`, e si passa
+        # dalla raffica. E' la condizione di questi test.
+        def al_volo(self, **_):
+            return None
 
     def _amelie(self, fabbrica_camera):
         a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
@@ -1191,6 +1208,43 @@ class TestLuceDelloScatto:
                 "la raffica dev'essere avvenuta con la luce accesa"
             assert colori[-1] == ambra, \
                 "dopo lo scatto l'ambra deve tornare subito, prima dell'OCR"
+        finally:
+            a.matcher.chiudi()
+            a.narratore.chiudi()
+
+    def test_senza_raffica_non_c_e_nessun_lampo(self):
+        """Quando la camera e' gia' in moto, l'anello non si tocca.
+
+        Il bianco serviva a illuminare una raffica; se la raffica non c'e', un
+        bianco alzato e riabbassato un decimo dopo e' un lampo che non
+        illumina niente. E costa: cinque livelli su 255, misurati, contro i
+        quaranta che da' la posa.
+        """
+        from amelie.bridge import BIANCO_SCATTO
+        from amelie.capture import Scatto
+
+        class CameraInMoto:
+            def __init__(self, _ponte):
+                from amelie.capture import ImpostazioniCamera
+                self.imp = ImpostazioniCamera()
+
+            def al_volo(self, **_):
+                return Scatto(immagine=None, nitidezza=99.0)
+
+            def scatta(self, **_):
+                raise AssertionError("non si deve arrivare alla raffica")
+
+        a = self._amelie(CameraInMoto)
+        try:
+            try:
+                a._scatta_e_leggi()
+            except Exception:                               # noqa: BLE001
+                pass
+            bianco = (BIANCO_SCATTO.r, BIANCO_SCATTO.g, BIANCO_SCATTO.b,
+                      BIANCO_SCATTO.luminosita)
+            colori = [p for m, p in a.ponte.comandi if m == "set_anello"]
+            assert bianco not in colori, \
+                "lo scatto al volo non deve accendere l'anello"
         finally:
             a.matcher.chiudi()
             a.narratore.chiudi()

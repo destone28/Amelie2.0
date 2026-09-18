@@ -208,8 +208,16 @@ class TestCoerenzaDelleTabelle:
                     f"{stato} scade dopo {durata}s ma non gestisce SCADENZA"
                 )
 
-    def test_assestamento_abbastanza_lungo_da_fermare_l_oscillazione(self):
-        assert 0.4 <= DURATE_S[Stato.ASSESTAMENTO] <= 1.0
+    def test_l_assestamento_non_si_aspetta_piu_a_occhi_chiusi(self):
+        """Era 0,6 s spesi sempre, per il caso peggiore.
+
+        Adesso la camera resta in moto e lo scatto si prende dal flusso
+        tenendo il primo fotogramma abbastanza nitido: l'oscillazione la si
+        guarda, e chi appoggia la bottiglia piano non la paga. Quello che resta
+        qui e' solo il tempo perche' la schermata non sia un lampo e perche'
+        la mano esca dall'inquadratura.
+        """
+        assert 0.1 <= DURATE_S[Stato.ASSESTAMENTO] <= 0.25
 
 
 class TestRientro:

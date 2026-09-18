@@ -44,6 +44,7 @@ from typing import Any
 from .bridge import (
     AMBRA, BIANCO_SCATTO, ROSSO, SPENTO, VERDE,
     Colore, ErroreMCU, Ponte, PonteNonDisponibile, PonteSimulato,
+    Presenza as PresenzaDistanza,
 )
 from .capture import (
     Camera, CameraNonDisponibile, PresenzaOttica, blocca_esposizione,
@@ -179,7 +180,13 @@ class Configurazione:
     modello_addestrato: bool = False
     device_audio: str = "plughw:0,3"
     porta: int = 8080
-    periodo_sensore_s: float = 0.15
+    # Il battito. Era 0,15 s, ed e' sceso perche' adesso e' lui a vedere
+    # arrivare la bottiglia: il sensore di distanza risponde in sei millesimi e
+    # vuole tre letture d'accordo per dire che c'e' qualcuno, quindi il ritardo
+    # dell'innesco e' tre battiti. A 0,15 erano quattrocentocinquanta
+    # millesimi, meta' del secondo che abbiamo in tutto; a 0,05 sono
+    # centocinquanta, e costano il dodici per cento di un core a non far niente.
+    periodo_sensore_s: float = 0.05
     # Ogni quanto si guarda il piatto. Non e' il battito: il battito resta a
     # 0,15 s perche' fa scadere i timer, e una sbirciata costa novanta
     # millesimi di camera. Mezzo secondo vuol dire accorgersi di una bottiglia
@@ -204,7 +211,23 @@ class Amelie:
         self.cfg = cfg
         self.macchina = Macchina(su_transizione=self._su_transizione)
         self.ponte: Ponte = PonteSimulato() if cfg.simula_mcu else Ponte()
+        # Due modi di accorgersi della bottiglia, e fanno due lavori diversi.
+        #
+        # Il sensore di distanza dice QUANDO, e lo dice in millesimi: e' lui
+        # l'innesco, perche' e' l'unico abbastanza rapido perche' il testo
+        # compaia entro un secondo da quando il vetro tocca il piatto.
+        #
+        # La camera dice DOVE, e continua a servire: e' da lei che viene il
+        # riquadro dell'etichetta, che cambia con la forma della bottiglia. Ed
+        # e' il ripiego quando il sensore non risponde - un Modulino scollegato
+        # non deve rendere cieco il dispositivo.
         self.presenza = PresenzaOttica()
+        self.distanza = PresenzaDistanza()
+        # Se il sensore ha mai risposto. Finche' non risponde si guarda, e se
+        # smette di rispondere si torna a guardare.
+        self._sensore_risponde = False
+        # Quando la bottiglia e' comparsa: lo scatto deve essere di DOPO.
+        self._apparsa = 0.0
         self.camera = None if cfg.senza_camera else Camera()
         self.lettore = None if cfg.senza_camera else Lettore()
         self.giornale = Giornale(CARTELLA_GIORNALE)
@@ -1131,29 +1154,39 @@ class Amelie:
         # la macchina a stati, che è l'unica a sapere dove si sta andando.
         #
         # E si rimette SUBITO dopo la raffica, non alla fine del metodo: dopo
-        # c'è l'OCR, che dura quattro secondi, e quattro secondi di bianco pieno
-        # sotto una bottiglia non sono una luce, sono un lampeggiante.
-        try:
-            self.ponte.anello(BIANCO_SCATTO)
-        except (PonteNonDisponibile, ErroreMCU):
-            # Un anello che non si accende costa una foto piu' scura, non una
-            # scansione fallita: e' la stessa regola con cui `_esegui` protegge
-            # tutti gli effetti. Senza ErroreMCU, un firmware vecchio che non
-            # conosce `set_anello` trasformava ogni scatto in un guasto.
-            pass
-        try:
-            scatto = self.camera.scatta()
-        except CameraNonDisponibile as e:
-            log.error("camera: %s", e)
-            self.macchina.invia(Evento.ERRORE)
-            return
-        else:
-            colore = self._colore_dello_stato()
-            if colore is not None:
-                try:
-                    self.ponte.anello(colore)
-                except (PonteNonDisponibile, ErroreMCU):
-                    pass
+        # c'è l'OCR, e mezzo secondo di bianco pieno sotto una bottiglia è un
+        # lampeggiante, non una luce.
+        #
+        # Tutto questo vale però solo per la raffica. Quando la camera è già in
+        # moto non c'è nessuna raffica da illuminare: il fotogramma buono è
+        # quello che sta arrivando comunque, ed è stato esposto con la luce che
+        # c'era. Alzare l'anello per poi riabbassarlo un decimo dopo sarebbe un
+        # lampo che non illumina niente — cinque livelli su 255, misurati,
+        # contro i quaranta che dà la posa.
+        scatto = self.camera.al_volo(dopo=self._apparsa)
+        if scatto is None:
+            try:
+                self.ponte.anello(BIANCO_SCATTO)
+            except (PonteNonDisponibile, ErroreMCU):
+                # Un anello che non si accende costa una foto piu' scura, non
+                # una scansione fallita: e' la stessa regola con cui `_esegui`
+                # protegge tutti gli effetti. Senza ErroreMCU, un firmware
+                # vecchio che non conosce `set_anello` trasformava ogni scatto
+                # in un guasto.
+                pass
+            try:
+                scatto = self.camera.scatta()
+            except CameraNonDisponibile as e:
+                log.error("camera: %s", e)
+                self.macchina.invia(Evento.ERRORE)
+                return
+            else:
+                colore = self._colore_dello_stato()
+                if colore is not None:
+                    try:
+                        self.ponte.anello(colore)
+                    except (PonteNonDisponibile, ErroreMCU):
+                        pass
 
         try:
             lettura = self.lettore.leggi_comunque(scatto.immagine)
@@ -1626,6 +1659,9 @@ class Amelie:
         if ora != c_era:
             if ora:
                 self._tentativi = 0     # bottiglia nuova, si riparte da capo
+                # Lo scatto dovra' essere di DOPO questo istante: un fotogramma
+                # di prima mostra il piatto vuoto, o una mano che scende.
+                self._apparsa = time.monotonic()
             else:
                 # Tolta la bottiglia, la prossima e' un'altra storia.
                 self._bottiglia_chiusa = False
@@ -1653,27 +1689,66 @@ class Amelie:
             self.macchina.invia(Evento.SCADENZA)
 
     async def _chi_c_e(self) -> bool:
-        """Guarda il piatto, se e' il momento, e dice se c'e' una bottiglia.
+        """Dice se c'e' una bottiglia, e intanto guarda dov'e'.
 
-        Fra una sbirciata e l'altra non si cambia idea: il battito e' otto
-        volte piu' fitto perche' deve far scadere i timer, non perche' serva
-        guardare otto volte al secondo.
+        Chi decide e' il sensore di distanza, a ogni battito: sei millesimi, e
+        tre letture d'accordo bastano. La camera continua a guardare al suo
+        passo — mezzo secondo — ma non per decidere: per sapere DOVE sta
+        l'etichetta e per restare pronta a decidere lei, se il sensore tace.
         """
         if self._bottiglia_finta is not None:
             return self.presenza.aggiorna_a_mano(self._bottiglia_finta)
+        deciso = self._lo_dice_il_sensore()
+        await self._guarda_il_piatto()
+        return deciso if deciso is not None else self.presenza.presente
+
+    def _lo_dice_il_sensore(self) -> bool | None:
+        """La presenza secondo il Modulino Distance, o `None` se non risponde.
+
+        `None` non e' «non c'e' nessuno»: e' «questo sensore non sta dicendo
+        niente», e allora decide la camera. Un Modulino scollegato o un
+        firmware vecchio devono costare una scansione piu' lenta, non un
+        dispositivo cieco.
+        """
+        try:
+            mm = self.ponte.distanza_mm()
+        except (PonteNonDisponibile, ErroreMCU):
+            mm = None
+        if mm is None:
+            if self._sensore_risponde:
+                # Ha risposto e ha smesso: si lascia decidere alla camera
+                # invece di credere a un silenzio.
+                log.warning("il sensore di distanza non risponde piu'")
+                self._sensore_risponde = False
+                self.distanza.reimposta()
+            return None
+        self._sensore_risponde = True
+        return self.distanza.aggiorna(mm)
+
+    async def _guarda_il_piatto(self) -> None:
+        """La sbirciata: non decide piu' niente, ma serve ancora a due cose.
+
+        Il riquadro dell'etichetta, che dipende dalla forma della bottiglia, e
+        lo sfondo del piatto vuoto, che e' il ripiego quando il sensore tace.
+        """
         if self.camera is None:
-            return self.presenza.presente
+            return
+        if self._va_sorvegliata():
+            # Si richiama a ogni giro apposta: e' un no-op se gira gia', e
+            # rimette in moto lo stream dopo il racconto, che lo spegne.
+            self.camera.sorveglia()
         ora = time.monotonic()
         if ora < self._prossima_sbirciata:
-            return self.presenza.presente
+            return
         self._prossima_sbirciata = ora + self.cfg.periodo_sbirciata_s
-        # In un thread: novanta millesimi di camera fermerebbero anche le
-        # pagine che il tablet sta caricando.
+        # In un thread: col guardiano acceso la sbirciata e' gia' li' e costa
+        # la conversione in grigio, ma senza sono novanta millesimi di camera,
+        # e fermerebbero anche le pagine che il tablet sta caricando.
         fascia = await asyncio.to_thread(self.camera.sbircia)
         if fascia is None:
             # La camera sta scattando, o non ha dato il fotogramma. Una
             # sbirciata saltata non e' un'informazione: non si decide niente.
-            return self.presenza.presente
+            return
         if self._da_capire:
             self._da_capire = False
             # Si dichiara che qualcosa c'e', anche se non si sa cosa: senza,
@@ -1681,7 +1756,7 @@ class Amelie:
             # avviata - imparerebbe come «piatto vuoto» proprio la bottiglia
             # che si sta per fotografare, e la salverebbe pure.
             self.presenza.c_e_qualcosa()
-            return True
+            return
         c_e = self.presenza.aggiorna(fascia)
         # Dove sta la bottiglia, per darlo all'OCR al posto di un riquadro
         # fisso. `None` vuol dire «non si sa», e allora si torna al fisso.
@@ -1692,7 +1767,19 @@ class Amelie:
             # per conto suo, e prenderla per sfondo vuol dire dimenticare la
             # bottiglia che ha davanti.
             self._ricorda_sfondo()
-        return c_e
+
+    def _va_sorvegliata(self) -> bool:
+        """Lo stream si tiene in moto solo quando serve a qualcosa.
+
+        Non durante il racconto: col DisplayPort attivo il link USB scende a
+        2.0 e camera e audio si dividono un bus solo. E' la stessa ragione per
+        cui la camera si chiude prima di parlare, e vale anche per il
+        guardiano - anzi vale di piu', perche' lui legge senza sosta.
+        """
+        return self.macchina.stato in (
+            Stato.ATTESA, Stato.ASSESTAMENTO, Stato.SCANSIONE,
+            Stato.RIPOSIZIONA,
+        ) and not (self.mirino is not None and self.mirino.acceso)
 
     async def salute(self) -> None:
         while True:

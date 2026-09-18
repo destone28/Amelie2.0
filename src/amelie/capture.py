@@ -275,6 +275,13 @@ SOGLIA_NITIDEZZA = 40.0
 # stessa scena ferma sta sotto mezzo livello, misurato.
 SCARTO_DI_POSA = 2.0
 
+# Quanto vecchio può essere un fotogramma e valere ancora come «adesso».
+#
+# Mezzo secondo è il periodo della sbirciata: un fotogramma più vecchio di
+# così non è quello che il dispositivo avrebbe preso guardando adesso, ed è il
+# tempo entro cui una mano che passa davanti alla camera è ancora lì.
+FRESCHEZZA_S = 0.5
+
 # Quanto deve essere cambiata una riga o una colonna per contare come sagoma
 # della bottiglia. Un pixel isolato è rumore; mezza colonna è un bordo vero.
 FRAZIONE_SAGOMA = 0.25
@@ -745,6 +752,15 @@ class Camera:
         # in frazioni. Lo mette chi guarda il piatto - vedi
         # `PresenzaOttica.riquadro` - e quando e' `None` si usa quello fisso.
         self.riquadro: tuple[float, float, float, float] | None = None
+        # L'ultimo fotogramma che il guardiano ha preso, con l'istante in cui
+        # l'ha preso. Grezzo, non raddrizzato: raddrizzare costa, e la maggior
+        # parte dei fotogrammi che passano di qui non li guarda nessuno.
+        self._recente: tuple[float, np.ndarray] | None = None
+        self._guardiano: threading.Thread | None = None
+        self._basta = threading.Event()
+        # Quanti fotogrammi saltare prima di rifidarsi della luce, dopo aver
+        # cambiato la posa: il driver la applica con tre fotogrammi di ritardo.
+        self._da_saltare = 0
 
     @property
     def percorso(self) -> str:
@@ -795,14 +811,174 @@ class Camera:
         return cap
 
     def chiudi(self) -> None:
-        """Spegne lo stream. Si riaccende da solo alla prossima richiesta."""
+        """Spegne lo stream. Si riaccende da solo alla prossima richiesta.
+
+        Ferma anche il guardiano, e lo ferma PRIMA di prendere il lucchetto:
+        al contrario, il guardiano lo terrebbe per i novanta millesimi del suo
+        fotogramma e chi chiude aspetterebbe lui.
+        """
+        self._basta.set()
+        g = self._guardiano
+        if g is not None and g is not threading.current_thread():
+            g.join(timeout=2.0)
+        self._guardiano = None
         with self._lucchetto:
+            self._recente = None
             self._spegni()
 
     def _spegni(self) -> None:
         if self._cap is not None:
             self._cap.release()
             self._cap = None
+
+    def sorveglia(self) -> None:
+        """Tiene lo stream in moto, perché scattare non costi niente.
+
+        Lo scatto costava settecento millesimi e li spendeva quasi tutti ad
+        aspettare: centocinquanta perché la luce si assestasse, tre fotogrammi
+        buttati per svuotare il buffer USB, la ricerca della posa, e infine i
+        tre della raffica. Novanta millesimi l'uno, e tutti dopo che la
+        bottiglia era già lì.
+
+        Con la camera già in moto non c'è niente da svuotare e niente da
+        assestare: il fotogramma buono è quello che sta arrivando comunque, e
+        prenderlo costa il tempo di aspettarne uno — al massimo novanta
+        millesimi, spesso zero.
+
+        Costa tenere aperto uno stream che per lo più nessuno guarda. Il conto
+        era già stato fatto quando si è smesso di riaprire la camera a ogni
+        scatto: dodici secondi di stream aperto, temperatura ferma a 48 °C.
+        """
+        if self._guardiano is not None and self._guardiano.is_alive():
+            return
+        self._basta.clear()
+        self._guardiano = threading.Thread(target=self._veglia, name="camera",
+                                           daemon=True)
+        self._guardiano.start()
+
+    @property
+    def sorvegliata(self) -> bool:
+        return self._guardiano is not None and self._guardiano.is_alive()
+
+    def _veglia(self) -> None:
+        """Il giro del guardiano: un fotogramma, e ogni tanto un ritocco."""
+        while not self._basta.is_set():
+            try:
+                with self._lucchetto:
+                    if self._basta.is_set():
+                        return
+                    cap = self._apri()
+                    ok, frame = cap.read()
+            except CameraNonDisponibile as e:
+                log.warning("guardiano: %s", e)
+                self._basta.wait(1.0)
+                continue
+            except Exception:                               # noqa: BLE001
+                log.exception("guardiano: fotogramma perso")
+                self._basta.wait(1.0)
+                continue
+            if not ok or frame is None:
+                # Uno stream che non dà più fotogrammi non guarisce da solo.
+                log.warning("guardiano: fotogramma a vuoto, riaccendo")
+                with self._lucchetto:
+                    self._spegni()
+                self._basta.wait(0.5)
+                continue
+            self._recente = (time.monotonic(), frame)
+            self._ritocca_la_posa(frame)
+
+    def _ritocca_la_posa(self, frame) -> None:
+        """Un solo passo verso la posa giusta, e senza mai fermarsi.
+
+        `_cerca_la_posa` fa la stessa cosa in un colpo, ma aspettando: cambia
+        la posa e poi legge fotogrammi finché la luce non si ferma, e quei
+        fotogrammi si pagano tutti nel momento peggiore, cioè con la bottiglia
+        già appoggiata e qualcuno che guarda lo schermo.
+
+        Qui il tempo c'è: lo stream scorre comunque. Si corregge di un passo,
+        si saltano i tre fotogrammi che il driver impiega ad applicarla, e si
+        riguarda. Ci si mette qualche decimo in più e non se ne accorge
+        nessuno, perché succede prima.
+        """
+        if self._da_saltare > 0:
+            self._da_saltare -= 1
+            return
+        imp = self.imp
+        luce = float(cv2.cvtColor(self.ritaglia(self._raddrizza(frame)),
+                                  cv2.COLOR_BGR2GRAY).mean())
+        if abs(luce - imp.luce_cercata) <= imp.luce_tollerata:
+            return
+        nuova = int(imp.esposizione
+                    * (imp.luce_cercata / max(luce, 1.0)) ** imp.esponente_posa)
+        nuova = max(imp.posa_minima, min(imp.posa_massima, nuova))
+        if nuova == imp.esposizione:
+            return
+        imposta_posa(self.percorso, nuova)
+        self.imp = replace(imp, esposizione=nuova)
+        self._da_saltare = self.imp.fotogrammi_da_scartare
+        log.info("posa %d -> %d (luce %.0f)", imp.esposizione, nuova, luce)
+
+    def pronto(self, *, dopo: float = 0.0, attesa: float = 0.5):
+        """Il primo fotogramma preso DOPO un certo istante, già raddrizzato.
+
+        `dopo` è quello che rende onesta la fretta: la bottiglia si è appoggiata
+        a un certo istante, e un fotogramma di prima mostra il piatto vuoto con
+        una mano sopra. Si aspetta il primo che venga dopo, e sono novanta
+        millesimi al massimo.
+        """
+        scadenza = time.monotonic() + attesa
+        while True:
+            recente = self._recente
+            if recente is not None and recente[0] >= dopo:
+                return self._raddrizza(recente[1])
+            if not self.sorvegliata or time.monotonic() >= scadenza:
+                return None
+            time.sleep(0.01)
+
+    def al_volo(self, *, dopo: float = 0.0, attesa: float = 0.25) -> "Scatto | None":
+        """Lo scatto quando la camera è già in moto: si prende, non si fa.
+
+        Si prende il primo fotogramma abbastanza nitido, e se non ne arriva
+        nessuno si tiene il migliore visto. **È l'assestamento fatto
+        guardando**, al posto dei sei decimi di attesa fissa che c'erano prima:
+        una bottiglia appoggiata piano è ferma subito e non si aspetta niente,
+        una appoggiata di slancio oscilla e si aspetta lei — invece di
+        aspettare sempre, per il caso peggiore, anche quando non serve.
+
+        L'attesa è un quarto di secondo, cioè due o tre fotogrammi: è quanto
+        basta a una bottiglia appoggiata da una mano ferma, ed è il tetto che
+        si paga quando la scena non arriva mai a fuoco — davanti a un piatto
+        vuoto la nitidezza resta a 11 e non c'è nessun fotogramma da aspettare.
+
+        `None` vuol dire che il guardiano non sta girando o non ha ancora un
+        fotogramma abbastanza nuovo: chi chiama torna a `scatta`, che la camera
+        se la apre da sé.
+        """
+        scadenza = time.monotonic() + attesa
+        migliore: Scatto | None = None
+        viste: list[float] = []
+        while True:
+            frame = self.pronto(dopo=dopo, attesa=max(0.0, scadenza - time.monotonic()))
+            if frame is None:
+                break
+            ritaglio = self.ritaglia(frame)
+            # La nitidezza si misura sul RITAGLIO e non sul fotogramma intero:
+            # costa meno, e dice quello che conta davvero, cioè se è a fuoco
+            # dove si legge. Una stanza nitida dietro una bottiglia mossa
+            # faceva un numero alto e una lettura vuota.
+            n = nitidezza(ritaglio)
+            viste.append(n)
+            if migliore is None or n > migliore.nitidezza:
+                migliore = Scatto(immagine=ritaglio, nitidezza=n, scartati=0,
+                                  nitidezze=[])
+            if n >= SOGLIA_NITIDEZZA or time.monotonic() >= scadenza:
+                break
+            # Il prossimo dev'essere un altro fotogramma, non lo stesso
+            # riguardato: `dopo` si sposta a ora.
+            dopo = time.monotonic()
+        if migliore is not None:
+            migliore.nitidezze = viste
+        return migliore
 
     def fascia(self, frame) -> np.ndarray:
         """Il fotogramma INTERO, in grigio e piccolo.
@@ -842,6 +1018,11 @@ class Camera:
         sbirciata saltata non e' un guasto, e chi guarda non deve mai mettersi
         in coda dietro a chi lavora.
         """
+        # Se il guardiano sta girando, il fotogramma c'è già: metterglisi in
+        # coda vorrebbe dire aspettare il suo, per poi chiederne un altro.
+        recente = self._recente
+        if recente is not None and time.monotonic() - recente[0] <= FRESCHEZZA_S:
+            return self._raddrizza(recente[1])
         if not self._lucchetto.acquire(blocking=bloccante):
             return None
         try:

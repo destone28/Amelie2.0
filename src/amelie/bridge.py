@@ -354,6 +354,60 @@ class PonteSimulato(Ponte):
         return True
 
 
+class Presenza:
+    """Decide se c'è una bottiglia dal sensore di distanza.
+
+    Era stata tolta quando la presenza la decideva la camera, ed è tornata:
+    guardare costa secondi — una lettura dell'etichetta, il riquadro, la
+    sagoma — e il sensore risponde in millesimi. Per far comparire il testo in
+    meno di un secondo da quando la bottiglia si appoggia, l'innesco deve
+    costare quasi niente, e questo è il solo pezzo che lo sa fare.
+
+    Il fondo di una bottiglia è quasi speculare: se non è centrato, il lobo
+    riflesso esce dal cono di ricezione e la misura salta. Per questo la
+    decisione non si prende su una lettura sola.
+
+    L'isteresi è **asimmetrica** di proposito: bastano poche letture vicine per
+    dire che è arrivata, ne servono molte lontane per dire che è andata via.
+    Sbagliare in un senso fa partire una scansione di troppo; sbagliare
+    nell'altro interrompe un racconto a metà, che si nota molto di più.
+    """
+
+    def __init__(
+        self,
+        vicino_mm: int = 100,
+        lontano_mm: int = 140,
+        letture_per_arrivare: int = 3,
+        letture_per_andarsene: int = 5,
+    ) -> None:
+        self.vicino, self.lontano = vicino_mm, lontano_mm
+        self.n_arrivo, self.n_uscita = letture_per_arrivare, letture_per_andarsene
+        self.presente = False
+        self._vicine = 0
+        self._lontane = 0
+
+    def aggiorna(self, mm: int | None) -> bool:
+        """Aggiunge una lettura e restituisce se ora la bottiglia c'è."""
+        if mm is not None and mm < self.vicino:
+            self._vicine += 1
+            self._lontane = 0
+        elif mm is None or mm > self.lontano:
+            self._lontane += 1
+            self._vicine = 0
+        # Fra vicino e lontano non si cambia idea: è la zona morta che evita il
+        # tremolio quando la bottiglia è appoggiata sul bordo della soglia.
+
+        if not self.presente and self._vicine >= self.n_arrivo:
+            self.presente = True
+        elif self.presente and self._lontane >= self.n_uscita:
+            self.presente = False
+        return self.presente
+
+    def reimposta(self) -> None:
+        self.presente = False
+        self._vicine = self._lontane = 0
+
+
 class PonteNonDisponibile(RuntimeError):
     """Il router non risponde: l'MCU non è raggiungibile."""
 

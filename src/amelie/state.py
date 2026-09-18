@@ -96,9 +96,20 @@ class Effetto(enum.Enum):
 # Quanto si resta in uno stato prima che scatti SCADENZA. `None` = si resta
 # finché non arriva un altro evento.
 DURATE_S: dict[Stato, float | None] = {
-    # Il tempo che serve alla bottiglia per smettere di oscillare. Sotto i
-    # 400 ms si fotografa il movimento; sopra il secondo l'attesa si nota.
-    Stato.ASSESTAMENTO: 0.6,
+    # Il tempo che serve alla bottiglia per smettere di oscillare — e adesso
+    # è solo il minimo, non l'attesa.
+    #
+    # Erano 600 ms fissi, spesi sempre, perché era l'unico modo di non
+    # fotografare il movimento: si scattava una volta sola e quella doveva
+    # essere buona. Ora la camera resta in moto e lo scatto si prende dal
+    # flusso, quindi l'assestamento si può GUARDARE invece che aspettare: si
+    # tiene il primo fotogramma abbastanza nitido, e chi appoggia la bottiglia
+    # piano non paga l'oscillazione che non c'è. Vedi `Camera.al_volo`.
+    #
+    # Quel che resta qui è il tempo perché la schermata «fammi guardare» non
+    # sia un lampo, e perché la mano che ha appoggiato la bottiglia esca
+    # dall'inquadratura.
+    Stato.ASSESTAMENTO: 0.15,
     # Nessuno stato che dipende da un thread puo' restare senza tetto: se il
     # lavoro non torna, la macchina resterebbe li' per sempre con il calice che
     # gira. Succede davvero, togliendo e rimettendo la bottiglia mentre parla.
