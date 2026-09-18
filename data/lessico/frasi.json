@@ -44,6 +44,10 @@
       "it": "Questo è un vino di {vitigno}.",
       "en": "This is a {vitigno} wine."
     },
+    "generico": {
+      "it": "Questo è {cosa}.",
+      "en": "This is {cosa}."
+    },
     "vitigno_incerto": {
       "it": "Direi {cosa}.",
       "en": "I'd say {cosa}."
@@ -93,6 +97,10 @@
     "temperatura_puntuale": {
       "it": "Si serve a {gradi} gradi.",
       "en": "Best served at {gradi} degrees."
+    },
+    "generico_limite": {
+      "it": "Questa bottiglia non è nel mio archivio: quello che le ho detto è scritto sull'etichetta.",
+      "en": "This bottle is not in my archive: what I told you is written on the label."
     }
   },
   "voce": {
@@ -213,6 +221,76 @@
     "IGP": {
       "it": "IGT",
       "en": "IGT"
+    }
+  },
+  "generico": {
+    "spumante": {
+      "it": "uno spumante",
+      "en": "a sparkling wine"
+    },
+    "frizzante": {
+      "it": "un vino frizzante",
+      "en": "a semi-sparkling wine"
+    },
+    "passito": {
+      "it": "un passito",
+      "en": "a wine from dried grapes"
+    },
+    "liquoroso": {
+      "it": "un vino liquoroso",
+      "en": "a fortified wine"
+    },
+    "vino": {
+      "it": "un vino",
+      "en": "a wine"
+    },
+    "rosato": {
+      "it": "rosato",
+      "en": "rosé"
+    },
+    "rosso": {
+      "it": "rosso",
+      "en": "red"
+    },
+    "bianco": {
+      "it": "bianco",
+      "en": "white"
+    },
+    "metodo": {
+      "it": "metodo classico",
+      "en": "metodo classico"
+    },
+    "brut": {
+      "it": "brut",
+      "en": "brut"
+    },
+    "extra": {
+      "it": "extra dry",
+      "en": "extra dry"
+    },
+    "dry": {
+      "it": "dry",
+      "en": "dry"
+    },
+    "nature": {
+      "it": "pas dosé",
+      "en": "brut nature"
+    },
+    "secco": {
+      "it": "secco",
+      "en": "dry"
+    },
+    "amabile": {
+      "it": "amabile",
+      "en": "off-dry"
+    },
+    "dolce": {
+      "it": "dolce",
+      "en": "sweet"
+    },
+    "riserva": {
+      "it": "riserva",
+      "en": "riserva"
     }
   }
 }

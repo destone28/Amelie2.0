@@ -332,7 +332,43 @@ def _apertura(f: Fatti, lex: Lessico, lingua: str) -> str:
             return d("vitigno_incerto", cosa=_con_articolo(f.vitigni[0], lingua))
         return d("vitigno_noto", vitigno=f.vitigni[0])
 
+    if f.livello is Livello.GENERICO:
+        cosa = _che_tipo_di_vino(f, lex, lingua)
+        if cosa:
+            return d("generico", cosa=cosa)
+
     return d("illeggibile")
+
+
+def _che_tipo_di_vino(f: Fatti, lex: Lessico, lingua: str) -> str:
+    """«Uno spumante rosato metodo classico, brut» — solo cio' che c'e' scritto.
+
+    Ogni pezzo viene da una parola LETTA sull'etichetta, e ogni parola letta
+    passa da un elenco chiuso: niente di quello che dice il rumore dell'OCR
+    puo' finire in bocca al dispositivo. Se non c'e' nessun pezzo non si dice
+    niente, e il racconto passa alla frase che chiede di girare l'etichetta.
+    """
+    g = lambda chiave: lex.frase("generico", chiave, lingua=lingua)
+    parole = set(f.qualificatori)
+    base = next((g(k) for k in ("spumante", "frizzante", "passito", "liquoroso")
+                 if k in parole), None)
+    # «Metodo» da solo dichiara uno spumante: se c'e' quello e manca la parola
+    # «spumante», si dice comunque spumante.
+    if base is None and "metodo" in parole:
+        base = g("spumante")
+    colore = {"Rosato": "rosato", "Rosso": "rosso", "Bianco": "bianco"}.get(
+        f.colore or "")
+    if base is None and colore is None:
+        return ""
+    pezzi = [base or g("vino")]
+    if colore:
+        pezzi.append(g(colore))
+    if "metodo" in parole:
+        pezzi.append(g("metodo"))
+    dosaggio = next((g(k) for k in ("nature", "brut", "extra", "dry", "secco",
+                                    "amabile", "dolce") if k in parole), None)
+    testo = " ".join(pezzi)
+    return f"{testo}, {dosaggio}" if dosaggio else testo
 
 
 def _corpo(f: Fatti, lex: Lessico, lingua: str) -> list[str]:
@@ -392,6 +428,13 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str) -> list[str]:
             frasi.append(d("temperatura_intervallo", da=da.strip(), a=a.strip()))
         else:
             frasi.append(d("temperatura_puntuale", gradi=t.strip()))
+
+    # E alla fine, quando non c'e' nient'altro da dire, si dice PERCHE'. Non e'
+    # un'esitazione - quelle si sono tolte, e riguardavano il leggere - e' un
+    # fatto: questa bottiglia in archivio non c'e'. Senza, un racconto di due
+    # righe sembra un dispositivo rotto; con, e' un dispositivo onesto.
+    if f.livello is Livello.GENERICO:
+        frasi.append(d("generico_limite"))
 
     return [x for x in frasi if x]
 

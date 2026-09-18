@@ -763,3 +763,103 @@ class TestLaTemperaturaDiServizio:
     def test_e_un_bianco_fermo_pure(self, m):
         f = m.cerca(["SOAVE", "CLASSICO"])
         assert f.temperatura_c == "10-12"
+
+
+class TestNonSiNominaCioCheNonSiELetto:
+    """La regola più importante del riconoscimento.
+
+    «Trento Rosato/Rosé» somiglia moltissimo a «Brut Rosé Metodo Classico» —
+    due parole su tre in comune — ma «Trento» sulla bottiglia non c'era, e
+    Trento è un posto: dirlo vuol dire attribuire al vino un'origine che
+    nessuno ha dichiarato.
+
+    Misurato su 139 etichette vere più 9 bottiglie fuori archivio, e la
+    separazione è totale: i riconoscimenti giusti hanno il 100 % delle parole
+    identificanti sul vetro, le invenzioni ne hanno lo 0 %. Una soglia di
+    SOMIGLIANZA non avrebbe potuto fare questo lavoro — «Lambrusco dell'Emilia»
+    diventava «Colli dell'Etruria Centrale» con sicurezza 67, sopra al Chianti
+    Classico vero che ne fa 78.
+    """
+
+    def test_un_posto_che_non_si_e_letto_non_si_nomina(self, m):
+        f = m.cerca(["Leggiadro", "Brut Rosé", "METODO CLASSICO"])
+        detto = " ".join(filter(None, [f.nome, f.denominazione, f.tipologia]))
+        assert "trento" not in detto.lower(), f"ha nominato Trento: {detto!r}"
+        assert "asti" not in detto.lower(), f"ha nominato Asti: {detto!r}"
+
+    def test_e_nemmeno_lo_propone(self, m):
+        f = m.cerca(["Leggiadro", "Brut Rosé", "METODO CLASSICO"])
+        for c in f.candidati:
+            assert "trento" not in c.lower(), c
+
+    def test_il_produttore_non_trascina_la_sua_omonima(self, m):
+        """Caso vero, dalle 139 etichette: il produttore si chiama «Santa
+        Margherita» e il vino è un Valdadige, dell'Alto Adige. In archivio
+        esiste «Santa Margherita di Belice», che è in Sicilia, e il
+        riconoscitore la metteva prima all'84 %."""
+        f = m.cerca(["Santa Margherita", "VALDADIGE", "DENOMINAZIONE DI ORIGINE"])
+        detto = " ".join(filter(None, [f.nome, f.denominazione, f.tipologia]))
+        assert "belice" not in detto.lower(), f"ha inventato la Sicilia: {detto!r}"
+
+    def test_quello_che_si_e_letto_si_dice_eccome(self, m):
+        """La regola non deve costare i riconoscimenti giusti."""
+        f = m.cerca(["BAROLO", "2016", "MARCHESI DI BAROLO", "CANNUBI"])
+        assert f.livello is Livello.VINO
+        assert "barolo" in (f.nome or "").lower()
+        assert f.sicurezza == pytest.approx(100, abs=1)
+
+    def test_e_nemmeno_quelli_generici(self, m):
+        f = m.cerca(["PRIMITIVO", "DI", "MANDURIA", "2019"])
+        assert "manduria" in (f.denominazione or f.tipologia or "").lower()
+
+    def test_un_refuso_dell_ocr_non_fa_cadere_la_regola(self, m):
+        """Il riscontro è per parola e sopporta un errore di lettura: sotto la
+        soglia non è un riscontro debole, è un non-riscontro, e un refuso vale
+        ottanta e passa."""
+        assert m._tutto_letto("cerasuolo abruzzo", ["cerasuolc", "abruzzo"])
+        assert not m._tutto_letto("cerasuolo abruzzo", ["montepulciano", "abruzzo"])
+
+    def test_le_parole_generiche_non_devono_essere_lette(self, m):
+        """«Spumante», «rosato», «riserva» valgono per migliaia di bottiglie:
+        non identificano niente e non possono vincolare niente."""
+        assert m._identificanti("trento rosato spumante") == ["trento"]
+        assert m._identificanti("spumante rosato brut") == []
+        # e un record fatto di sole parole generiche non attribuisce niente
+        assert m._tutto_letto("spumante rosato", ["qualcosa", "d", "altro"])
+
+    def test_i_di_e_i_del_non_contano(self, m):
+        """Il filtro delle parole lette butta via «di» da tutte e due le parti:
+        pretenderlo boccerebbe ogni «Primitivo di Manduria»."""
+        assert m._tutto_letto("primitivo di manduria", ["primitivo", "manduria"])
+
+
+class TestQuelCheDiceLEtichetta:
+    """Quando in archivio non c'è niente da nominare, si dice quel che c'è
+    scritto. Non «non ce l'ho», che al tavolo non serve a nessuno, e non un
+    vino inventato, che è peggio."""
+
+    def test_uno_spumante_sconosciuto_resta_uno_spumante(self, m):
+        f = m.cerca(["Leggiadro", "Brut Rosé", "METODO CLASSICO"])
+        assert f.livello is Livello.GENERICO
+        assert f.colore == "Rosato"
+        assert "spumante" in f.qualificatori or "metodo" in f.qualificatori
+        assert f.temperatura_c == "6-8"
+        assert not f.vuoto, "il racconto deve partire lo stesso"
+
+    def test_di_un_rosso_sconosciuto_si_dice_che_e_rosso(self, m):
+        f = m.cerca(["CASTELLO", "DI", "FANTASIA", "ROSSO", "2019"])
+        assert f.livello is Livello.GENERICO
+        assert f.colore == "Rosso"
+
+    def test_non_si_inventa_ne_vitigno_ne_denominazione(self, m):
+        f = m.cerca(["Leggiadro", "Brut Rosé", "METODO CLASSICO"])
+        assert not f.vitigni and not f.denominazione and not f.nome
+        assert not f.cantina and not f.regione
+
+    def test_i_qualificatori_vengono_da_un_elenco_chiuso(self, m):
+        """Niente di quello che dice il rumore dell'OCR può finire in bocca al
+        dispositivo: le parole del tipo passano da un elenco scritto a mano."""
+        from amelie.matcher import ORDINE_QUALIFICATORI
+
+        f = m.cerca(["uIsE", "202", "Leggiadro", "Brut Rosé", "METODO CLASSICO"])
+        assert all(q in ORDINE_QUALIFICATORI for q in f.qualificatori)

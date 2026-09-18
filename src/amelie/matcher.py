@@ -117,6 +117,12 @@ class Livello(str, Enum):
     TIPOLOGIA = "tipologia"
     DENOMINAZIONE = "denominazione"
     VITIGNO = "vitigno"
+    # L'etichetta si e' letta benissimo, e in archivio non c'e' niente che si
+    # possa nominare senza inventare. Si dice allora **solo cio' che c'e'
+    # scritto**: che e' uno spumante, che e' rosato, che e' brut. Non e' un
+    # fallimento ed e' l'opposto di un'improvvisazione - e' il livello in cui
+    # ogni parola detta viene dalla bottiglia. Vedi `Matcher._solo_l_etichetta`.
+    GENERICO = "generico"
     NULLA = "nulla"
 
 
@@ -214,6 +220,11 @@ class Fatti:
     # quelli veri, cio' che scrive e' fondato E la verifica torna a mordere.
     note_sensoriali: list[str] = field(default_factory=list)
     temperatura_c: str | None = None
+    # Le parole che l'etichetta usa per dire che TIPO di vino e' - «spumante»,
+    # «metodo classico», «rosato», «brut». Si riempiono solo al livello
+    # GENERICO, dove sono l'unica cosa che si puo' dire, e sono tutte lette
+    # dalla bottiglia: nessuna viene da noi.
+    qualificatori: list[str] = field(default_factory=list)
 
     # Per la schermata di conferma: `candidati` sono le righe LEGGIBILI che
     # l'ospite vede, `riferimenti` i record a cui corrispondono, nello stesso
@@ -528,6 +539,50 @@ QUALIFICATORI = frozenset((
     "novello", "classico", "vendemmia", "tardiva", "stramature",
 ))
 
+# Le parole che NON identificano un vino: dicono che TIPO di vino e', non QUALE
+# vino e'. «Spumante», «rosato», «brut» valgono per migliaia di bottiglie;
+# «Trento», «Barolo», «Cerasuolo» valgono per una zona sola.
+#
+# La distinzione porta tutto il peso della regola piu' importante del
+# riconoscimento: **non si nomina cio' che non si e' letto**. Misurato su 139
+# etichette vere piu' 9 bottiglie fuori archivio, la separazione e' totale -
+# i riconoscimenti giusti hanno il 100 % delle parole identificanti sul vetro,
+# le invenzioni ne hanno lo 0 %. Vedi `_tutto_letto`.
+PAROLE_GENERICHE = frozenset(QUALIFICATORI) | frozenset((
+    "vino", "vini", "wine", "doc", "docg", "dop", "igp", "igt",
+    "brut", "extra", "dry", "secco", "dolce", "abboccato", "amabile", "nature",
+    "metodo", "millesimato", "cuvee", "sec", "demi", "annata", "cru",
+    "rosso", "rossa", "bianco", "bianca", "rosato", "rosata", "rose", "rosa",
+    "red", "white", "blanc", "noir", "nero", "nera",
+))
+
+# Le parole con cui un'etichetta dichiara che TIPO di vino contiene, e la
+# categoria del registro UE a cui corrispondono. Servono quando in archivio non
+# c'e' niente da nominare: sono l'unica cosa che si puo' dire, e la puo' dire
+# perche' l'ha scritta il produttore.
+CATEGORIA_DETTA = {
+    "spumante": "Sparkling Wine",
+    # «Metodo» su un'etichetta di vino compare quasi solo in «metodo classico»
+    # e «metodo charmat», che sono due modi di fare le bolle: la parola da
+    # sola dichiara uno spumante. «Classico» non si puo' usare - il filtro
+    # delle parole lette lo scarta, perche' sta su un'etichetta su tre.
+    "metodo": "Sparkling Wine",
+    "champenoise": "Quality Sparkling Wine",
+    "frizzante": "Semi-Sparkling Wine",
+    "passito": "Wine From Raisined Grapes",
+    "liquoroso": "Liqueur Wine",
+}
+
+# L'ordine in cui le parole del tipo si dicono a voce: «spumante metodo
+# classico rosato brut», non «brut rosato classico spumante».
+ORDINE_QUALIFICATORI = (
+    "spumante", "frizzante", "passito", "liquoroso", "novello",
+    "metodo", "classico", "champenoise", "millesimato",
+    "rosato", "rosso", "bianco", "rose",
+    "brut", "extra", "dry", "nature", "secco", "amabile", "dolce",
+    "riserva", "superiore",
+)
+
 # Fra i qualificatori, questi non sono una sfumatura: cambiano il PRODOTTO. Un
 # passito non e' la versione dolce del bianco, e' un altro vino, fatto con uve
 # appassite. Chi ne porta uno e l'altro no non puo' ricevere la sua descrizione
@@ -662,6 +717,9 @@ class Matcher:
         if not migliore.produttore_letto:
             fatti = self._senza_produttore(fatti, testo_norm, tetto)
             fatti.produttore_letto_davvero = False
+        # E ora la regola che vale su TUTTI i nomi, non solo su quello della
+        # cantina: non si nomina cio' che non si e' letto.
+        fatti = self._non_oltre_cio_che_si_e_letto(fatti, token, testo_norm, tetto)
         if self._c_e_un_altro_produttore(candidati):
             fatti.sicurezza = min(fatti.sicurezza, SOGLIA_CERTA - 0.5)
         fatti.annata = annata
@@ -685,6 +743,11 @@ class Matcher:
                 suo = self._colore_di(c.ambito, c.ambito_id)
                 if suo is not None and suo != detto:
                     continue
+            # E nemmeno si propone cio' che non si e' letto: la schermata di
+            # scelta non e' il posto dove le regole si allentano, e' il posto
+            # dove l'ospite si fida di quello che gli mettiamo davanti.
+            if not self._tutto_letto(c.testo, token):
+                continue
             visti.add(c.testo)
             fatti.candidati.append(self.etichetta(c.ambito, c.ambito_id)
                                    or c.testo)
@@ -862,6 +925,130 @@ class Matcher:
                          cantina_primo, altra)
                 return True
         return False
+
+    @staticmethod
+    def _identificanti(testo: str) -> list[str]:
+        """Le parole di un nome che dicono QUALE vino e', non che tipo e'.
+
+        Si passa dallo stesso filtro delle parole LETTE, e non e' un dettaglio:
+        pretendere che si legga anche il «di» di «Primitivo di Manduria»
+        significa bocciare ogni record che ne contenga uno, perche' quel filtro
+        i «di» li butta via da tutte e due le parti. La regola confronta cio'
+        che e' confrontabile.
+        """
+        return [p for p in parole_utili(testo) if p not in PAROLE_GENERICHE]
+
+    @staticmethod
+    def _tutto_letto(testo_record: str, lette: Sequence[str]) -> bool:
+        """Le parole che identificano questo record erano sull'etichetta?
+
+        È la regola più importante del riconoscimento: **non si nomina cio' che
+        non si e' letto.** «Trento Rosato/Rose» somiglia moltissimo a «Brut Rose
+        Metodo Classico» - due parole su tre in comune - ma la parola «Trento»
+        sulla bottiglia non c'era, e Trento e' un posto: dirlo vuol dire
+        attribuire al vino un'origine che nessuno ha dichiarato.
+
+        Misurato su 139 etichette vere piu' 9 bottiglie fuori archivio, e la
+        separazione e' totale:
+
+            riconoscimenti giusti      100 % delle parole identificanti lette
+            invenzioni                   0 %, con somiglianza da 11 a 73
+
+        Non serve una soglia intermedia, e una soglia di SOMIGLIANZA non
+        avrebbe potuto fare questo lavoro: «Lambrusco dell'Emilia» diventava
+        «Colli dell'Etruria Centrale» con sicurezza 67, sopra al Chianti
+        Classico vero che ne fa 78. Le due popolazioni si sovrappongono nella
+        somiglianza e non si sovrappongono per niente qui.
+
+        Un refuso dell'OCR non fa cadere la regola: il riscontro e' per parola,
+        con la stessa soglia usata per la prova del produttore - `fuzz.ratio`
+        sotto 70 non e' un riscontro debole, e' un non-riscontro, e un refuso
+        vale ottanta e passa.
+        """
+        from rapidfuzz import fuzz
+
+        ident = Matcher._identificanti(testo_record)
+        if not ident:
+            # Un record fatto di sole parole generiche - «Spumante Rosato» -
+            # non attribuisce niente a nessuno: non c'e' niente da provare.
+            return True
+        libere = list(lette)
+        for parola in ident:
+            if not libere:
+                return False
+            i = max(range(len(libere)), key=lambda k: fuzz.ratio(parola, libere[k]))
+            if fuzz.ratio(parola, libere[i]) < RISCONTRO_PAROLA:
+                return False
+            # Una parola letta ne conferma UNA sola: senza, un'etichetta con
+            # «Montepulciano» scritto due volte proverebbe due record diversi.
+            libere.pop(i)
+        return True
+
+    def _non_oltre_cio_che_si_e_letto(self, f: Fatti, token: Sequence[str],
+                                      testo_norm: str, tetto: float) -> Fatti:
+        """Scende finche' il nome che si sta per dire non e' tutto sull'etichetta.
+
+        È `_senza_produttore` applicata a ogni nome, non solo a quello della
+        cantina: la stessa regola, portata fino in fondo. Se non regge nemmeno
+        il gradino piu' generico, non si tace e non si inventa - si dice quel
+        che c'e' scritto. Vedi `_solo_l_etichetta`.
+        """
+        for ambito, ident in self.catena_di_ripiego(f):
+            r = self.con.execute(
+                "SELECT testo, peso FROM ricerca WHERE ambito = ? AND ambito_id = ?",
+                (ambito, ident)).fetchone()
+            if r is None or not self._tutto_letto(r["testo"], token):
+                continue
+            if f.origine == (ambito, ident):
+                return f
+            sceso = self._componi(Candidato(ambito=ambito, ambito_id=ident,
+                                            testo=r["testo"], somiglianza=0.0,
+                                            peso=r["peso"]))
+            if sceso.livello is Livello.NULLA:
+                continue
+            sceso.sicurezza = min(tetto, self._sicurezza_verificata(
+                Candidato(ambito=ambito, ambito_id=ident, testo=r["testo"],
+                          somiglianza=0.0, peso=r["peso"]), testo_norm))
+            sceso.annata = f.annata
+            log.info("«%s» non si e' letto per intero: si scende a %s «%s»",
+                     f.nome or f.tipologia or f.denominazione, ambito, r["testo"])
+            return sceso
+        return self._solo_l_etichetta(f, token, tetto)
+
+    def _solo_l_etichetta(self, f: Fatti, token: Sequence[str],
+                          tetto: float) -> Fatti:
+        """Quel che c'e' scritto sulla bottiglia, e nient'altro.
+
+        L'ultimo gradino, e il piu' onesto: l'etichetta si e' letta benissimo e
+        in archivio non c'e' niente che si possa nominare senza inventarlo.
+        Restano le parole che dicono che TIPO di vino e' - spumante, metodo
+        classico, rosato, brut - e quelle si possono ripetere, perche' le ha
+        scritte il produttore.
+
+        Non e' «non ce l'ho in archivio», che al tavolo non serve a nessuno, e
+        non e' un vino inventato, che e' peggio. E' l'unica risposta vera che
+        si puo' dare a una bottiglia che non conosciamo.
+        """
+        detto = self._colore_detto(token)
+        parole = set(token)
+        categoria = None
+        for chiave, cat in CATEGORIA_DETTA.items():
+            if chiave in parole:
+                categoria = cat
+                break
+        # La sicurezza la decide QUANTO si e' letto, come per tutto il resto:
+        # «e' uno spumante rosato» detto avendo letto una parola sola non e'
+        # piu' solido di qualunque altra affermazione fatta su una parola sola.
+        g = Fatti(livello=Livello.GENERICO, colore=detto, categoria=categoria,
+                  annata=f.annata, sicurezza=min(tetto, SOGLIA_CERTA - 0.5))
+        g.temperatura_c = TEMPERATURA_PER_CATEGORIA.get(categoria or "")
+        # Le parole del tipo, nell'ordine in cui si dicono: «spumante metodo
+        # classico rosato». Servono al narratore per aprire, e sono TUTTE
+        # lette: nessuna viene da noi.
+        g.qualificatori = [p for p in ORDINE_QUALIFICATORI if p in parole]
+        log.info("niente da nominare: resto su quel che dice l'etichetta (%s)",
+                 " ".join(g.qualificatori) or "nulla")
+        return g
 
     @sotto_lucchetto
     def _senza_produttore(self, f: Fatti, testo_norm: str, tetto: float) -> Fatti:
@@ -1183,6 +1370,13 @@ class Matcher:
         f = costruttore(c.ambito_id)
         if f.livello is not Livello.NULLA:
             f.origine = (c.ambito, c.ambito_id)
+        # La temperatura di servizio la decide la CATEGORIA, e va messa QUI:
+        # stava dentro alla nota del vitigno, e cosi' un Marsala senza nota
+        # d'uva restava senza temperatura pur sapendo benissimo di essere un
+        # liquoroso. E' un fatto della categoria, non dell'uva, e non dipende
+        # da cos'altro sappiamo di quel vino.
+        f.temperatura_c = f.temperatura_c or TEMPERATURA_PER_CATEGORIA.get(
+            f.categoria or "")
         return f
 
     # ------------------------------------------------------------ ripiego
@@ -1427,6 +1621,17 @@ class Matcher:
             livello=Livello.DENOMINAZIONE,
             denominazione=r["nome"], tipo_denominazione=r["tipo"],
         )
+        # La categoria si prende dalle tipologie, ma SOLO se sono unanimi: un
+        # Marsala e' liquoroso in tutte e quindici le sue, e dirlo non e'
+        # un'ipotesi. L'Asti invece e' meta' fermo e meta' spumante, e li' una
+        # maggioranza sceglierebbe per conto suo. Sono 219 denominazioni su
+        # 532, e serve alla temperatura di servizio: senza, un Marsala perde
+        # la sua e si ritrova quella dell'uva.
+        cat = self.con.execute(
+            "SELECT categoria FROM tipologia WHERE denominazione_id = ?"
+            " GROUP BY categoria", (did,)).fetchall()
+        if len(cat) == 1 and cat[0]["categoria"]:
+            f.categoria = cat[0]["categoria"]
         # Un vitigno vale come "principale della denominazione" solo se lo e' per
         # la maggioranza delle sue tipologie: altrimenti si finirebbe per
         # attribuire al Chianti generico i vitigni di una sua versione rara.
