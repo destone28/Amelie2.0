@@ -590,8 +590,15 @@ svg { display: block; }
 #impostazioni {
   position: absolute; inset: 0; z-index: 9; background: var(--carbone);
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: var(--passo);
+  /* Dal centro all'alto, e con lo scorrimento. Era centrato, e andava bene
+     finche' le righe erano tre; col selettore dei tre modi sono diventate sei,
+     il contenuto e' cresciuto oltre i 480 px di vetro e il primo pezzo a
+     uscire dal basso e' stato proprio il tasto per chiudere. */
+  justify-content: flex-start; gap: var(--passo);
+  overflow-y: auto; overscroll-behavior: contain;
   padding: calc(var(--passo) * 2) calc(var(--passo) * 3);
+  /* Spazio in fondo perche' il tasto appiccicato non copra l'ultima riga. */
+  padding-bottom: calc(var(--tocco) + var(--passo) * 2);
 }
 #impostazioni[hidden] { display: none; }
 #i-titolo {
@@ -713,6 +720,20 @@ svg { display: block; }
   color: var(--avorio); max-height: 70%; overflow: auto; white-space: pre-wrap;
 }
 #d-corpo::-webkit-scrollbar { display: none; }
+/* Mentre il racconto si scrive. Non e' una decorazione: generare costa
+   secondi, e in quei secondi lo schermo mostrava il titolo e sotto il vuoto -
+   cioe' sembrava rotto. */
+.scrivendo {
+  display: block; color: var(--oro-chiaro); opacity: .75;
+  animation: respiro 1.6s ease-in-out infinite;
+}
+@keyframes respiro { 0%, 100% { opacity: .35; } 50% { opacity: .95; } }
+/* Chi ha il movimento ridotto non vede lampeggiare niente, ma la frase resta:
+   e' lei a dire che il dispositivo sta lavorando, non il lampeggio. */
+@media (prefers-reduced-motion: reduce) {
+  .scrivendo { animation: none; opacity: .8; }
+}
+
 #d-chiudi, #i-chiudi {
   min-width: calc(var(--tocco) * 2.5); height: var(--tocco);
   display: flex; align-items: center; justify-content: center;
@@ -720,6 +741,15 @@ svg { display: block; }
   border: 2px solid var(--oro); border-radius: var(--raggio);
 }
 #d-chiudi.premuto, #i-chiudi.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
+/* Il tasto per chiudere le impostazioni resta in fondo allo schermo comunque
+   si scorra, e si vede: sul fondo carbone un bordo sottile spariva, e dentro
+   un pannello che adesso scorre spariva del tutto. */
+#i-chiudi {
+  position: sticky; bottom: 0; margin-top: auto;
+  background: var(--carbone); color: var(--oro-chiaro);
+  border-width: 3px; min-width: calc(var(--tocco) * 3.5);
+  box-shadow: 0 0 0 calc(var(--passo) / 2) var(--carbone);
+}
 </style>
 </head>
 <body>
@@ -1202,6 +1232,20 @@ eventi.onmessage = (e) => {
       mostra(m.vista);
       break;
 
+    case "scrivendo": {
+      /* Il testo non c'e' ancora e ci vorranno secondi: si dice. La frase
+         arriva col messaggio «lingua», che si rimanda a ogni cambio, quindi
+         segue la lingua da sola. */
+      const t = $("r-testo");
+      t.innerHTML = "";
+      const s = document.createElement("span");
+      s.className = "scrivendo";
+      s.textContent = parole.sto_scrivendo || "…";
+      t.appendChild(s);
+      frasi = []; viva = -1; avanzamento(0);
+      break;
+    }
+
     case "racconto":
       componiRacconto(m.frasi);
       segnaPausa(false);
@@ -1248,6 +1292,7 @@ eventi.onmessage = (e) => {
 
     case "lingua":
       disegnaLingue(m);
+      parole.sto_scrivendo = m.sto_scrivendo || "";
       if (m.impostazioni) {
         $("i-titolo").textContent = m.impostazioni.impostazioni;
         $("i-modo-titolo").textContent = m.impostazioni.modo_titolo;

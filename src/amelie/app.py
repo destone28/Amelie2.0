@@ -53,7 +53,7 @@ from .carta import Carta, CartaVuota
 from .giornale import Giornale
 from .mirino import LetturaContinua, Mirino
 from .matcher import Fatti, Livello, Matcher
-from .narrator import Narratore, spezza_in_frasi
+from .narrator import Narratore, _che_tipo_di_vino, spezza_in_frasi
 from .ocr import Lettore, OCRNonDisponibile
 from .speech import (
     VOCI, VOLUME_PREDEFINITO, ImpostazioniVoce, Riproduttore, Voce,
@@ -436,10 +436,31 @@ class Amelie:
                              "voce_muta": not self._voce_disponibile()}
         if stato in (Stato.RACCONTO, Stato.CONCLUSO):
             f = self._fatti
-            m["titolo"] = f.nome or f.tipologia or f.denominazione or (
-                f.vitigni[0] if f.vitigni else "")
-            pezzi = [x for x in (f.cantina, str(f.annata) if f.annata else None) if x]
-            m["sottotitolo"] = " · ".join(pezzi)
+            if self._la_carta_parla_ora():
+                # Quando a raccontare e' la carta, il titolo e' il suo. Prima
+                # veniva sempre dai fatti dell'archivio, che in modo carta non
+                # si toccavano mai: a schermo restava il nome del vino
+                # PRECEDENTE. Visto sul dispositivo, «Garda Cabernet 2008»
+                # scritto sopra la descrizione di un Lambrusco Grasparossa.
+                m["titolo"] = self._voce.titolo_in(self.lingua)
+                m["sottotitolo"] = ""
+            else:
+                m["titolo"] = f.nome or f.tipologia or f.denominazione or (
+                    f.vitigni[0] if f.vitigni else "")
+                if not m["titolo"]:
+                    # Al livello GENERICO non c'e' nessun nome da mettere - e'
+                    # il livello in cui non si e' riconosciuto il vino - e lo
+                    # schermo restava senza titolo: il testo saliva in cima,
+                    # sotto le linguette della lingua, e l'ospite leggeva una
+                    # descrizione senza sapere di CHE COSA.
+                    #
+                    # Il titolo c'e' lo stesso, ed e' quello che si e' letto
+                    # sul vetro: «spumante rosato brut». Sono le stesse parole
+                    # con cui il racconto apre, e non ne aggiunge nessuna.
+                    m["titolo"] = _che_tipo_di_vino(f, self.lex, self.lingua)
+                pezzi = [x for x in (f.cantina,
+                                     str(f.annata) if f.annata else None) if x]
+                m["sottotitolo"] = " · ".join(pezzi)
             # CONCLUSO mostra la stessa schermata del racconto - la vista non
             # cambia - e il racconto e' quello di prima: il testo NON va
             # svuotato. Senza questa riga, alla fine di ogni racconto l'ospite
@@ -475,6 +496,11 @@ class Amelie:
             "avviso_muto": self.lex.frase("schermo", "voce_assente",
                                           lingua=self.lingua),
             "annulla": self.lex.frase("schermo", "annulla", lingua=self.lingua),
+            # Che cosa scrivere al posto del racconto mentre lo si scrive.
+            # Sta qui, con le altre scritte fisse, perche' segua la lingua da
+            # sola: il messaggio si rimanda a ogni cambio.
+            "sto_scrivendo": self.lex.frase("schermo", "sto_scrivendo",
+                                            lingua=self.lingua),
             # Le scritte del pannello delle impostazioni stanno QUI e non nel
             # messaggio «impostazioni», che porta i valori: cosi' seguono la
             # lingua da sole, perche' questo messaggio si rimanda a ogni cambio.
@@ -1253,6 +1279,11 @@ class Amelie:
             self.macchina.invia(Evento.RINUNCIA)
 
     def _riconosci(self) -> None:
+        # Niente di questa bottiglia si eredita dalla precedente. Ogni via
+        # riempie una delle due - i fatti dell'archivio o la voce della carta -
+        # e l'altra deve restare vuota, perche' lo schermo guarda tutt'e due.
+        self._voce = None
+        self._fatti = Fatti()
         if self.modo == "carta" and self.carta is not None:
             self._riconosci_dalla_carta()
             return
@@ -1307,7 +1338,36 @@ class Amelie:
             "sicurezza": round(self._voce.somiglianza),
             "titolo": self._voce.titolo,
         })
+        # E si cerca ANCHE in archivio, che costa cinquanta millesimi e parla
+        # tutte le lingue. Serve quando l'ospite chiede l'inglese e la carta e'
+        # scritta solo in italiano: senza, gli arrivava la prima frase tradotta
+        # e tutto il resto in italiano, scritto e letto dalla voce inglese.
+        self._fatti = self.matcher.cerca(righe)
         self.macchina.invia(Evento.MATCH_SICURO)
+
+    def _si_generera(self) -> bool:
+        """Questo racconto passera' dal modello, cioe' fara' aspettare?
+
+        Le stesse condizioni che `Narratore.racconta` applica per primo: il
+        modello acceso dalle impostazioni, un modello davvero disponibile, e un
+        livello in cui ci sia qualcosa da raccontare. Duplicarle qui non e'
+        bello, ma la decisione va presa PRIMA della chiamata che dura secondi,
+        e chiederla al narratore vorrebbe dire aver gia' aspettato.
+        """
+        return (self.genera_racconti
+                and self.narratore.genera is not None
+                and not self._fatti.vuoto
+                and self._fatti.livello is not Livello.GENERICO)
+
+    def _la_carta_parla_ora(self) -> bool:
+        """La carta ha questa bottiglia E sa dirla in questa lingua?
+
+        Due condizioni, e la seconda cambia mentre il dispositivo e' acceso:
+        l'ospite tocca la bandierina e la carta, che era la voce giusta un
+        istante prima, smette di esserlo.
+        """
+        return (self._voce is not None
+                and self._voce.testo_in(self.lingua) is not None)
 
     def _racconta_dalla_carta(self):
         """Il racconto e' la descrizione scritta nel file, letta com'e'.
@@ -1319,16 +1379,23 @@ class Amelie:
         from .matcher import Livello
 
         v = self._voce
+        titolo = v.titolo_in(self.lingua)
         apre = self.lex.frase("apertura", "tipologia_nota", lingua=self.lingua,
-                              cosa=_con_articolo(v.titolo, self.lingua))
-        return Racconto(testo=f"{apre} {v.descrizione}", origine="carta",
-                        livello=Livello.TIPOLOGIA)
+                              cosa=_con_articolo(titolo, self.lingua))
+        return Racconto(testo=f"{apre} {v.testo_in(self.lingua)}",
+                        origine="carta", livello=Livello.TIPOLOGIA)
 
     def _racconta(self) -> None:
         self._ferma_voce.clear()
-        if self.modo == "carta" and self._voce is not None:
+        if self._la_carta_parla_ora():
             racconto = self._racconta_dalla_carta()
         else:
+            # Generare costa secondi, e in quei secondi lo schermo mostrava il
+            # titolo e sotto il vuoto: sembrava rotto. Si dice che si sta
+            # scrivendo, e lo si dice PRIMA - non e' una decorazione, e'
+            # l'unica differenza fra un dispositivo che lavora e uno fermo.
+            if self._si_generera():
+                self._pubblica({"tipo": "scrivendo"})
             racconto = self.narratore.racconta(
                 self._fatti, preferisci_modello=self.genera_racconti)
         log.info("racconto da %s (%d parole)", racconto.origine,
@@ -1416,7 +1483,7 @@ class Amelie:
         parte. Li' la barra e' bene in vista, e restava ferma a zero per tutto
         il racconto.
         """
-        pesi = [max(1, len(per_la_voce(f))) for f in frasi]
+        pesi = [max(1, len(per_la_voce(f, self.lingua))) for f in frasi]
         totale = sum(pesi)
         fatto = 0
         # Il ritmo della lingua che si sta MOSTRANDO. Non `voce.imp.modello`:

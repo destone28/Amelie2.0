@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import csv
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
@@ -56,11 +56,36 @@ TACITE = frozenset((
 
 @dataclass
 class Voce:
-    """Una riga della carta: un titolo e il suo racconto."""
+    """Una riga della carta: un titolo e il suo racconto, in ogni lingua che c'e'.
+
+    `titolo` e `descrizione` sono l'italiano, che e' obbligatorio; le altre
+    lingue stanno in `altre`, e possono non esserci.
+    """
 
     titolo: str
     descrizione: str
     somiglianza: float = 0.0
+    # {"en": (titolo, descrizione)} per le lingue oltre l'italiano.
+    altre: dict[str, tuple[str, str]] = field(default_factory=dict)
+
+    def titolo_in(self, lingua: str) -> str:
+        if lingua == "it" or lingua not in self.altre:
+            return self.titolo
+        return self.altre[lingua][0] or self.titolo
+
+    def testo_in(self, lingua: str) -> str | None:
+        """La descrizione in questa lingua, o `None` se la carta non ce l'ha.
+
+        `None` e' un'informazione, non un guasto: vuol dire che questa bottiglia
+        va raccontata da un'altra parte. Senza questa distinzione, all'ospite
+        che aveva scelto l'inglese arrivava la prima frase tradotta e poi tutto
+        il resto in italiano - scritto **e letto**, con la voce inglese che
+        compita l'italiano.
+        """
+        if lingua == "it":
+            return self.descrizione
+        testo = self.altre.get(lingua, ("", ""))[1]
+        return testo or None
 
 
 class Carta:
@@ -69,6 +94,8 @@ class Carta:
     def __init__(self, percorso: str | Path) -> None:
         self.percorso = Path(percorso)
         self.voci: list[Voce] = []
+        # Le lingue che il file parla. Si sa dalle colonne, e si sa all'avvio.
+        self.lingue: set[str] = {"it"}
         self._voci_indice: list[str] = []
         # Due elenchi di parole per ogni titolo, e servono a due cose diverse.
         # `_token` passa dal filtro delle parole vuote ed è quello su cui si
@@ -87,18 +114,34 @@ class Carta:
 
     def _carica(self) -> None:
         with open(self.percorso, encoding="utf-8", newline="") as f:
-            for r in csv.DictReader(f):
+            lettore = csv.DictReader(f)
+            # Le lingue che questo file parla, dalle colonne che ha: oltre
+            # all'italiano, ogni `descrizione_xx` ne aggiunge una. Un file con
+            # la sola `descrizione` parla italiano e basta, e il dispositivo lo
+            # sa PRIMA di provare a leggerlo in inglese.
+            intestazioni = lettore.fieldnames or []
+            self.lingue = {"it"} | {
+                c.split("_", 1)[1] for c in intestazioni
+                if c.startswith("descrizione_") and len(c.split("_", 1)[1]) == 2
+            }
+            for r in lettore:
                 titolo = (r.get("titolo") or "").strip()
                 testo = (r.get("descrizione") or "").strip()
                 if not titolo or not testo:
                     continue
-                self.voci.append(Voce(titolo=titolo, descrizione=testo))
+                altre = {}
+                for lingua in self.lingue - {"it"}:
+                    t = (r.get(f"descrizione_{lingua}") or "").strip()
+                    if t:
+                        altre[lingua] = ((r.get(f"titolo_{lingua}") or "").strip(), t)
+                self.voci.append(Voce(titolo=titolo, descrizione=testo, altre=altre))
                 self._token.append(parole_utili(normalizza(titolo)))
                 self._tutte.append(token(titolo))
                 for p in self._tutte[-1]:
                     self._dove.setdefault(p, set()).add(len(self._voci_indice))
                 self._voci_indice.append(titolo)
-        log.info("carta dei vini: %d voci da %s", len(self.voci), self.percorso.name)
+        log.info("carta dei vini: %d voci da %s, in %s", len(self.voci),
+                 self.percorso.name, ", ".join(sorted(self.lingue)))
         if not self.voci:
             raise CartaVuota(f"nessuna voce utilizzabile in {self.percorso}")
 
@@ -160,7 +203,7 @@ class Carta:
                 continue
             meglio = (quante, -mute, punti)
             migliore = Voce(titolo=voce.titolo, descrizione=voce.descrizione,
-                            somiglianza=punti)
+                            somiglianza=punti, altre=voce.altre)
         if migliore is not None:
             log.info("carta: «%s» al %.0f%% (%d parole lette, %d no)",
                      migliore.titolo, migliore.somiglianza, meglio[0], -meglio[1])

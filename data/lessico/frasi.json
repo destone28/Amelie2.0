@@ -132,6 +132,10 @@
       "it": "Un attimo…",
       "en": "One moment…"
     },
+    "sto_scrivendo": {
+      "it": "Sto scrivendo la descrizione…",
+      "en": "I'm writing the description…"
+    },
     "fammi_guardare": {
       "it": "Fammi guardare…",
       "en": "Let me have a look…"

@@ -360,6 +360,57 @@ class TestLingua:
         assert visti["it"] != visti["en"]
         assert visti["en"], "manca la frase inglese"
 
+    def test_il_titolo_della_carta_e_il_suo_e_non_quello_di_prima(self, amelie):
+        """Visto sul dispositivo: «Garda Cabernet 2008» scritto sopra la
+        descrizione di un Lambrusco Grasparossa.
+
+        In modo carta i fatti dell'archivio non si aggiornavano mai, e il
+        titolo veniva sempre da li': cioe' dal vino PRECEDENTE.
+        """
+        from amelie.carta import Voce
+        from amelie.matcher import Fatti, Livello
+
+        amelie._fatti = Fatti(livello=Livello.VINO, nome="Garda Cabernet",
+                              annata=2008)
+        amelie._voce = Voce(titolo="Lambrusco Grasparossa di Castelvetro DOC",
+                            descrizione="Il piu' corposo dei Lambruschi.")
+        catturati = []
+        amelie._pubblica = lambda m, c=catturati: c.append(m)
+        amelie._mostra(Stato.RACCONTO)
+        assert catturati[0]["titolo"] == "Lambrusco Grasparossa di Castelvetro DOC"
+        assert catturati[0]["sottotitolo"] == ""
+
+    def test_ma_se_la_carta_non_parla_la_lingua_il_titolo_e_dell_archivio(self, amelie):
+        """La carta e' scritta in italiano e l'ospite ha scelto l'inglese: a
+        raccontare e' l'archivio, e il titolo dev'essere il suo."""
+        from amelie.carta import Voce
+        from amelie.matcher import Fatti, Livello
+
+        amelie.cambia_lingua("en")
+        amelie._fatti = Fatti(livello=Livello.TIPOLOGIA,
+                              tipologia="Lambrusco Grasparossa di Castelvetro")
+        amelie._voce = Voce(titolo="Lambrusco Grasparossa DOC",
+                            descrizione="Solo in italiano.")
+        catturati = []
+        amelie._pubblica = lambda m, c=catturati: c.append(m)
+        amelie._mostra(Stato.RACCONTO)
+        assert catturati[0]["titolo"] == "Lambrusco Grasparossa di Castelvetro"
+
+    def test_al_generico_il_titolo_e_cio_che_dice_l_etichetta(self, amelie):
+        """Senza nome lo schermo restava senza titolo e il testo saliva in
+        cima, sotto le linguette della lingua."""
+        from amelie.matcher import Fatti, Livello
+
+        f = Fatti(livello=Livello.GENERICO, colore="Rosato", sicurezza=88.0)
+        f.qualificatori = ["spumante", "brut"]
+        amelie._fatti, amelie._voce = f, None
+        catturati = []
+        amelie._pubblica = lambda m, c=catturati: c.append(m)
+        amelie._mostra(Stato.RACCONTO)
+        titolo = catturati[0]["titolo"]
+        assert titolo.strip(), "nessun titolo al livello generico"
+        assert "spumante" in titolo.lower()
+
     def _attendi(self, amelie, stato, secondi=5.0):
         """L'annuncio e la ripresa girano in un thread: non sono istantanei."""
         import time

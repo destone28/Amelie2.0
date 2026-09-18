@@ -183,3 +183,48 @@ class TestCioCheLaCartaDaPerScontato:
     def test_e_il_rosso_di_montalcino_non_diventa_un_brunello(self, carta):
         v = carta.cerca(["ROSSO", "DI", "MONTALCINO", "DOC"])
         assert v.titolo == "Rosso di Montalcino DOC"
+
+
+class TestLeLingueDellaCarta:
+    """Una carta scritta solo in italiano non deve fingere di parlare inglese.
+
+    Visto sul dispositivo: con l'inglese scelto, all'ospite arrivava la prima
+    frase tradotta - quella la compone il lessico - e poi tutta la descrizione
+    in italiano, **letta dalla voce inglese**. Una frase italiana compitata
+    all'inglese in mezzo a un testo inglese.
+    """
+
+    def test_un_file_con_la_sola_descrizione_parla_italiano(self, carta):
+        assert carta.lingue == {"it"}
+        v = carta.cerca(["BAROLO", "DOCG"])
+        assert v.testo_in("it")
+        assert v.testo_in("en") is None
+
+    @pytest.fixture
+    def bilingue(self, tmp_path):
+        f = tmp_path / "vini.csv"
+        with open(f, "w", encoding="utf-8", newline="") as g:
+            w = csv.writer(g, quoting=csv.QUOTE_ALL)
+            w.writerow(["titolo", "descrizione", "titolo_en", "descrizione_en"])
+            w.writerow(["Barolo DOCG", "Nebbiolo sulle Langhe.",
+                        "Barolo DOCG", "Nebbiolo from the Langhe hills."])
+            w.writerow(["Soave DOC", "Garganega sui colli veronesi.", "", ""])
+        return Carta(f)
+
+    def test_le_colonne_dicono_le_lingue(self, bilingue):
+        assert bilingue.lingue == {"it", "en"}
+
+    def test_dove_c_e_l_inglese_si_usa_l_inglese(self, bilingue):
+        v = bilingue.cerca(["BAROLO", "DOCG"])
+        assert v.testo_in("en") == "Nebbiolo from the Langhe hills."
+        assert v.titolo_in("en") == "Barolo DOCG"
+
+    def test_ma_riga_per_riga_e_non_per_file(self, bilingue):
+        """Il file parla inglese, questa voce no: e non si spaccia per tale."""
+        v = bilingue.cerca(["SOAVE", "DOC"])
+        assert v.testo_in("en") is None
+        assert v.testo_in("it")
+
+    def test_senza_titolo_tradotto_resta_quello_di_partenza(self, bilingue):
+        v = bilingue.cerca(["SOAVE", "DOC"])
+        assert v.titolo_in("en") == "Soave DOC"
