@@ -630,6 +630,61 @@ svg { display: block; }
    niente e' peggio di nessun comando. E' lo stesso criterio del volume. */
 #i-generate[hidden] { display: none; }
 
+/* Il mirino. Occupa tutto il vetro perche' quello che si sta guardando e'
+   l'inquadratura: ridurla per far posto a una cornice vorrebbe dire tarare
+   una cosa guardandone un'altra. Il testo sta di fianco, e sotto i 900 px va
+   sotto - su un vetro da 800x480 l'immagine resta comunque la meta' larga. */
+#mirino {
+  position: absolute; inset: 0; z-index: 10; background: #0d0a09;
+  display: flex; gap: calc(var(--passo) * 1.5);
+  padding: var(--passo); align-items: stretch;
+}
+#mirino[hidden] { display: none; }
+#m-video {
+  flex: 1 1 66%; min-width: 0; min-height: 0; object-fit: contain;
+  border-radius: var(--raggio); background: #000;
+}
+#m-lato {
+  flex: 1 1 32%; min-width: 0; display: flex; flex-direction: column;
+  gap: calc(var(--passo) / 1.5); color: var(--avorio);
+  font-size: calc(var(--t-scelta) * .5); line-height: 1.3;
+}
+/* Scorre il CORPO, non il pannello. Il pulsante di ritorno sta fuori da qui e
+   non si muove: su una parete piena di scritte l'OCR trova quaranta righe, e
+   con il pulsante dentro all'elenco l'unica via d'uscita dal mirino finiva
+   sotto il bordo dello schermo. Su un dispositivo senza tastiera, quello non
+   e' un difetto di impaginazione: e' restarci chiusi dentro. */
+#m-corpo { flex: 1 1 auto; min-height: 0; overflow: auto; }
+#m-corpo::-webkit-scrollbar { display: none; }
+#m-lato h3 {
+  margin: 0 0 .3em; font-size: calc(var(--t-scelta) * .42);
+  letter-spacing: .14em; text-transform: uppercase; color: var(--oro);
+  font-weight: 600;
+}
+#m-lato h3:not(:first-child) { margin-top: .8em; }
+#m-lato p { margin: .2em 0; }
+#m-lato ul { margin: 0; padding-left: 1.1em; }
+#m-lato li { margin: .1em 0; }
+#m-lato code {
+  background: rgba(244,237,227,.09); padding: 0 5px; border-radius: 4px;
+}
+#m-lato .certo { color: #5CDC7A; }
+#m-lato .dubbio { color: #FF9628; }
+#m-lato .nulla { color: #EE5F4F; }
+#m-lato .fioco { color: rgba(244,237,227,.6); }
+#m-torna {
+  flex: none; min-height: var(--tocco);
+  display: flex; align-items: center; justify-content: center;
+  font-size: calc(var(--t-scelta) * .8); color: var(--avorio);
+  border: 2px solid var(--oro); border-radius: var(--raggio);
+}
+#m-torna.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
+@media (max-width: 900px) {
+  #mirino { flex-direction: column; }
+  #m-video { flex: 1 1 58%; }
+  #m-lato { flex: 1 1 42%; }
+}
+
 #diagnostica {
   position: absolute; inset: 0; z-index: 9; background: var(--carbone);
   display: flex; flex-direction: column; align-items: center;
@@ -782,10 +837,25 @@ svg { display: block; }
       </div>
       <div class="i-interruttore"><div class="i-pallina"></div></div>
     </button>
+    <button class="i-riga" id="i-mirino">
+      <div>
+        <div class="i-nome" id="i-mirino-nome">Mirino</div>
+        <div class="i-spiega" id="i-mirino-spiega"></div>
+      </div>
+      <div class="i-interruttore"><div class="i-pallina"></div></div>
+    </button>
     <button class="i-riga" id="i-stato">
       <div class="i-nome" id="i-stato-nome">Stato tecnico</div>
     </button>
     <div id="i-chiudi">chiudi</div>
+  </section>
+
+  <section id="mirino" hidden>
+    <img id="m-video" alt="">
+    <div id="m-lato">
+      <div id="m-corpo"></div>
+      <div id="m-torna">torna al racconto</div>
+    </div>
   </section>
 
   <section id="diagnostica" hidden>
@@ -798,6 +868,10 @@ svg { display: block; }
 "use strict";
 const $ = (id) => document.getElementById(id);
 const viste = ["attesa", "lavoro", "racconto", "conferma", "avviso"];
+/* Le scritte che arrivano dal server e servono a piu' di un posto. Stanno qui
+   perche' il messaggio che le porta arriva a ogni cambio di lingua, e chi le
+   usa puo' essere disegnato molto dopo. */
+const parole = {};
 
 /* Un chiosco non deve mai comportarsi da pagina: niente menu contestuale al
    tocco lungo, niente trascinamento, niente ingrandimento a due dita. Sono
@@ -1155,6 +1229,12 @@ eventi.onmessage = (e) => {
         $("i-titolo").textContent = m.impostazioni.impostazioni;
         $("i-generate-nome").textContent = m.impostazioni.descrizioni_generate;
         $("i-generate-spiega").textContent = m.impostazioni.generate_spiega;
+        $("i-mirino-nome").textContent = m.impostazioni.mirino;
+        $("i-mirino-spiega").textContent = m.impostazioni.mirino_spiega;
+        $("m-torna").textContent = m.impostazioni.mirino_torna;
+        parole.mirino = { legge: m.impostazioni.mirino_legge,
+                          trova: m.impostazioni.mirino_trova,
+                          niente: m.impostazioni.mirino_niente };
         $("i-stato-nome").textContent = m.impostazioni.stato_tecnico;
         $("i-chiudi").textContent = m.impostazioni.chiudi;
         $("d-chiudi").textContent = m.impostazioni.chiudi;
@@ -1172,6 +1252,10 @@ eventi.onmessage = (e) => {
 
     case "impostazioni":
       disegnaImpostazioni(m);
+      break;
+
+    case "mirino":
+      disegnaMirino(m);
       break;
 
     case "salute":
@@ -1237,8 +1321,91 @@ function disegnaImpostazioni(m) {
       .then(d => disegnaImpostazioni(d))
       .catch(() => { generatiAccesi = !generatiAccesi; disegnaImpostazioni({}); });
   });
+  rendiToccabile($("i-mirino"), () => chiediMirino(!mirinoAcceso));
   rendiToccabile($("i-stato"), apriDiagnostica);
   rendiToccabile($("i-chiudi"), () => { $("impostazioni").hidden = true; });
+})();
+
+/* --------------------------------------------------------------- mirino */
+
+/* Il mirino: il dispositivo smette di raccontare e mostra cosa vede la camera,
+   con sopra il riquadro che va all'OCR e la nitidezza misurata dentro di lui.
+   Si accende dal pannello e si spegne da li' o dal pulsante grande, che e'
+   l'unico modo di tornare indietro quando il pannello non si vede piu'.
+
+   Il video e' un multipart che il browser tiene aperto: quando si spegne, il
+   src va SVUOTATO. Lasciarlo vuol dire una connessione appesa per sempre a un
+   flusso che non manda piu' niente, e al riaccendersi il browser mostrerebbe
+   l'ultimo fotogramma della volta prima come se fosse adesso. */
+let mirinoAcceso = false;
+let mirinoOrologio = null;
+/* Quante righe si mostrano. Un'etichetta ne da' tre o cinque; una parete con
+   un calendario dietro ne da' quaranta, e mostrarle tutte spinge fuori
+   schermo la cosa per cui si e' aperto il mirino. Le altre si contano. */
+const RIGHE_MOSTRATE = 10;
+
+function chiediMirino(acceso) {
+  fetch("/mirino/" + (acceso ? 1 : 0), { method: "POST" })
+    .then(r => r.json())
+    .then(disegnaMirino)
+    .catch(() => { /* il messaggio di stato rimettera' le cose a posto */ });
+}
+
+function disegnaMirino(m) {
+  if (typeof m.acceso !== "boolean") return;
+  mirinoAcceso = m.acceso;
+  if (typeof m.disponibile === "boolean") $("i-mirino").hidden = !m.disponibile;
+  $("i-mirino").classList.toggle("acceso", mirinoAcceso);
+  $("i-mirino").setAttribute("aria-pressed", String(mirinoAcceso));
+  $("mirino").hidden = !mirinoAcceso;
+  if (mirinoAcceso) {
+    $("impostazioni").hidden = true;
+    $("diagnostica").hidden = true;
+    $("m-video").src = "/mirino/flusso?" + Date.now();
+    aggiornaLettura();
+    if (!mirinoOrologio) mirinoOrologio = setInterval(aggiornaLettura, 1200);
+  } else {
+    $("m-video").removeAttribute("src");
+    if (mirinoOrologio) { clearInterval(mirinoOrologio); mirinoOrologio = null; }
+  }
+}
+
+const sicuro = (s) => String(s).replace(/[<&]/g, c => c === "<" ? "&lt;" : "&amp;");
+
+function aggiornaLettura() {
+  fetch("/mirino/lettura", { cache: "no-store" })
+    .then(r => r.json())
+    .then(d => {
+      const e = $("m-corpo");
+      const p = parole.mirino || {};
+      if (d.stato !== "letto") {
+        e.innerHTML = "<p class=fioco>" + sicuro(d.stato) + "</p>";
+        return;
+      }
+      const cl = d.livello === "certo" ? "certo"
+               : d.livello === "dubbio" ? "dubbio" : "nulla";
+      e.innerHTML =
+        "<h3>" + sicuro(p.legge || "Cosa legge") + " · " + d.durata + " s</h3>" +
+        (d.righe.length
+          ? "<ul>" + d.righe.slice(0, RIGHE_MOSTRATE).map(r =>
+              "<li><code>" + sicuro(r) + "</code></li>").join("") + "</ul>" +
+            (d.righe.length > RIGHE_MOSTRATE
+              ? "<p class=fioco>e altre " + (d.righe.length - RIGHE_MOSTRATE) + "</p>"
+              : "")
+          : "<p class=fioco>" + sicuro(p.niente || "—") + "</p>") +
+        "<h3>" + sicuro(p.trova || "Cosa trova") + "</h3>" +
+        "<p><b class=" + cl + ">" + sicuro(d.livello) + "</b> · " + d.sicurezza + "</p>" +
+        (d.nome ? "<p><b>" + sicuro(d.nome) + "</b><br>" + sicuro(d.cantina) +
+           (d.annata ? " · " + sicuro(d.annata) : "") + "</p>" : "") +
+        (d.candidati.length ? "<ul>" + d.candidati.map(c =>
+           "<li>" + sicuro(c) + "</li>").join("") + "</ul>" : "") +
+        "<p class=fioco>nitidezza " + d.nitidezza + " · posa " + d.posa + "</p>";
+    })
+    .catch(() => { /* la board sta rispondendo a qualcos'altro */ });
+}
+
+(function preparaMirino() {
+  rendiToccabile($("m-torna"), () => chiediMirino(false));
 })();
 
 (function preparaAngolo() {

@@ -164,6 +164,30 @@
       "it": "Il racconto viene scritto sul momento per questa bottiglia. Richiede qualche secondo in più.",
       "en": "The description is written on the spot for this bottle. It takes a few seconds longer."
     },
+    "mirino": {
+      "it": "Mirino",
+      "en": "Viewfinder"
+    },
+    "mirino_spiega": {
+      "it": "Mostra cosa vede la camera e cosa riesce a leggere, per mettere a punto l'inquadratura. Finché è acceso il dispositivo non racconta.",
+      "en": "Shows what the camera sees and what it manages to read, to adjust the framing. While it is on the device tells no wine."
+    },
+    "mirino_torna": {
+      "it": "torna al racconto",
+      "en": "back to wines"
+    },
+    "mirino_legge": {
+      "it": "Cosa legge",
+      "en": "What it reads"
+    },
+    "mirino_trova": {
+      "it": "Cosa trova",
+      "en": "What it finds"
+    },
+    "mirino_niente": {
+      "it": "nessuna riga di testo",
+      "en": "no line of text"
+    },
     "acceso": {
       "it": "Acceso",
       "en": "On"

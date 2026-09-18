@@ -224,10 +224,14 @@ class TestCicloCompleto:
         """Amelie con camera e OCR finti che restituiscono righe VERE."""
         import numpy as np
 
-        from amelie.capture import Scatto
+        from amelie.capture import ImpostazioniCamera, Scatto
         from amelie.ocr import Lettura, Riga
 
         class CameraFinta:
+            # Come quella vera, che porta con se' le proprie impostazioni: il
+            # ciclo ci legge la posa per metterla a giornale.
+            imp = ImpostazioniCamera()
+
             def scatta(self, **_):
                 return Scatto(immagine=np.zeros((8, 8, 3), dtype=np.uint8),
                               nitidezza=420.0)
@@ -1115,7 +1119,10 @@ class TestLuceDelloScatto:
         """
 
         def __init__(self, ponte):
+            from amelie.capture import ImpostazioniCamera
+
             self.ponte = ponte
+            self.imp = ImpostazioniCamera()
             self.acceso_quando_ho_scattato = None
 
         def scatta(self, **_):

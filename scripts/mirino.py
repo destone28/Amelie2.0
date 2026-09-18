@@ -5,6 +5,15 @@
     ssh arduino@amelie.local 'cd ~/amelie && PYTHONPATH=src ./venv/bin/python scripts/mirino.py'
     # poi dal PC, nel browser:  http://<indirizzo-della-board>:8090/
 
+**Lo stesso mirino sta ora sul dispositivo**, e si accende dal vetro: angolo in
+basso a destra tenuto tre secondi, poi l'interruttore «Mirino». Quello non
+richiede di fermare il servizio ne' di avere un PC, ed e' la strada normale.
+Questo script resta per chi vuole guardare da lontano, su uno schermo grande,
+con la posa o il ritaglio cambiati da riga di comando senza toccare il codice.
+
+La logica e' la stessa: `amelie.mirino`. Qui attorno c'e' solo cio' che vale al
+banco - l'anello acceso a mano e un server che non e' quello del dispositivo.
+
 Serve a mettere la camera nel punto giusto rispetto alla bottiglia, che è la
 cosa che dallo schermo del dispositivo non si vede. Non mostra il fotogramma e
 basta: mostra le **tre cose che decidono se l'etichetta verrà letta**.
@@ -46,7 +55,6 @@ from __future__ import annotations
 import argparse
 import socket
 import sys
-import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -107,86 +115,30 @@ aggiorna(); setInterval(aggiorna, 1200);
 </body></html>""".encode("utf-8")
 
 
-class Lettura:
-    """L'OCR e il riconoscimento, su un filo a parte.
+class MirinoDaBanco:
+    """Il mirino con attorno quello che serve a usarlo da un PC.
 
-    Su questa board l'OCR costa alcuni secondi: farlo dentro al flusso video
-    lo bloccherebbe. Gira qui in continuo sull'ultimo fotogramma disponibile, e
-    chi disegna prende l'ultimo risultato pronto — che è vecchio di qualche
-    secondo, ed è esattamente quello che serve per capire cosa sta leggendo.
+    Il mirino vero e proprio sta in `amelie.mirino`, ed è lo stesso che il
+    dispositivo mostra sul suo vetro: una copia sola, perché due copie
+    divergono e quella che diverge è sempre quella che sta sul dispositivo
+    in sala. Qui restano le due cose che valgono solo al banco — accendere
+    l'anello a mano e dire a voce alta cosa si sta guardando.
     """
 
-    def __init__(self) -> None:
-        self.esito: dict = {"stato": "attendo il primo fotogramma"}
-        self._ultimo = None
-        self._lucchetto = threading.Lock()
-        self._filo = threading.Thread(target=self._gira, daemon=True)
-        self._vivo = True
-
-    def avvia(self) -> None:
-        self._filo.start()
-
-    def proponi(self, frame) -> None:
-        with self._lucchetto:
-            self._ultimo = frame
-
-    def _gira(self) -> None:
-        from amelie.matcher import Matcher
-        from amelie.ocr import Lettore
-
-        lettore, matcher = Lettore(), Matcher()
-        try:
-            while self._vivo:
-                with self._lucchetto:
-                    frame = self._ultimo
-                    self._ultimo = None
-                if frame is None:
-                    time.sleep(0.1)
-                    continue
-                t = time.monotonic()
-                try:
-                    lettura = lettore.leggi(frame)
-                    righe = [r.testo for r in lettura.righe]
-                    fatti = matcher.cerca(righe)
-                    self.esito = {
-                        "stato": "letto",
-                        "durata": round(time.monotonic() - t, 1),
-                        "righe": righe,
-                        "livello": fatti.livello.value,
-                        "sicurezza": round(fatti.sicurezza),
-                        "nome": fatti.nome or "",
-                        "cantina": fatti.cantina or "",
-                        "annata": fatti.annata or "",
-                        "vitigni": fatti.vitigni[:3],
-                        "candidati": fatti.candidati[:3],
-                    }
-                except Exception as e:                      # noqa: BLE001
-                    self.esito = {"stato": f"errore: {e.__class__.__name__}: {e}"}
-        finally:
-            matcher.chiudi()
-
-    def spegni(self) -> None:
-        self._vivo = False
-
-
-class Mirino:
-    """Tiene la camera aperta e prepara i fotogrammi per chi li chiede."""
-
-    def __init__(self, imp, con_luce: bool, lettura=None) -> None:
-        import cv2
-
+    def __init__(self, imp, con_luce: bool, con_ocr: bool) -> None:
         from amelie.capture import Camera, blocca_esposizione
+        from amelie.mirino import LetturaContinua, Mirino
 
-        self.cv2 = cv2
-        self.lettura = lettura
         self.camera = Camera(imp)
         self.percorso = self.camera.percorso
         blocca_esposizione(imp, self.percorso)
-        self.cap = self.camera._apri()
-        self.con_luce = con_luce
-        self._vivo = False
-        self._jpg: bytes | None = None
-        self._filo = None
+        # La posa NON si ricerca: qui la sceglie chi ha lanciato il comando,
+        # con `--esposizione`, e ricercarla vorrebbe dire scavalcarlo. Sul
+        # dispositivo e' il contrario: li' nessuno la sceglie, e il mirino deve
+        # mostrare l'inquadratura con la posa che ci sara' davvero.
+        self.mirino = Mirino(self.camera,
+                             LetturaContinua() if con_ocr else None,
+                             regola_la_luce=False)
         self._ponte = None
         if con_luce:
             self._accendi()
@@ -204,83 +156,24 @@ class Mirino:
                   f"stai inquadrando con la sola luce della stanza")
 
     def avvia(self) -> None:
-        """Un filo solo acquisisce, e tutti gli altri leggono l'ultimo pronto.
+        self.mirino.accendi()
 
-        Prima i fotogrammi li produceva chi guardava il video, e da lì venivano
-        due difetti: l'OCR non partiva finché non si apriva la pagina — restava
-        a «attendo il primo fotogramma» — e due finestre aperte si contendevano
-        la camera prendendo mezzi fotogrammi a testa.
-        """
-        self._vivo = True
-        self._jpg = None
-        self._filo = threading.Thread(target=self._acquisisci, daemon=True)
-        self._filo.start()
+    def ultimo(self):
+        return self.mirino.ultimo()
 
-    def _acquisisci(self) -> None:
-        while self._vivo:
-            jpg = self._prepara()
-            if jpg is None:
-                time.sleep(0.05)
-                continue
-            self._jpg = jpg
-
-    def ultimo(self) -> bytes | None:
-        return self._jpg
+    @property
+    def esito(self) -> dict:
+        return self.mirino.esito
 
     def spegni(self) -> None:
-        self._vivo = False
-        try:
-            self.cap.release()
-        except Exception:                                   # noqa: BLE001
-            pass
+        self.mirino.spegni()
+        self.camera.chiudi()
         if self._ponte is not None:
             from amelie.bridge import AMBRA
             try:
                 self._ponte.anello(AMBRA)
             except Exception:                               # noqa: BLE001
                 pass
-
-    def _prepara(self) -> bytes | None:
-        from amelie.capture import SOGLIA_NITIDEZZA, nitidezza, ritaglia_centro
-
-        ok, frame = self.cap.read()
-        if not ok or frame is None:
-            return None
-        cv2 = self.cv2
-        h, w = frame.shape[:2]
-        f = self.camera.imp.ritaglio
-        nh, nw = int(h * f), int(w * f)
-        y0, x0 = (h - nh) // 2, (w - nw) // 2
-
-        # La nitidezza si misura DENTRO il ritaglio: fuori di li' l'OCR non
-        # guarda, e includerlo darebbe un numero che non decide niente.
-        ritagliato = ritaglia_centro(frame, f)
-        n = nitidezza(ritagliato)
-        buona = n >= SOGLIA_NITIDEZZA
-        # All'OCR va il RITAGLIO, non l'intera immagine: e' quello che vede il
-        # dispositivo, e leggere di piu' qui darebbe un risultato che a regime
-        # non si otterrebbe.
-        #
-        # E va una COPIA. `ritaglia_centro` restituisce una vista sullo stesso
-        # blocco di memoria, quindi il rettangolo e la scritta disegnati qui
-        # sotto finivano dentro all'immagine che l'OCR stava per leggere: la
-        # prima riga riconosciuta era «nitidezza 60 (soglia 40)», cioe' la
-        # sovrimpressione di questo strumento. Uno strumento di misura che
-        # misura se stesso.
-        if self.lettura is not None:
-            self.lettura.proponi(ritagliato.copy())
-        colore = (90, 220, 60) if buona else (60, 80, 240)      # BGR
-
-        cv2.rectangle(frame, (x0, y0), (x0 + nw, y0 + nh), colore, 3)
-        # Le due mezzerie: centrare l'etichetta a occhio, senza righello.
-        cv2.line(frame, (w // 2, y0), (w // 2, y0 + nh), colore, 1)
-        cv2.line(frame, (x0, h // 2), (x0 + nw, h // 2), colore, 1)
-        cv2.putText(frame, f"nitidezza {n:.0f}  (soglia {SOGLIA_NITIDEZZA:.0f})",
-                    (x0 + 12, y0 + 42), cv2.FONT_HERSHEY_SIMPLEX, 1.1,
-                    colore, 2, cv2.LINE_AA)
-
-        ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
-        return jpg.tobytes() if ok else None
 
 
 def indirizzo_locale() -> str:
@@ -294,7 +187,7 @@ def indirizzo_locale() -> str:
         s.close()
 
 
-def servi(mirino: Mirino, porta: int) -> None:
+def servi(mirino: MirinoDaBanco, porta: int) -> None:
     class Gestore(BaseHTTPRequestHandler):
         def log_message(self, *a):        # niente rumore a ogni fotogramma
             pass
@@ -309,10 +202,10 @@ def servi(mirino: Mirino, porta: int) -> None:
                 return
             if self.path == "/lettura":
                 import json
-                corpo = json.dumps(
-                    mirino.lettura.esito if mirino.lettura is not None
-                    else {"stato": "OCR spento: rilancia con --ocr"},
-                    ensure_ascii=False).encode("utf-8")
+                esito = mirino.esito
+                if esito.get("stato") == "OCR spento":
+                    esito = {"stato": "OCR spento: rilancia con --ocr"}
+                corpo = json.dumps(esito, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -379,14 +272,11 @@ def main() -> None:
     if args.ritaglio:
         imp = replace(imp, ritaglio=args.ritaglio)
 
-    lettura = None
     if args.ocr:
         print("  OCR acceso: il primo giro richiede qualche secondo")
-        lettura = Lettura()
-        lettura.avvia()
 
     try:
-        mirino = Mirino(imp, args.luce, lettura)
+        mirino = MirinoDaBanco(imp, args.luce, args.ocr)
     except CameraNonDisponibile as e:
         sys.exit(f"camera non disponibile: {e}\n"
                  f"Il servizio e' fermo?  sudo systemctl stop amelie")
@@ -398,8 +288,6 @@ def main() -> None:
         servi(mirino, args.porta)
     finally:
         mirino.spegni()
-        if lettura is not None:
-            lettura.spegni()
 
 
 if __name__ == "__main__":

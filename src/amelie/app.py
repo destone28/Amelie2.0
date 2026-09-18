@@ -48,6 +48,8 @@ from .bridge import (
 from .capture import (
     Camera, CameraNonDisponibile, PresenzaOttica, blocca_esposizione,
 )
+from .giornale import Giornale
+from .mirino import LetturaContinua, Mirino
 from .matcher import Fatti, Livello, Matcher
 from .narrator import Narratore, spezza_in_frasi
 from .ocr import Lettore, OCRNonDisponibile
@@ -106,6 +108,9 @@ CARTELLA_SEGNALAZIONI = RADICE / "var" / "segnalazioni"
 # con la bottiglia gia' posata imparerebbe quella come sfondo e resterebbe
 # fermo a guardarla. Vedi `PresenzaOttica.ricorda`.
 PERCORSO_SFONDO = RADICE / "var" / "sfondo.npy"
+# Il giornale di bordo: una riga per scansione e il fotogramma che l'ha
+# prodotta. Vedi `amelie.giornale`.
+CARTELLA_GIORNALE = RADICE / "var" / "scansioni"
 # Ogni quanto si puo' riscrivere lo sfondo, e di quanto deve essere cambiato
 # perche' valga la pena. La memoria della board e' flash: un aggiornamento al
 # minuto sarebbero settanta megabyte al giorno per un file che quasi non cambia.
@@ -184,6 +189,7 @@ class Amelie:
         self.presenza = PresenzaOttica()
         self.camera = None if cfg.senza_camera else Camera()
         self.lettore = None if cfg.senza_camera else Lettore()
+        self.giornale = Giornale(CARTELLA_GIORNALE)
         self.matcher = Matcher()
         self.voce = None if cfg.senza_voce else Voce(
             ImpostazioniVoce(device_alsa=cfg.device_audio))
@@ -233,6 +239,13 @@ class Amelie:
         # Lo sfondo scritto su disco, e quando si potra' riscrivere.
         self._sfondo_scritto = None
         self._prossimo_sfondo = 0.0
+        # Il mirino, quando e' acceso. Non si costruisce qui: ha bisogno del
+        # matcher e del lettore gia' aperti, e finche' nessuno lo chiede non
+        # deve esistere. Vedi `imposta_mirino`.
+        self.mirino: Mirino | None = None
+        # Quello che si sa della scansione in corso, da annotare quando
+        # finisce. Vedi `_annota`.
+        self._scansione: dict[str, Any] = {}
         # Vero finche' non si e' capito che cosa c'e' sul piatto. Succede solo
         # al primo avvio di una installazione, quando nessuno sfondo e' stato
         # ancora imparato: l'unico modo di saperlo e' guardare per bene una
@@ -294,6 +307,13 @@ class Amelie:
             # battito, cioe' un decimo di secondo dopo il tocco.
             if t.a is Stato.CONCLUSO or t.evento is Evento.ANNULLA:
                 self._bottiglia_chiusa = True
+            # Una scansione rimasta senza esito qui ha finito comunque, e va a
+            # giornale con il modo in cui e' finita. Succede quando l'ospite
+            # chiude la scelta fra candidati, o toglie la bottiglia a meta':
+            # senza questa riga, proprio i casi piu' interessanti sarebbero gli
+            # unici a non lasciare traccia.
+            if self._scansione and t.a in (Stato.ATTESA, Stato.CONCLUSO):
+                self._annota(f"chiuso da {t.evento.value}")
             self._mostra(t.a)
         for e in t.effetti:
             self._esegui(e)
@@ -390,7 +410,9 @@ class Amelie:
             "impostazioni": {
                 chiave: self.lex.frase("schermo", chiave, lingua=self.lingua)
                 for chiave in ("impostazioni", "descrizioni_generate",
-                               "generate_spiega", "stato_tecnico", "chiudi")
+                               "generate_spiega", "stato_tecnico", "chiudi",
+                               "mirino", "mirino_spiega", "mirino_torna",
+                               "mirino_legge", "mirino_trova", "mirino_niente")
             },
         })
 
@@ -524,6 +546,112 @@ class Amelie:
     def _salva_generati(self, acceso: bool) -> None:
         self._scrivi_durevole(PERCORSO_GENERATI, "1" if acceso else "0",
                               "impostazione delle descrizioni generate")
+
+    # --------------------------------------------------------------- mirino
+
+    def imposta_mirino(self, acceso: bool) -> dict[str, Any]:
+        """L'interruttore del mirino: il dispositivo smette di raccontare e guarda.
+
+        Sono due modi di usare la stessa camera e non possono convivere: la
+        camera si apre un processo per volta, e mentre il mirino tiene lo
+        stream per mostrare cosa vede, una scansione non può scattare. Quindi
+        accendere il mirino **ferma il ciclo**: niente sbirciate al piatto,
+        niente racconti, niente timer. Si spegne dallo stesso interruttore, e
+        il dispositivo torna quello di prima.
+
+        Non si ricorda fra un avvio e l'altro, ed è voluto: questa è una
+        modalità di taratura, e un dispositivo che si riaccende in sala deve
+        riaccendersi come un dispositivo che racconta vini. Chi l'ha lasciata
+        accesa la sera prima non se ne ricorderà.
+
+        L'anello va a bianco come durante la raffica, e la posa si cerca una
+        volta all'accensione: si tara l'inquadratura con la luce e la posa che
+        ci saranno davvero, non con quelle della stanza.
+        """
+        acceso = bool(acceso)
+        if acceso == (self.mirino is not None and self.mirino.acceso):
+            return self._stato_mirino()
+        if acceso:
+            self._accendi_mirino()
+        else:
+            self._spegni_mirino()
+        stato = self._stato_mirino()
+        # Si dichiara com'e' andata, non cosa si e' chiesto: senza camera
+        # l'accensione non succede, e un giornale che dice «acceso» mentre lo
+        # schermo resta nero manda a cercare il guasto dalla parte sbagliata.
+        log.info("mirino: %s", "acceso" if stato["acceso"] else "spento")
+        self._manda_mirino()
+        return stato
+
+    def _accendi_mirino(self) -> None:
+        if self.camera is None or self.lettore is None:
+            log.warning("mirino senza camera: non c'è niente da inquadrare")
+            return
+        # Prima si chiude quello che c'era: un racconto che continua a parlare
+        # mentre lo schermo mostra il mirino è un dispositivo in due posti.
+        self._ferma_racconto()
+        self._bottiglia_chiusa = False
+        # «La bottiglia non c'e' piu'» e' proprio la notizia giusta: e' il modo
+        # in cui si dichiara che il giro e' finito, e riporta in attesa da
+        # qualunque stato. Non serve una scorciatoia che gli somigli.
+        self.macchina.invia(Evento.BOTTIGLIA_ASSENTE)
+        try:
+            self.ponte.anello(BIANCO_SCATTO)
+        except (PonteNonDisponibile, ErroreMCU):
+            pass
+        if self.mirino is None:
+            # Il mirino apre il SUO lettore e il SUO matcher. Prestargli quelli
+            # del dispositivo sembrava un risparmio e invece e' una corsa: se
+            # una scansione e' ancora in corso quando si accende il mirino, due
+            # fili finiscono dentro allo stesso motore ONNX e alla stessa
+            # connessione SQLite. Vedi `LetturaContinua`.
+            self.mirino = Mirino(self.camera, LetturaContinua())
+        self.mirino.accendi()
+
+    def _spegni_mirino(self) -> None:
+        if self.mirino is not None:
+            self.mirino.spegni()
+        # Lo stream si chiude: la prima sbirciata lo riaccende, e cosi' la
+        # camera riparte pulita invece che da uno stream che il mirino stava
+        # leggendo a raffica.
+        if self.camera is not None:
+            self.camera.chiudi()
+        # Il piatto vuoto si ripesca da dove sta scritto, invece di
+        # reimpararlo da quello che c'e' davanti adesso. Chi tara il mirino ha
+        # una bottiglia in mano: reimparando, quella bottiglia diventerebbe lo
+        # sfondo, e il dispositivo resterebbe a guardarla senza vederla.
+        sfondo = self._sfondo_ricordato() if self.camera is not None else None
+        if sfondo is not None:
+            self.presenza.ricorda(sfondo)
+        else:
+            self.presenza.reimposta()
+        self._mostra(self.macchina.stato)
+
+    def _stato_mirino(self) -> dict[str, Any]:
+        acceso = self.mirino is not None and self.mirino.acceso
+        return {"ok": True, "acceso": acceso,
+                "disponibile": self.camera is not None and self.lettore is not None,
+                "nitidezza": round(self.mirino.nitidezza) if acceso else 0}
+
+    def _manda_mirino(self) -> None:
+        self._pubblica({"tipo": "mirino", **self._stato_mirino()})
+
+    # -------------------------------------------------------- giornale
+
+    def _annota(self, esito: str) -> None:
+        """Mette a giornale la scansione appena conclusa, com'è andata.
+
+        Si chiama dove la scansione FINISCE, e finisce in due posti soli: senza
+        niente da leggere, oppure con un racconto pronto. Quello che si sa si
+        è accumulato per strada in `_scansione`.
+        """
+        voce = dict(self._scansione)
+        self._scansione = {}
+        if not voce:
+            return
+        voce["esito"] = esito
+        voce["lingua"] = self.lingua
+        self.giornale.annota(voce, getattr(self, "_ultimo_scatto", None))
 
     def _manda_impostazioni(self) -> None:
         self._pubblica({"tipo": "impostazioni",
@@ -936,6 +1064,13 @@ class Amelie:
         self._ultimo_scatto = scatto.immagine
         log.info("lette %d righe in %.1f s (nitidezza %.0f)",
                  len(self._righe), lettura.durata_s, scatto.nitidezza)
+        self._scansione = {
+            "righe": list(self._righe),
+            "ocr_s": round(lettura.durata_s, 1),
+            "nitidezza": round(scatto.nitidezza),
+            "posa": self.camera.imp.esposizione,
+            "tentativo": self._tentativi + 1,
+        }
         if self._righe:
             self._tentativi = 0
             # Un'etichetta letta e' la prova che sul piatto c'e' qualcosa, e
@@ -945,6 +1080,7 @@ class Amelie:
             self.macchina.invia(Evento.LETTURA_RIUSCITA)
             return
         self._tentativi += 1
+        self._annota("niente da leggere")
         self.macchina.invia(Evento.LETTURA_FALLITA)
         if self._tentativi >= TENTATIVI_MAX:
             # Si e' provato abbastanza: si mostra il messaggio e si tace, invece
@@ -973,11 +1109,20 @@ class Amelie:
         self._candidati = self._fatti.candidati
         log.info("livello %s, sicurezza %.0f", self._fatti.livello.value,
                  self._fatti.sicurezza)
+        self._scansione.update({
+            "livello": self._fatti.livello.value,
+            "sicurezza": round(self._fatti.sicurezza),
+            "nome": self._fatti.nome or "",
+            "cantina": self._fatti.cantina or "",
+            "annata": self._fatti.annata or "",
+            "candidati": list(self._candidati),
+        })
         if self._fatti.certo:
             self.macchina.invia(Evento.MATCH_SICURO)
         elif self._fatti.dubbio and self._candidati:
             self.macchina.invia(Evento.MATCH_DUBBIO)
         elif self._fatti.vuoto:
+            self._annota("letto ma non riconosciuto")
             self.macchina.invia(Evento.LETTURA_FALLITA)
         else:
             self.macchina.invia(Evento.MATCH_ASSENTE)
@@ -989,6 +1134,13 @@ class Amelie:
         log.info("racconto da %s (%d parole)", racconto.origine,
                  len(racconto.testo.split()))
         frasi = racconto.frasi
+        # La scansione finisce qui: si e' letto, si e' cercato, e c'e' un
+        # racconto pronto. Si mette a giornale con dentro anche COSA si e'
+        # detto: un riconoscimento giusto puo' produrre un testo sbagliato, e
+        # senza il testo quel caso non si vede.
+        self._scansione["racconto_da"] = racconto.origine
+        self._scansione["racconto"] = racconto.testo
+        self._annota("raccontato")
 
         # Il testo arriva TUTTO INSIEME, e la frase in ascolto si illumina.
         # Prima compariva un pezzo alla volta, al ritmo stimato della lettura:
@@ -1291,6 +1443,11 @@ class Amelie:
 
     async def _un_battito(self) -> None:
         """Un giro solo: sbirciata, presenza, timer. Isolato per poterlo provare."""
+        if self.mirino is not None and self.mirino.acceso:
+            # Col mirino acceso il dispositivo guarda, non racconta: la camera
+            # e' sua, e far scadere un timer qui vorrebbe dire far partire una
+            # scansione contro uno stream che qualcun altro sta leggendo.
+            return
         c_era = self.presenza.presente
         ora = await self._chi_c_e()
         if ora != c_era:
@@ -1445,6 +1602,7 @@ def crea_app(amelie: Amelie):
                 amelie._manda_lingua()
                 amelie._manda_volume()
                 amelie._manda_impostazioni()
+                amelie._manda_mirino()
                 while True:
                     dati = await coda.get()
                     if dati is None:        # il servizio sta chiudendo
@@ -1491,6 +1649,66 @@ def crea_app(amelie: Amelie):
     @app.post("/generati/{acceso}")
     async def generati(acceso: int):
         return JSONResponse(amelie.imposta_generati(bool(acceso)))
+
+    @app.post("/mirino/{acceso}")
+    async def mirino(acceso: int):
+        return JSONResponse(amelie.imposta_mirino(bool(acceso)))
+
+    @app.get("/mirino/lettura")
+    async def mirino_lettura():
+        vista = amelie.mirino
+        if vista is None or not vista.acceso:
+            return JSONResponse({"stato": "mirino spento"})
+        return JSONResponse({**vista.esito,
+                             "nitidezza": round(vista.nitidezza),
+                             "posa": amelie.camera.imp.esposizione
+                             if amelie.camera else None})
+
+    @app.get("/mirino/flusso")
+    async def mirino_flusso():
+        """Il video, in multipart. Un fotogramma per volta, l'ultimo pronto.
+
+        Non è una coda: chi si collega prende quello che c'è adesso, e se
+        arriva tardi salta i fotogrammi vecchi invece di rincorrerli. È quello
+        che serve a un mirino, dove guardare indietro non ha senso.
+        """
+        async def fotogrammi():
+            ultimo = None
+            while True:
+                vista = amelie.mirino
+                if vista is None or not vista.acceso:
+                    return
+                jpg = vista.ultimo()
+                if jpg is not None and jpg is not ultimo:
+                    ultimo = jpg
+                    yield (b"--fotogramma\r\nContent-Type: image/jpeg\r\n"
+                           b"Content-Length: " + str(len(jpg)).encode()
+                           + b"\r\n\r\n" + jpg + b"\r\n")
+                await asyncio.sleep(0.05)
+
+        return StreamingResponse(
+            fotogrammi(),
+            media_type="multipart/x-mixed-replace; boundary=fotogramma",
+            headers={"Cache-Control": "no-store"})
+
+    @app.get("/giornale")
+    async def giornale(quante: int = 20):
+        """Le ultime scansioni: cosa ha letto, cosa ha concluso, cosa ha detto.
+
+        È il modo di capire perché una bottiglia non è stata riconosciuta
+        quando nessuno era lì a guardare. Ogni voce porta il nome del suo
+        fotogramma, che si scarica da `/giornale/<nome>`.
+        """
+        return JSONResponse({"voci": amelie.giornale.ultime(
+            max(1, min(200, quante)))})
+
+    @app.get("/giornale/{nome}")
+    async def giornale_immagine(nome: str):
+        percorso = amelie.giornale.immagine(nome)
+        if percorso is None:
+            return JSONResponse({"ok": False, "motivo": "non c'è"},
+                                status_code=404)
+        return FileResponse(percorso, media_type="image/jpeg")
 
     @app.post("/prova/{cosa}")
     async def prova(cosa: str):

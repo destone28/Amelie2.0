@@ -684,6 +684,38 @@ class Camera:
         striscia = grigio[:, int(w * da) : int(w * a)]
         return cv2.resize(striscia, self.imp.sbirciata).astype(np.float32)
 
+    def fotogramma(self):
+        """Un fotogramma grezzo, per chi vuole guardare invece di leggere.
+
+        Lo usa il mirino, che ne consuma qualcuno al secondo. Passa dallo
+        stesso lucchetto dello scatto: la camera si apre un processo per volta,
+        e dentro al processo un filo per volta.
+        """
+        with self._lucchetto:
+            try:
+                cap = self._apri()
+            except CameraNonDisponibile as e:
+                log.warning("mirino senza camera: %s", e)
+                return None
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                self._spegni()
+                return None
+            return frame
+
+    def regola_la_luce(self) -> float:
+        """Cerca la posa e basta, senza scattare.
+
+        Serve al mirino: si guarda l'etichetta con la stessa posa con cui la
+        leggerà il dispositivo, altrimenti si sta calibrando un'inquadratura
+        che a regime non esiste.
+        """
+        with self._lucchetto:
+            cap = self._apri()
+            for _ in range(self.imp.fotogrammi_da_scartare):
+                cap.grab()
+            return self._cerca_la_posa(cap)
+
     def sbircia(self) -> np.ndarray | None:
         """Un fotogramma solo, ridotto alla fascia della bottiglia.
 
