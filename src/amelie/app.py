@@ -1449,12 +1449,23 @@ class Amelie:
             if sfondo is not None:
                 self.presenza.ricorda(sfondo)
                 self._sfondo_scritto = sfondo
-            else:
-                # Prima accensione di questa installazione. Senza uno sfondo
-                # non c'e' modo di sapere se il piatto e' vuoto o se c'e' una
-                # bottiglia gia' posata: si guarda per bene una volta, con la
-                # luce, e poi si sapra' per sempre.
-                self._da_capire = True
+            # E SEMPRE si guarda una volta, anche con uno sfondo in mano.
+            #
+            # Lo sfondo ricordato dice com'era il piatto l'ultima volta che il
+            # dispositivo ha creduto fosse vuoto, e quella convinzione puo'
+            # essere sbagliata: basta che la bottiglia sia arrivata mentre lo
+            # imparava. Succede, e visto sul dispositivo: lo sfondo salvato
+            # conteneva una bottiglia, quindi il piatto sembrava vuoto con la
+            # bottiglia sopra, quindi nessuna scansione partiva - e senza
+            # scansione non partiva nemmeno la via di scampo, che sta in fondo
+            # alla scansione. Cieco fino a che qualcuno non toglieva la
+            # bottiglia.
+            #
+            # Costa un'accensione dell'anello e una lettura per avvio. In
+            # cambio, all'accensione il dispositivo sa sempre cosa ha davanti,
+            # qualunque cosa dica il file. Ed e' anche l'unico collaudo
+            # automatico che questo dispositivo fa di se stesso.
+            self._da_capire = True
 
         while True:
             try:
