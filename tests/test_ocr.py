@@ -1,9 +1,9 @@
-"""Test della normalizzazione dell'uscita OCR.
+"""Test della lettura dell'etichetta.
 
-Il motore vero non serve: qui si verifica che l'involucro regga entrambi i
-formati di uscita di RapidOCR (quello 3.x a oggetto e quello vecchio a tuple),
-che il filtro sulla confidenza funzioni, e che il riconoscimento delle righe
-"grandi" — quelle dove sta la denominazione — sia sensato.
+Il motore vero non serve: qui si verifica che il filtro sulla confidenza
+funzioni, che il riconoscimento delle righe "grandi" — quelle dove sta la
+denominazione — sia sensato, e che le scelte pagate con una misura restino
+quelle.
 """
 
 import pytest
@@ -13,57 +13,23 @@ from amelie.ocr import (
     Lettore,
     Lettura,
     Riga,
-    _estrai_righe,
+    _altezza_del_riquadro,
 )
-
-
-class UscitaNuova:
-    """Come risponde RapidOCR 3.x."""
-
-    def __init__(self, txts, scores, boxes=None):
-        self.txts = txts
-        self.scores = scores
-        self.boxes = boxes
 
 
 def riquadro(x0, y0, x1, y1):
     return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
 
 
-class TestEstrazione:
-    def test_formato_nuovo(self):
-        u = UscitaNuova(["Barolo", "2019"], [0.98, 0.91])
-        righe = _estrai_righe(u)
-        assert [r.testo for r in righe] == ["Barolo", "2019"]
-        assert righe[0].confidenza == pytest.approx(0.98)
+class TestAltezzaDelRiquadro:
+    """Serve a decidere quali righe meritano i quaranta millesimi di lettura."""
 
-    def test_formato_vecchio_a_tuple(self):
-        grezzo = [
-            (riquadro(0, 0, 100, 30), "Barolo", 0.98),
-            (riquadro(0, 40, 60, 60), "2019", 0.91),
-        ]
-        righe = _estrai_righe(grezzo)
-        assert [r.testo for r in righe] == ["Barolo", "2019"]
+    def test_misura_l_altezza(self):
+        assert _altezza_del_riquadro(riquadro(0, 10, 100, 40)) == 30
 
-    def test_nessun_risultato(self):
-        assert _estrai_righe(None) == []
-        assert _estrai_righe([]) == []
-
-    def test_uscita_incomprensibile_non_esplode(self):
-        assert _estrai_righe(42) == []
-
-    def test_elementi_malformati_vengono_saltati(self):
-        grezzo = [
-            (riquadro(0, 0, 10, 10), "Barolo", 0.9),
-            ("spazzatura",),
-            None,
-        ]
-        assert len(_estrai_righe(grezzo)) == 1
-
-    def test_riquadro_illeggibile_non_perde_la_riga(self):
-        righe = _estrai_righe(UscitaNuova(["Barolo"], [0.9], [["x", "y"]]))
-        assert righe[0].testo == "Barolo"
-        assert righe[0].riquadro == ()
+    def test_un_riquadro_illeggibile_vale_zero_e_non_esplode(self):
+        assert _altezza_del_riquadro([["x", "y"]]) == 0.0
+        assert _altezza_del_riquadro(None) == 0.0
 
 
 class TestFiltro:
@@ -132,21 +98,36 @@ class TestImpostazioni:
 
         Più accurato **e** più veloce: raddrizzare un ritaglio prima di
         riconoscerlo fa risparmiare al riconoscitore il lavoro di indovinare.
-        """
-        assert ImpostazioniOCR().usa_classificatore is True
 
-    def test_non_si_alza_la_risoluzione_del_rilevatore(self):
-        """L'altra cosa che verrebbe da fare, e che peggiora.
-
-        Sugli stessi tre scatti, 1536 ha dato `AVOLA | SICILIA | (0 | 10 | NERO`
-        in 12,0 s contro `D'AVOLA | SICILIA | NERO` in 4,9 s a 736: più
-        spazzatura e il doppio del tempo.
+        **Quella misura è stata presa con la camera montata orizzontale.** Ora
+        la camera è di lato e il fotogramma si raddrizza in `capture`: il testo
+        arriva già dritto e non c'è più niente da raddrizzare. Verificato che si
+        legga lo stesso con e senza, sulla stessa etichetta.
         """
-        assert ImpostazioniOCR().lato_massimo == 736
+        assert ImpostazioniOCR().usa_classificatore is False
+
+    def test_la_risoluzione_del_rilevatore_e_un_compromesso_misurato(self):
+        """Sotto sbaglia le lettere, sopra costa e basta.
+
+        Sulla stessa etichetta: a 224 il rilevatore trova in 110 ms e si legge
+        `SERARUOLS`, a 320 trova in 274 ms e si legge `CERASUOLO`, a 756 trova
+        in 2835 ms e si leggono le stesse righe di 320.
+        """
+        assert ImpostazioniOCR().lato_rilevatore == 320
+
+    def test_si_leggono_solo_le_righe_piu_alte(self):
+        """Ogni riga costa quaranta millesimi, e una parete ne dà trentotto."""
+        assert ImpostazioniOCR().righe_massime == 10
+
+    def test_la_larghezza_di_una_riga_ha_un_tetto(self):
+        """Il pacchetto non glielo mette, e una didascalia lunga costava da
+        sola quanto tutta l'etichetta."""
+        assert ImpostazioniOCR().larghezza_riga == 320
+        assert ImpostazioniOCR().altezza_riga == 48
 
     def test_immutabile(self):
         with pytest.raises(Exception):
-            ImpostazioniOCR().lato_massimo = 1
+            ImpostazioniOCR().lato_rilevatore = 1
 
 
 class TestIlVersoDelFotogramma:

@@ -82,16 +82,16 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("-n", "--numero", type=int, default=None)
     ap.add_argument("--salva", type=Path, default=None)
-    ap.add_argument("--lato", type=int, default=736, help="Det.limit_side_len")
+    ap.add_argument("--lato", type=int, default=320, help="lato corto dato al rilevatore")
     ap.add_argument("--thread", type=int, default=4)
     args = ap.parse_args()
 
     import cv2
 
     righe = carica_manifesto(args.numero)
-    lettore = Lettore(ImpostazioniOCR(lato_massimo=args.lato, numero_thread=args.thread))
+    lettore = Lettore(ImpostazioniOCR(lato_rilevatore=args.lato, numero_thread=args.thread))
 
-    print(f"Etichette: {len(righe)}   lato_max={args.lato}   thread={args.thread}")
+    print(f"Etichette: {len(righe)}   lato_ril={args.lato}   thread={args.thread}")
     print("Caricamento del motore...", end=" ", flush=True)
     t0 = time.perf_counter()
     lettore._carica()

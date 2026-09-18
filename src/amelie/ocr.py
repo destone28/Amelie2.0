@@ -17,13 +17,38 @@ Due decisioni contro-intuitive, entrambe misurate:
   modelli PP-OCR sono addestrati su tre canali e un canale replicato è un
   ingresso fuori distribuzione.
 
-- **Il collo di bottiglia non è la rete**: i due terzi del tempo se ne vanno in
-  pre e post-processing Python/OpenCV, che è mono-thread. Prima di cambiare
-  modello conviene ridurre `limit_side_len` e passare un ritaglio invece del
-  fotogramma intero.
+- **Ridurre `limit_side_len` non riduceva niente.** Per un anno il parametro è
+  stato girato da 736 a 160 senza che il tempo cambiasse di un millesimo, e il
+  motivo sta nel pacchetto: con `limit_type="min"` il ridimensionamento
+  interviene solo `if min(h, w) < limit_side_len`, cioè **solo per ingrandire**.
+  Un ritaglio 756x1824 ha il lato corto già sopra qualunque soglia, e arrivava
+  alla rete intero. Misurato: 3960 ms, identici a 736 e a 160.
 
-Il classificatore di orientamento è disattivato: sul supporto l'etichetta è
-sempre dritta, e ogni riga risparmiata è tempo guadagnato su un Cortex-A53.
+Da lì la forma attuale, che è **in due fasi** e vale quattro secondi:
+
+1. **si trova** dove sta il testo su un'immagine che rimpiccioliamo NOI, perché
+   il costo del rilevatore va col numero di pixel: 2835 ms a 768x1824, 198 ms a
+   192x480, sulla stessa rete;
+2. **si legge** ogni riga ritagliata dall'immagine GRANDE. Il riconoscitore
+   normalizza ogni ritaglio a 48 pixel d'altezza, quindi il suo costo non
+   dipende dalla risoluzione di partenza: si può cercare sul piccolo e leggere
+   sul grande senza pagare niente.
+
+Misurato sul dispositivo, stessa etichetta: **3960 ms -> 585 ms**, con le
+stesse tre righe lette (`Leggiadro`, `Brut Rosé`, `METODO CLASSICO`).
+
+Due trappole trovate per strada, e vanno ricordate perché non danno errore:
+
+- **I parametri si danno alla costruzione, mai alla chiamata.** Passare
+  `box_thresh` o `unclip_ratio` a `motore(...)` fa ricostruire il motore a ogni
+  fotogramma: 585 ms diventano 1240, e non c'è nessun avviso.
+- **La larghezza dei ritagli non ha un tetto suo.** Una riga lunga diventa un
+  ingresso lungo, e una sola riga di didascalia costava quanto tutta
+  l'etichetta. Qui si normalizza a mano prima di leggere.
+
+Il classificatore di orientamento è disattivato: la camera ora è montata di
+lato e il fotogramma si raddrizza a monte, quindi sul supporto l'etichetta
+arriva dritta, e ogni riga risparmiata è tempo guadagnato su un Cortex-A53.
 """
 
 from __future__ import annotations
@@ -33,7 +58,7 @@ import time
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -44,15 +69,57 @@ RADICE_MODELLI = Path(__file__).resolve().parents[2] / "models"
 class ImpostazioniOCR:
     """Parametri del riconoscimento."""
 
-    # Lato massimo dell'immagine data al rilevatore. 736 è il default di PP-OCR.
+    # Lato corto a cui si riduce l'immagine PRIMA di cercarci dentro il testo.
     #
-    # Verrebbe da alzarlo, e sarebbe sbagliato: **misurato** su tre scatti veri
-    # della stessa etichetta, 736 legge `D'AVOLA | SICILIA | NERO` in 4,9 s,
-    # mentre 1536 legge `AVOLA | SICILIA | (0 | 10 | NERO` in 12,0 s. Più
-    # risoluzione ha dato più spazzatura e il doppio del tempo: il modello di
-    # riconoscimento lavora su ritagli normalizzati, e il collo di bottiglia
-    # non era la risoluzione.
-    lato_massimo: int = 736
+    # Si chiamava `lato_massimo` e non era un massimo: finiva in
+    # `Det.limit_side_len` che con `limit_type="min"` è un MINIMO, e serviva
+    # solo a ingrandire. Il nome nuovo dice quello che il numero fa davvero.
+    #
+    # 320 è misurato, non scelto. Sotto, il rilevatore comincia a sbagliare le
+    # lettere - a 224 la stessa etichetta dà `SERARUOLS` dove a 320 dà
+    # `CERASUOLO` - e sopra costa e basta:
+    #
+    #     224   trova in 110 ms   `CERARUOLO` `SEARRUZZO`
+    #     320   trova in 274 ms   `CERASUOLO` `DABRUZZO`
+    #     756   trova in 2835 ms  le stesse due righe
+    lato_rilevatore: int = 320
+
+    # Quante righe si leggono, delle tante che il rilevatore trova.
+    #
+    # Ogni riga costa 40 ms, e una parete dietro la bottiglia ne produce
+    # trentotto. Si tengono le più ALTE: su un'etichetta la denominazione è
+    # scritta grande e i solfiti sono scritti piccoli, e il tempo va speso dove
+    # c'è il nome.
+    righe_massime: int = 10
+
+    # L'altezza a cui si normalizza ogni riga prima di leggerla, e il tetto
+    # alla sua larghezza. È quello che il riconoscitore farebbe da sé, tranne
+    # che per il tetto: senza, una riga lunga diventa un ingresso lungo e costa
+    # da sola quanto tutta l'etichetta.
+    altezza_riga: int = 48
+    larghezza_riga: int = 320
+
+    # Quanto deve essere sicura una regione per diventare una riga, e di quanto
+    # si allarga il riquadro prima di ritagliarlo. Sono i default di PP-OCR:
+    # provato ad allargare fino a 2,5 per recuperare le prime lettere mangiate
+    # («OSECCO» per PROSECCO), e non serviva - a 320 il riquadro è già giusto,
+    # era la risoluzione a mancare.
+    soglia_riquadro: float = 0.5
+    allargamento: float = 1.5
+
+    # Le reti piccole invece di quelle normali.
+    #
+    # Misurato sulla stessa etichetta, dopo aver sistemato tutto il resto:
+    #
+    #     PP-OCRv5 mobile   trova 381 ms   legge 786 ms
+    #     PP-OCRv6 small    trova 374 ms   legge 905 ms
+    #     PP-OCRv6 tiny     trova 261 ms   legge 255 ms
+    #
+    # Le tre righe lette sono le stesse. Il dizionario non c'entra: provato a
+    # sostituire il riconoscitore cinese - seimila ideogrammi nell'ultimo
+    # strato - con quello latino, e si risparmiavano sessanta millesimi su
+    # seicentonovanta. È la taglia della rete, non l'alfabeto.
+    reti_piccole: bool = True
 
     # Quante parole utili bastano per non provare altri versi del fotogramma.
     # Tre è il minimo che sull'etichetta vera ha dato un riconoscimento:
@@ -66,8 +133,11 @@ class ImpostazioniOCR:
     # non si sta guardando un'etichetta, si sta guardando una stanza.
     righe_che_bastano: int = 8
 
-    # Il classificatore di orientamento. Era spento, con la motivazione che la
-    # bottiglia sta in piedi e il testo non può essere capovolto.
+    # Il classificatore di orientamento. Era spento, poi acceso, ora di nuovo
+    # spento - e le tre volte per ragioni diverse, che vale la pena distinguere.
+    #
+    # Era spento con la motivazione che la bottiglia sta in piedi e il testo non
+    # può essere capovolto.
     #
     # **La motivazione era sbagliata, e spegnerlo costava quasi tutto.** Su una
     # bottiglia il testo dell'etichetta non è quasi mai orizzontale nel
@@ -82,8 +152,17 @@ class ImpostazioniOCR:
     #
     # Più accurato **e** più veloce: il classificatore raddrizza il ritaglio
     # prima di riconoscerlo, e un ritaglio dritto si legge meglio e prima di uno
-    # storto. Non è un costo, è un risparmio.
-    usa_classificatore: bool = True
+    # storto. Non era un costo, era un risparmio.
+    #
+    # Quella misura è stata presa con la camera montata orizzontale. Ora la
+    # camera è montata di lato e il fotogramma si raddrizza in `capture`: il
+    # testo arriva già dritto, e il classificatore non ha più niente da
+    # raddrizzare. Rimesso a spento e verificato che si legga lo stesso -
+    # `Leggiadro`, `Brut Rosé`, `METODO CLASSICO` con e senza.
+    #
+    # Resta acceso come opzione, e resta collegato: se un giorno la camera
+    # tornasse dritta, basta questo campo.
+    usa_classificatore: bool = False
 
     # Sotto questa confidenza la riga è quasi sempre rumore (bordi
     # dell'etichetta, riflessi, texture della carta).
@@ -181,11 +260,27 @@ class Lettore:
                 "(pip install rapidocr onnxruntime)"
             ) from e
 
+        # Tutto qui, e niente alla chiamata: passare anche un solo parametro a
+        # `motore(...)` fa ricostruire il motore a ogni fotogramma. Misurato,
+        # 585 ms contro 1240, senza nessun avviso.
         parametri: dict[str, Any] = {
             "Global.use_cls": self.imp.usa_classificatore,
-            "Det.limit_side_len": self.imp.lato_massimo,
+            # L'immagine la rimpiccioliamo noi, prima: qui si dice al pacchetto
+            # di non rimetterci le mani. Il lato corto che gli arriva è già
+            # quello che vogliamo, e `limit_type="min"` con la stessa soglia
+            # lascia il rapporto a uno.
+            "Det.limit_type": "min",
+            "Det.limit_side_len": self.imp.lato_rilevatore,
+            "Det.box_thresh": self.imp.soglia_riquadro,
+            "Det.unclip_ratio": self.imp.allargamento,
             "EngineConfig.onnxruntime.intra_op_num_threads": self.imp.numero_thread,
         }
+        if self.imp.reti_piccole:
+            from rapidocr.utils.typings import ModelType, OCRVersion
+
+            v6, tiny = OCRVersion("PP-OCRv6"), ModelType("tiny")
+            parametri |= {"Det.ocr_version": v6, "Det.model_type": tiny,
+                          "Rec.ocr_version": v6, "Rec.model_type": tiny}
         if self.imp.modello_det:
             parametri["Det.model_path"] = str(self.imp.modello_det)
         if self.imp.modello_rec:
@@ -200,12 +295,84 @@ class Lettore:
         """Legge un'immagine **BGR nativa**, non convertita in grigio."""
         motore = self._carica()
         inizio = time.perf_counter()
-        grezzo = motore(immagine)
+        trovate = self._trova_e_leggi(motore, immagine)
         durata = time.perf_counter() - inizio
 
-        righe = [r for r in _estrai_righe(grezzo) if self._tieni(r)]
+        righe = [r for r in trovate if self._tieni(r)]
         log.debug("OCR: %d righe utili in %.2f s", len(righe), durata)
         return Lettura(righe=righe, durata_s=durata)
+
+    def _trova_e_leggi(self, motore, immagine) -> list[Riga]:
+        """Le due fasi: si cerca sul piccolo, si legge sul grande.
+
+        Il rilevatore costa in proporzione ai pixel - 2835 ms a 768x1824, 198 ms
+        a 192x480 - mentre il riconoscitore normalizza ogni ritaglio a
+        un'altezza fissa e non sa nemmeno da che immagine venga. Separarli
+        vuol dire pagare la risoluzione solo dove pesa, e tenerla dove serve.
+        """
+        import cv2
+        import numpy as np
+        from rapidocr.utils.process_img import get_rotate_crop_image
+
+        scala = self.imp.lato_rilevatore / max(1, min(immagine.shape[:2]))
+        if scala < 1.0:
+            piccola = cv2.resize(
+                immagine,
+                (max(1, int(immagine.shape[1] * scala)),
+                 max(1, int(immagine.shape[0] * scala))),
+                interpolation=cv2.INTER_AREA)
+        else:
+            piccola, scala = immagine, 1.0
+
+        trovato = motore(piccola, use_det=True, use_cls=False, use_rec=False)
+        riquadri = [] if trovato is None or trovato.boxes is None else list(trovato.boxes)
+        if not riquadri:
+            return []
+        # Le righe più alte per prime, e poi si taglia: su un'etichetta la
+        # denominazione è scritta grande, i solfiti no, e una parete dietro la
+        # bottiglia dà trentotto righe da 40 ms l'una.
+        riquadri.sort(key=lambda b: -_altezza_del_riquadro(b))
+        scelti = riquadri[:self.imp.righe_massime]
+        if len(riquadri) > len(scelti):
+            log.debug("OCR: %d righe trovate, se ne leggono %d",
+                      len(riquadri), len(scelti))
+
+        ritagli = [self._normalizza_riga(
+            get_rotate_crop_image(immagine, np.array(b, dtype=np.float32) / scala))
+            for b in scelti]
+        if self.imp.usa_classificatore:
+            ritagli, _ = motore.cls_and_rotate(ritagli)
+        letto = motore.recognize_txt(ritagli)
+
+        testi = getattr(letto, "txts", None) or []
+        punteggi = getattr(letto, "scores", None)
+        if punteggi is None:
+            punteggi = [1.0] * len(testi)
+        # Il riquadro torna nelle coordinate dell'immagine grande, non in
+        # quelle del provino: `Riga.altezza` serve a distinguere il nome
+        # scritto grande dalla scritta piccola, e su un'immagine rimpicciolita
+        # direbbe un'altra cosa.
+        return [Riga(testo=str(t), confidenza=float(c),
+                     riquadro=_riquadro(np.array(b, dtype=np.float32) / scala))
+                for t, c, b in zip(testi, punteggi, scelti)]
+
+    def _normalizza_riga(self, ritaglio):
+        """Una riga portata all'altezza di lettura, con un tetto alla larghezza.
+
+        Il tetto è la parte che il pacchetto non mette: lì la larghezza segue il
+        rapporto del ritaglio senza limiti, e una didascalia lunga costava da
+        sola quanto tutta l'etichetta. Tagliata a 320 si legge uguale - stesso
+        testo, misurato riga per riga - e costa come le altre.
+        """
+        import cv2
+
+        alto, largo = ritaglio.shape[:2]
+        if alto < 1 or largo < 1:
+            return ritaglio
+        quanto = max(8, int(largo * self.imp.altezza_riga / alto))
+        return cv2.resize(ritaglio,
+                          (min(quanto, self.imp.larghezza_riga), self.imp.altezza_riga),
+                          interpolation=cv2.INTER_AREA)
 
     def leggi_comunque(self, immagine) -> Lettura:
         """Legge, e se il raccolto è povero riprova girando il fotogramma.
@@ -244,6 +411,17 @@ class Lettore:
             # due minuti e mezzo, e il verso non c'entra niente - qualunque
             # verso, quella parete resta piena di scritte.
             return migliore
+        if not _c_e_una_lettera(migliore):
+            # Righe, ma nemmeno una lettera: numeri e frammenti. Girare il
+            # fotogramma non ci scriverà parole che non ci sono.
+            #
+            # Misurato sul dispositivo, piatto vuoto e un calendario dietro:
+            # l'OCR legge `20 21 19 22 24`, nessuna di queste conta come parola
+            # utile, e il ripiego girava tre volte per **5,7 secondi** su una
+            # scena senza etichette. Un verso sbagliato non dà cifre, dà
+            # spazzatura fatta di lettere — `D'ABRUZZC`, `3IMER · DRZZZO` —
+            # ed è su quella che vale la pena riprovare.
+            return migliore
         if migliore.vuota:
             # NIENTE, nemmeno un frammento: davanti alla camera non c'è
             # scritto niente, e girare il fotogramma non ci scriverà nulla.
@@ -271,57 +449,22 @@ class Lettore:
         )
 
 
-def _estrai_righe(risultato: Any) -> list[Riga]:
-    """Normalizza l'uscita di RapidOCR, che è cambiata fra le versioni.
+def _c_e_una_lettera(lettura: "Lettura") -> bool:
+    """C'è almeno una lettera in quello che si è letto?
 
-    RapidOCR 3.x restituisce un oggetto con gli attributi `txts`, `scores` e
-    `boxes`; le versioni precedenti restituivano una lista di tuple
-    `(riquadro, testo, confidenza)`. Si accettano entrambe perché il pacchetto
-    installato sulla board potrebbe non essere quello del PC di sviluppo.
+    Distingue «etichetta messa male» da «non c'è nessuna etichetta»: la prima
+    dà lettere sbagliate, la seconda dà cifre.
     """
-    if risultato is None:
-        return []
+    return any(c.isalpha() for r in lettura.righe for c in r.testo)
 
-    # Attenzione all'ordine dei controlli: quando RapidOCR non trova nulla
-    # restituisce comunque il suo oggetto, ma con txts a None. Senza questo
-    # ramo si finiva nel caso "uscita non riconosciuta" e si registrava un
-    # avviso a ogni scatto a vuoto - cioe' ogni volta che non c'e' la bottiglia.
-    if hasattr(risultato, "txts") and getattr(risultato, "txts") is None:
-        return []
 
-    testi = getattr(risultato, "txts", None)
-    if testi is not None:
-        # Attenzione: `scores` e `boxes` sono array numpy. Un `or` su un array
-        # numpy solleva ValueError ("truth value is ambiguous"), quindi il
-        # confronto con None deve essere esplicito.
-        punteggi = getattr(risultato, "scores", None)
-        if punteggi is None:
-            punteggi = [1.0] * len(testi)
-        riquadri = getattr(risultato, "boxes", None)
-        if riquadri is None:
-            riquadri = [()] * len(testi)
-        return [
-            Riga(testo=str(t), confidenza=float(s), riquadro=_riquadro(b))
-            for t, s, b in zip(testi, punteggi, riquadri)
-        ]
-
-    if isinstance(risultato, Sequence):
-        righe = []
-        for elemento in risultato:
-            if not isinstance(elemento, Sequence) or len(elemento) < 3:
-                continue
-            riquadro, testo, confidenza = elemento[0], elemento[1], elemento[2]
-            righe.append(
-                Riga(
-                    testo=str(testo),
-                    confidenza=float(confidenza),
-                    riquadro=_riquadro(riquadro),
-                )
-            )
-        return righe
-
-    log.warning("uscita OCR non riconosciuta: %r", type(risultato))
-    return []
+def _altezza_del_riquadro(b: Any) -> float:
+    """Quanto è alto un riquadro, per decidere quali righe meritano i 40 ms."""
+    try:
+        ys = [float(p[1]) for p in b]
+    except (TypeError, IndexError, ValueError):
+        return 0.0
+    return max(ys) - min(ys) if ys else 0.0
 
 
 def _riquadro(b: Any) -> tuple[tuple[float, float], ...]:
