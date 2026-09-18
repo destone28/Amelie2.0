@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from functools import lru_cache
 from typing import Iterable
 
 # ---------------------------------------------------------------------------
@@ -49,6 +50,21 @@ def spoglia_accenti(s: str) -> str:
     return "".join(c for c in scomposto if not unicodedata.combining(c))
 
 
+# Quante forme normalizzate si tengono a mente.
+#
+# Non e' un'ottimizzazione di principio, e' una misura: cercare tre parole in
+# archivio chiamava `normalizza` cinquecentoventi volte, quasi sempre sulle
+# stesse stringhe - i nomi dei candidati, ripassati a ogni livello della
+# cascata - e quelle cinquecentoventi volte costavano centoundici millesimi
+# sui quattrocento della ricerca intera. La funzione e' pura e l'archivio non
+# cambia mentre il dispositivo e' acceso: ricordare e' lecito.
+#
+# Il tetto tiene il ricordo largo quanto un archivio di candidati e non di
+# piu': oltre, si starebbe tenendo in memoria l'intero database per risparmiare
+# una espressione regolare.
+FORME_RICORDATE = 4096
+
+
 def normalizza(s: str, *, collassa_confusioni: bool = True) -> str:
     """Riduce una stringa alla forma usata per il confronto fuzzy.
 
@@ -59,6 +75,11 @@ def normalizza(s: str, *, collassa_confusioni: bool = True) -> str:
     >>> normalizza("Chianti 2019")
     'chianti 2019'
     """
+    return _normalizza(s, collassa_confusioni)
+
+
+@lru_cache(maxsize=FORME_RICORDATE)
+def _normalizza(s: str, collassa_confusioni: bool) -> str:
     s = spoglia_accenti(s).lower()
     s = _sciogli_punti(s)
     parti = [p for p in _NON_ALFANUM.split(s) if p]
@@ -129,7 +150,18 @@ def token(s: str, *, minimo: int = 3) -> list[str]:
     Le parole di una o due lettere ("di", "il", "e") non discriminano nulla e
     allargano inutilmente il set di candidati.
     """
-    return [t for t in normalizza(s).split() if len(t) >= minimo]
+    return list(_token(s, minimo))
+
+
+@lru_cache(maxsize=FORME_RICORDATE)
+def _token(s: str, minimo: int) -> tuple[str, ...]:
+    """Il risultato vero, in forma immutabile perche' si possa ricordare.
+
+    Chi chiama `token` ne riceve una copia: l'elenco viene ordinato e filtrato
+    in giro per il riconoscitore, e restituire l'originale ricordato vorrebbe
+    dire lasciare che qualcuno lo modifichi sotto i piedi di tutti gli altri.
+    """
+    return tuple(t for t in normalizza(s).split() if len(t) >= minimo)
 
 
 # ---------------------------------------------------------------------------
@@ -222,4 +254,9 @@ def parole_utili(s: str, *, minimo: int = 3) -> list[str]:
     il *vino*, ma vanno recuperate a parte come qualificatori della
     denominazione ("Chianti Classico" è una denominazione diversa da "Chianti").
     """
-    return [t for t in token(s, minimo=minimo) if t not in PAROLE_VUOTE]
+    return list(_parole_utili(s, minimo))
+
+
+@lru_cache(maxsize=FORME_RICORDATE)
+def _parole_utili(s: str, minimo: int) -> tuple[str, ...]:
+    return tuple(t for t in _token(s, minimo) if t not in PAROLE_VUOTE)

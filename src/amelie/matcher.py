@@ -686,6 +686,17 @@ class Matcher:
         self.con.row_factory = sqlite3.Row
         self._db = threading.RLock()
         self._vitigni: tuple[str, ...] | None = None
+        # Cio' che si e' gia' chiesto all'archivio, e che non cambiera'.
+        #
+        # Una ricerca faceva quasi cinquecento interrogazioni SQL, e le faceva
+        # perche' la cascata ripassa gli stessi candidati a ogni livello:
+        # duecentotrenta millesimi sui quattrocento della ricerca intera, spesi
+        # a richiedere il colore dello stesso record otto volte. La connessione
+        # e' in sola lettura e il file non cambia mentre il dispositivo e'
+        # acceso: la seconda risposta e' identica alla prima per costruzione.
+        self._colori: dict[tuple[str, int], str | None] = {}
+        self._tipologie: dict[tuple[int, str], int | None] = {}
+        self._per_record: dict[tuple[str, int], tuple[str, float]] | None = None
 
     @sotto_lucchetto
     def chiudi(self) -> None:
@@ -815,6 +826,37 @@ class Matcher:
         trovati = {COLORE_DETTO[x] for x in token if x in COLORE_DETTO}
         return trovati.pop() if len(trovati) == 1 else None
 
+    def _voce_di_ricerca(self, ambito: str, ident: int) -> tuple[str, float] | None:
+        """Il testo indicizzato di un record, preso per chiave invece che cercato.
+
+        `ricerca` e' una tabella FTS5, e in FTS5 le colonne che non sono testo
+        indicizzato sono UNINDEXED davvero: `WHERE ambito = ? AND ambito_id = ?`
+        non ha nessun indice da usare e scandisce venticinquemila righe. Sono
+        **quarantacinque millesimi a chiamata**, misurati, e la cascata la
+        chiama quattro volte per ricerca: centottantacinque millesimi buttati a
+        rileggere un archivio che sa gia' tutto.
+
+        Qui si legge l'archivio una volta e si tiene un dizionario. Costa una
+        scansione all'avvio - la stessa che prima si pagava ogni volta - e poi
+        nulla. Si puo' fare perche' la connessione e' in sola lettura: il file
+        non cambia mentre il dispositivo e' acceso.
+        """
+        if self._per_record is None:
+            self._per_record = self._indice_per_record()
+        return self._per_record.get((ambito, ident))
+
+    @sotto_lucchetto
+    def _indice_per_record(self) -> dict[tuple[str, int], tuple[str, float]]:
+        indice: dict[tuple[str, int], tuple[str, float]] = {}
+        for r in self.con.execute(
+                "SELECT ambito, ambito_id, testo, peso FROM ricerca"):
+            # `setdefault` e non assegnazione: dove un record ha piu' di una
+            # voce, la query di prima prendeva la prima con `fetchone()`, e
+            # cambiare quale si prende cambierebbe cosa si racconta.
+            indice.setdefault((r["ambito"], r["ambito_id"]), (r["testo"], r["peso"]))
+        log.debug("indice per record: %d voci", len(indice))
+        return indice
+
     def _colore_di(self, ambito: str, ambito_id: int) -> str | None:
         """Di che colore e' questo record, tradotto, o `None` se non lo dice.
 
@@ -825,6 +867,12 @@ class Matcher:
         altrimenti meta' degli spumanti risulterebbe senza colore proprio
         quando il colore e' l'unica cosa che l'etichetta dichiara.
         """
+        chiave = (ambito, ambito_id)
+        if chiave not in self._colori:
+            self._colori[chiave] = self._leggi_colore(ambito, ambito_id)
+        return self._colori[chiave]
+
+    def _leggi_colore(self, ambito: str, ambito_id: int) -> str | None:
         if ambito == "tipologia":
             r = self.con.execute(
                 "SELECT colore FROM tipologia WHERE id = ?", (ambito_id,)).fetchone()
@@ -1045,24 +1093,22 @@ class Matcher:
         che c'e' scritto. Vedi `_solo_l_etichetta`.
         """
         for ambito, ident in self.catena_di_ripiego(f):
-            r = self.con.execute(
-                "SELECT testo, peso FROM ricerca WHERE ambito = ? AND ambito_id = ?",
-                (ambito, ident)).fetchone()
-            if r is None or not self._tutto_letto(r["testo"], token):
+            r = self._voce_di_ricerca(ambito, ident)
+            if r is None or not self._tutto_letto(r[0], token):
                 continue
             if f.origine == (ambito, ident):
                 return f
             sceso = self._componi(Candidato(ambito=ambito, ambito_id=ident,
-                                            testo=r["testo"], somiglianza=0.0,
-                                            peso=r["peso"]))
+                                            testo=r[0], somiglianza=0.0,
+                                            peso=r[1]))
             if sceso.livello is Livello.NULLA:
                 continue
             sceso.sicurezza = min(tetto, self._sicurezza_verificata(
-                Candidato(ambito=ambito, ambito_id=ident, testo=r["testo"],
-                          somiglianza=0.0, peso=r["peso"]), testo_norm))
+                Candidato(ambito=ambito, ambito_id=ident, testo=r[0],
+                          somiglianza=0.0, peso=r[1]), testo_norm))
             sceso.annata = f.annata
             log.info("«%s» non si e' letto per intero: si scende a %s «%s»",
-                     f.nome or f.tipologia or f.denominazione, ambito, r["testo"])
+                     f.nome or f.tipologia or f.denominazione, ambito, r[0])
             return sceso
         return self._solo_l_etichetta(f, token, tetto)
 
@@ -1123,14 +1169,12 @@ class Matcher:
                                                testo="", somiglianza=0.0, peso=0))
             if generico.livello is Livello.NULLA:
                 continue
-            r = self.con.execute(
-                "SELECT testo, peso FROM ricerca WHERE ambito = ? AND ambito_id = ?",
-                (ambito, ident)).fetchone()
+            r = self._voce_di_ricerca(ambito, ident)
             if r is None:
                 continue
             generico.sicurezza = min(tetto, self._sicurezza_verificata(
-                Candidato(ambito=ambito, ambito_id=ident, testo=r["testo"],
-                          somiglianza=0.0, peso=r["peso"]), testo_norm))
+                Candidato(ambito=ambito, ambito_id=ident, testo=r[0],
+                          somiglianza=0.0, peso=r[1]), testo_norm))
             log.info("produttore non letto: da %r si scende a %s", f.cantina, ambito)
             return generico
         # Sotto non c'e' nulla su cui ripiegare. Si tiene il record, ma il
@@ -1487,6 +1531,13 @@ class Matcher:
         di Manduria Riserva - e prendere la prima a caso significherebbe
         raccontare una Riserva per un vino base.
         """
+        chiave = (den_id, nome_norm)
+        if chiave not in self._tipologie:
+            self._tipologie[chiave] = self._cerca_tipologia(den_id, nome_norm)
+        return self._tipologie[chiave]
+
+    @sotto_lucchetto
+    def _cerca_tipologia(self, den_id: int, nome_norm: str) -> int | None:
         from rapidfuzz import fuzz
 
         with self._db:
