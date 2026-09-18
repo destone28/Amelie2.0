@@ -863,3 +863,24 @@ class TestQuelCheDiceLEtichetta:
 
         f = m.cerca(["uIsE", "202", "Leggiadro", "Brut Rosé", "METODO CLASSICO"])
         assert all(q in ORDINE_QUALIFICATORI for q in f.qualificatori)
+
+    def test_il_colore_regge_anche_dopo_la_cascata(self, m):
+        """Il vincolo si applica scegliendo fra i candidati, ma la cascata
+        continua dopo: il produttore non letto fa scendere alla tipologia, la
+        regola sul nome fa scendere ancora, e uno di quei gradini può essere di
+        un altro colore.
+
+        Visto sul dispositivo con un'etichetta che diceva PROSECCO ROSÉ: si
+        scendeva a «Prosecco-Wine», che in archivio è BIANCO.
+        """
+        f = m.cerca(["ISE", "20", "TARVESIUM", "PROSECCO ROSÉ", "DOC",
+                     "MILLESIMATO2024", "EXTRA DRY"])
+        assert f.colore in ("Rosé", "Rosato"), (
+            f"un Prosecco Rosé raccontato come {f.colore}")
+        assert "prosecco" in (f.tipologia or f.denominazione or "").lower()
+
+    def test_un_prosecco_bianco_resta_bianco(self, m):
+        """E la correzione non deve scattare quando non c'è niente da
+        correggere: senza la parola «rosé» il Prosecco è quello di sempre."""
+        f = m.cerca(["PROSECCO", "DOC", "EXTRA", "DRY"])
+        assert f.colore == "White"

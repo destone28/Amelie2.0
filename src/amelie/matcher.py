@@ -720,6 +720,7 @@ class Matcher:
         # E ora la regola che vale su TUTTI i nomi, non solo su quello della
         # cantina: non si nomina cio' che non si e' letto.
         fatti = self._non_oltre_cio_che_si_e_letto(fatti, token, testo_norm, tetto)
+        fatti = self._del_colore_dichiarato(fatti, token, testo_norm, tetto)
         if self._c_e_un_altro_produttore(candidati):
             fatti.sicurezza = min(fatti.sicurezza, SOGLIA_CERTA - 0.5)
         fatti.annata = annata
@@ -983,6 +984,51 @@ class Matcher:
             # «Montepulciano» scritto due volte proverebbe due record diversi.
             libere.pop(i)
         return True
+
+    def _del_colore_dichiarato(self, f: Fatti, token: Sequence[str],
+                               testo_norm: str, tetto: float) -> Fatti:
+        """Se il colore scritto contraddice ancora, si cerca il fratello giusto.
+
+        Il vincolo del colore si applica quando si sceglie fra i candidati, ma
+        la cascata continua dopo: il produttore non letto fa scendere alla
+        tipologia, la regola sul nome fa scendere ancora, e uno di quei gradini
+        puo' essere di un altro colore. Visto sul dispositivo con un'etichetta
+        che diceva PROSECCO ROSE: si e' sceso a «Prosecco-Wine», che in
+        archivio e' BIANCO, e il colore dichiarato era finito per strada.
+
+        Qui si guarda fra le tipologie della STESSA denominazione - i fratelli
+        - e si prende quella del colore giusto, se il suo nome si e' letto. Non
+        si va a cercare altrove: cambiare denominazione sarebbe tornare a
+        indovinare, e la denominazione qui l'abbiamo letta.
+        """
+        detto = self._colore_detto(token)
+        if detto is None or f.denominazione is None:
+            return f
+        if f.colore is None or COLORE_UE.get(f.colore, f.colore) == detto:
+            return f
+        atteso = [k for k, v in COLORE_UE.items() if v == detto]
+        righe = self.con.execute(
+            "SELECT t.id, r.testo, r.peso FROM tipologia t"
+            " JOIN denominazione d ON d.id = t.denominazione_id"
+            " JOIN ricerca r ON r.ambito = 'tipologia' AND r.ambito_id = t.id"
+            " WHERE d.nome = ? AND t.colore IN (%s)"
+            % ",".join("?" * len(atteso)), (f.denominazione, *atteso)).fetchall()
+        for r in righe:
+            if not self._tutto_letto(r["testo"], token):
+                continue
+            fratello = self._componi(Candidato(ambito="tipologia", ambito_id=r["id"],
+                                               testo=r["testo"], somiglianza=0.0,
+                                               peso=r["peso"]))
+            if fratello.livello is Livello.NULLA:
+                continue
+            fratello.sicurezza = min(tetto, self._sicurezza_verificata(
+                Candidato(ambito="tipologia", ambito_id=r["id"], testo=r["testo"],
+                          somiglianza=0.0, peso=r["peso"]), testo_norm))
+            fratello.annata = f.annata
+            log.info("colore dichiarato %s: da «%s» (%s) passo a «%s»",
+                     detto, f.tipologia or f.denominazione, f.colore, r["testo"])
+            return fratello
+        return f
 
     def _non_oltre_cio_che_si_e_letto(self, f: Fatti, token: Sequence[str],
                                       testo_norm: str, tetto: float) -> Fatti:
