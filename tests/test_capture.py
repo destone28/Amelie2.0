@@ -452,3 +452,121 @@ class TestLoSfondoSiRicorda:
         assert p.presente is False
         for _ in range(6):
             assert p.aggiorna(self.fascia(9)) is False
+
+
+class TestIlRiquadroDellaBottiglia:
+    """Il riquadro che va all'OCR segue la bottiglia, invece di stare fermo.
+
+    Una renana alta e stretta e una borgognona larga non occupano la stessa
+    parte del fotogramma: un riquadro fisso o taglia l'una, o lascia dentro
+    mezza stanza per l'altra. La sagoma è quella della bottiglia contro lo
+    sfondo imparato — i pixel cambiati sono lei, perché è l'unica cosa che è
+    arrivata.
+    """
+
+    LARGO, ALTO = 96, 170
+
+    def sfondo(self, seme=0):
+        r = np.random.default_rng(seme)
+        return r.integers(0, 255, (self.ALTO, self.LARGO)).astype(np.float32)
+
+    def con_bottiglia(self, x0, x1, y0=40, seme=0):
+        """Lo sfondo con sopra la bottiglia: chiara, e con la sua etichetta.
+
+        Non una macchia uniforme: una bottiglia vera ha un'etichetta e dei
+        riflessi, e un rettangolo di un solo valore sbilancia le statistiche
+        dell'immagine al punto che la normalizzazione della luce fa risultare
+        cambiato anche lo sfondo. Il rivelatore se ne accorge e rinuncia — che
+        è il comportamento giusto davanti a una sagoma incredibile — ma
+        provarlo così vorrebbe dire provare un caso che sul vetro non esiste.
+        """
+        r = np.random.default_rng(seme + 1)
+        img = self.sfondo(seme).copy()
+        alta = self.ALTO - y0
+        img[y0:, x0:x1] = 190 + r.integers(0, 40, (alta, x1 - x0))
+        return img
+
+    def posa(self, p, immagine, volte=6):
+        for _ in range(volte):
+            fuori = p.aggiorna(immagine)
+        return fuori
+
+    def test_senza_bottiglia_non_c_e_riquadro(self):
+        p = PresenzaOttica()
+        self.posa(p, self.sfondo())
+        assert p.riquadro() is None
+
+    def test_una_bottiglia_stretta_da_un_riquadro_stretto(self):
+        p = PresenzaOttica()
+        self.posa(p, self.sfondo())
+        assert self.posa(p, self.con_bottiglia(38, 58)) is True
+        r = p.riquadro()
+        assert r is not None
+        x0, y0, x1, y1 = r
+        assert 0.35 < x0 < 0.42 and 0.58 < x1 < 0.65, r
+        assert y1 > 0.95, "la bottiglia arriva al bordo di sotto"
+
+    def test_una_bottiglia_larga_da_un_riquadro_largo(self):
+        p = PresenzaOttica()
+        self.posa(p, self.sfondo())
+        self.posa(p, self.con_bottiglia(20, 76))
+        stretto = PresenzaOttica()
+        self.posa(stretto, self.sfondo())
+        self.posa(stretto, self.con_bottiglia(38, 58))
+        largo, sottile = p.riquadro(), stretto.riquadro()
+        assert largo is not None and sottile is not None
+        assert (largo[2] - largo[0]) > (sottile[2] - sottile[0]) * 1.8
+
+    def test_una_macchia_larga_e_bassa_non_e_una_bottiglia(self):
+        """Una sagoma più larga che alta non sta in piedi sul piatto: è una
+        scena che è cambiata, e un riquadro sbagliato non si vede — taglia
+        l'etichetta e basta."""
+        p = PresenzaOttica()
+        self.posa(p, self.sfondo())
+        img = self.sfondo().copy()
+        img[10:40, :] = 200.0              # una fascia larga e bassa
+        self.posa(p, img)
+        assert p.riquadro() is None
+
+    def test_una_macchia_minuscola_non_e_una_bottiglia(self):
+        p = PresenzaOttica()
+        self.posa(p, self.sfondo())
+        img = self.sfondo().copy()
+        img[80:100, 46:50] = 200.0
+        self.posa(p, img)
+        assert p.riquadro() is None
+
+    def test_la_luce_che_cambia_non_disegna_riquadri(self):
+        """Stessa normalizzazione della differenza: una luce diversa varrebbe
+        una sagoma grande quanto il vetro."""
+        p = PresenzaOttica()
+        s = self.sfondo()
+        self.posa(p, s)
+        self.posa(p, s * 0.7)
+        assert p.riquadro() is None
+
+
+class TestIlRitaglioSegueIlRiquadro:
+    def camera(self, riquadro=None):
+        from amelie.capture import Camera
+
+        c = Camera(ImpostazioniCamera(ritaglio_largo=0.70, ritaglio_alto=0.95))
+        c.riquadro = riquadro
+        return c
+
+    def test_senza_riquadro_si_usa_quello_fisso(self):
+        out = self.camera().ritaglia(immagine(1000, 500))
+        assert out.shape[:2] == (950, 350)
+
+    def test_col_riquadro_si_usa_quello(self):
+        c = self.camera((0.2, 0.1, 0.6, 0.9))
+        out = c.ritaglia(immagine(1000, 500))
+        # 40% di larghezza meno il margine ai due lati, 80% di altezza
+        largo = int(500 * (0.4 - 2 * 0.06 * 0.4))
+        assert out.shape[0] == 800
+        assert abs(out.shape[1] - largo) <= 2, out.shape
+
+    def test_un_riquadro_degenere_torna_al_fisso(self):
+        c = self.camera((0.5, 0.5, 0.5001, 0.5001))
+        out = c.ritaglia(immagine(1000, 500))
+        assert out.shape[:2] == (950, 350)

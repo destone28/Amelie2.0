@@ -616,7 +616,8 @@ class Amelie:
             # una scansione e' ancora in corso quando si accende il mirino, due
             # fili finiscono dentro allo stesso motore ONNX e alla stessa
             # connessione SQLite. Vedi `LetturaContinua`.
-            self.mirino = Mirino(self.camera, LetturaContinua())
+            self.mirino = Mirino(self.camera, LetturaContinua(),
+                                 presenza=self.presenza)
         self.mirino.accendi()
 
     def _spegni_mirino(self) -> None:
@@ -1545,6 +1546,9 @@ class Amelie:
             self.presenza.c_e_qualcosa()
             return True
         c_e = self.presenza.aggiorna(fascia)
+        # Dove sta la bottiglia, per darlo all'OCR al posto di un riquadro
+        # fisso. `None` vuol dire «non si sa», e allora si torna al fisso.
+        self.camera.riquadro = self.presenza.riquadro()
         if not c_e and self.macchina.stato is Stato.ATTESA:
             # Lo sfondo si impara solo da fermi. Durante una scansione il
             # rivelatore vede una scena che il dispositivo sta gia' guardando

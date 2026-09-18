@@ -142,25 +142,36 @@ class LetturaContinua:
         }
 
 
-def disegna(frame, imp):
+def disegna(frame, camera):
     """Sovrascrive al fotogramma quello che decide la lettura.
 
+    Il rettangolo è **quello vero**, chiesto alla camera: se il dispositivo ha
+    trovato la bottiglia, è il riquadro di quella bottiglia; se no, è quello
+    fisso. Disegnarne uno diverso da quello in uso farebbe tarare
+    l'inquadratura contro una linea che non decide niente.
+
     Restituisce `(jpeg, ritaglio, nitidezza)`. Il ritaglio è una **copia**, e
-    non è un dettaglio: `ritaglia_centro` restituisce una vista sullo stesso
-    blocco di memoria, quindi il rettangolo e la scritta disegnati qui finivano
-    dentro all'immagine che l'OCR stava per leggere. La prima riga riconosciuta
-    era «nitidezza 60 (soglia 40)», cioè la sovrimpressione di questo
-    strumento: uno strumento di misura che misura se stesso.
+    non è un dettaglio: il ritaglio è una vista sullo stesso blocco di memoria,
+    quindi il rettangolo e la scritta disegnati qui finivano dentro
+    all'immagine che l'OCR stava per leggere. La prima riga riconosciuta era
+    «nitidezza 60 (soglia 40)», cioè la sovrimpressione di questo strumento:
+    uno strumento di misura che misura se stesso.
     """
     import cv2
 
-    from .capture import SOGLIA_NITIDEZZA, nitidezza, ritaglia_centro
+    from .capture import SOGLIA_NITIDEZZA, nitidezza
 
     h, w = frame.shape[:2]
-    nh, nw = int(h * imp.ritaglio_alto), int(w * imp.ritaglio_largo)
-    y0, x0 = (h - nh) // 2, (w - nw) // 2
-
-    ritagliato = ritaglia_centro(frame, imp.ritaglio_largo, imp.ritaglio_alto)
+    ritagliato = camera.ritaglia(frame)
+    nh, nw = ritagliato.shape[:2]
+    # Dove sta davvero il ritaglio dentro al fotogramma: la camera lo prende
+    # centrato quando e' fisso, e sulla bottiglia quando l'ha trovata.
+    r = camera.riquadro
+    if r is None:
+        y0, x0 = (h - nh) // 2, (w - nw) // 2
+    else:
+        stretta = (r[2] - r[0]) * camera.imp.margine_riquadro
+        x0, y0 = int(w * max(0.0, r[0] + stretta)), int(h * max(0.0, r[1]))
     n = nitidezza(ritagliato)
     copia = ritagliato.copy()
     colore = (90, 220, 60) if n >= SOGLIA_NITIDEZZA else (60, 80, 240)   # BGR
@@ -187,9 +198,15 @@ class Mirino:
     """
 
     def __init__(self, camera, lettura: LetturaContinua | None = None,
-                 regola_la_luce: bool = True) -> None:
+                 regola_la_luce: bool = True, presenza=None) -> None:
         self.camera = camera
         self.lettura = lettura
+        # Chi sa dove sta la bottiglia. Col mirino acceso il ciclo e' fermo e
+        # nessuno glielo chiede piu': glielo si chiede da qui, altrimenti il
+        # rettangolo disegnato sarebbe quello fisso mentre il dispositivo, a
+        # ciclo acceso, ne userebbe un altro - e si tarerebbe contro una linea
+        # che non decide niente.
+        self.presenza = presenza
         self.regola = regola_la_luce
         self.nitidezza = 0.0
         self._jpg: bytes | None = None
@@ -241,7 +258,10 @@ class Mirino:
             if frame is None:
                 time.sleep(RIPOSO_S)
                 continue
-            jpg, ritaglio, n = disegna(frame, self.camera.imp)
+            if self.presenza is not None:
+                self.presenza.guarda(self.camera.fascia(frame))
+                self.camera.riquadro = self.presenza.riquadro()
+            jpg, ritaglio, n = disegna(frame, self.camera)
             if jpg is None:
                 continue
             self._jpg, self.nitidezza = jpg, n

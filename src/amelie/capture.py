@@ -190,6 +190,12 @@ class ImpostazioniCamera:
     ritaglio_largo: float = 0.70
     ritaglio_alto: float = 0.95
 
+    # Di quanto si stringe ai lati il riquadro trovato sulla bottiglia vera.
+    # Il bordo e' dove il vetro curva via e le lettere si accartocciano: sono
+    # le stesse che si perderebbero comunque, e toglierle risparmia al
+    # rilevatore due regioni di testo che non sa leggere.
+    margine_riquadro: float = 0.06
+
     # Di quanto ruotare il fotogramma prima di guardarlo, in gradi orari.
     #
     # Novanta, e la camera e' montata di lato apposta: una bottiglia e' alta e
@@ -236,7 +242,11 @@ class ImpostazioniCamera:
     # Novantasei per centoventotto: un ventesimo di lato. Piccola apposta - a
     # questa scala un tremolio del tavolo sposta la scena di un decimo di pixel
     # e sparisce, mentre una bottiglia resta grande come prima.
-    sbirciata: tuple[int, int] = (96, 128)
+    # Largo per alto, e la proporzione e' quella del fotogramma raddrizzato
+    # (1080x1920, cioe' 9:16): la sbirciata e' tutto il fotogramma rimpicciolito,
+    # e deformarla vorrebbe dire misurare distanze che sull'immagine vera non
+    # esistono - serve anche a dire DOVE sta la bottiglia, non solo SE c'e'.
+    sbirciata: tuple[int, int] = (96, 170)
 
 
 @dataclass
@@ -264,6 +274,17 @@ SOGLIA_NITIDEZZA = 40.0
 # è arrivata al sensore. Due livelli su 255: il rumore fra due fotogrammi della
 # stessa scena ferma sta sotto mezzo livello, misurato.
 SCARTO_DI_POSA = 2.0
+
+# Quanto deve essere cambiata una riga o una colonna per contare come sagoma
+# della bottiglia. Un pixel isolato è rumore; mezza colonna è un bordo vero.
+FRAZIONE_SAGOMA = 0.25
+# Sotto queste frazioni del fotogramma la sagoma non è una bottiglia: è una
+# macchia. Si torna al riquadro fisso, che è largo e non taglia niente.
+LARGHEZZA_MINIMA = 0.12
+ALTEZZA_MINIMA = 0.30
+# Sopra questa frazione di fotogramma cambiato non c'è nessuna sagoma da
+# ritagliare: è cambiata la scena, o la luce, e il riquadro fisso è più sicuro.
+SAGOMA_MASSIMA = 0.70
 
 
 def nitidezza(immagine: np.ndarray) -> float:
@@ -374,10 +395,12 @@ class PresenzaOttica:
         letture_per_andarsene: int = 3,
         soglia_fermo: float = 0.20,
         tolleranza: float = 20.0,
+        fascia: tuple[float, float] = (0.28, 0.72),
     ) -> None:
         self.soglia_arrivo = soglia_arrivo
         self.soglia_uscita = soglia_uscita
         self.soglia_fermo = soglia_fermo
+        self.fascia = fascia
         self.n_arrivo, self.n_uscita = letture_per_arrivare, letture_per_andarsene
         self.tolleranza = tolleranza
         self.presente = False
@@ -385,32 +408,49 @@ class PresenzaOttica:
         # Lo sfondo: la fascia com'è quando sul piatto non c'è niente. `None`
         # vuol dire «non lo so ancora», e capita due volte: all'accensione, e
         # quando si scopre che la bottiglia c'era già prima di accendere.
+        # Lo sfondo è il fotogramma INTERO com'è quando sul piatto non c'è
+        # niente. La striscia centrale — quella su cui si decide — si ricava da
+        # qui quando serve: una sola immagine, due domande diverse.
         self._sfondo: np.ndarray | None = None
+        self._intera: np.ndarray | None = None
         # La scena con la bottiglia, usata solo finché lo sfondo è ignoto.
         self._scena: np.ndarray | None = None
         self._ultima: np.ndarray | None = None
         self._diverse = 0
         self._uguali = 0
 
-    def aggiorna(self, fascia: np.ndarray) -> bool:
+    def _centro(self, sbirciata: np.ndarray) -> np.ndarray:
+        """La striscia dove sta la bottiglia, ritagliata dalla sbirciata intera.
+
+        La DECISIONE guarda solo qui, e le soglie sono misurate qui: fuori da
+        questa striscia c'è la stanza, e un cameriere che passa non deve
+        svegliare il dispositivo. Il resto del fotogramma serve a un'altra
+        domanda — dove sta la bottiglia — e quella la fa `riquadro`.
+        """
+        da, a = self.fascia
+        w = sbirciata.shape[1]
+        return sbirciata[:, int(w * da) : int(w * a)]
+
+    def aggiorna(self, sbirciata: np.ndarray) -> bool:
         """Aggiunge una sbirciata e restituisce se ora la bottiglia c'è."""
-        precedente, self._ultima = self._ultima, fascia
+        self._intera = sbirciata
+        precedente, self._ultima = self._ultima, sbirciata
         if precedente is None:
             if self._sfondo is None and not self.presente:
-                self._sfondo = fascia
+                self._sfondo = sbirciata
             return self.presente
 
         # Una scena che si sta ancora muovendo non si giudica: è la mano che
         # posa la bottiglia. Costa una sbirciata di ritardo e vale
         # l'assestamento che prima si aspettava a tempo.
-        if self._diverso(fascia, precedente) >= self.soglia_fermo:
+        if self._diverso(sbirciata, precedente) >= self.soglia_fermo:
             self._diverse = self._uguali = 0
             return self.presente
 
         if self._sfondo is None:
-            return self._aspetta_che_se_ne_vada(fascia)
+            return self._aspetta_che_se_ne_vada(sbirciata)
 
-        self.differenza = self._diverso(fascia, self._sfondo)
+        self.differenza = self._diverso(sbirciata, self._sfondo)
         if self.differenza >= self.soglia_arrivo:
             self._diverse += 1
             self._uguali = 0
@@ -421,7 +461,7 @@ class PresenzaOttica:
                 # Il piatto è vuoto e si vede: si aggiorna lo sfondo, così la
                 # luce che cala nel pomeriggio, la tovaglia cambiata e il
                 # calendario girato di pagina non diventano una bottiglia.
-                self._sfondo = fascia
+                self._sfondo = sbirciata
         else:
             # Fra le due soglie non si cambia idea: è la zona morta.
             self._diverse = self._uguali = 0
@@ -450,7 +490,7 @@ class PresenzaOttica:
             self.presente = False
         return self.presente
 
-    def _aspetta_che_se_ne_vada(self, fascia: np.ndarray) -> bool:
+    def _aspetta_che_se_ne_vada(self, sbirciata: np.ndarray) -> bool:
         """Il caso in cui non si è mai visto il piatto vuoto.
 
         Succede quando il dispositivo si accende con una bottiglia già posata:
@@ -461,15 +501,86 @@ class PresenzaOttica:
         vista proprio lo sfondo che mancava.
         """
         if self._scena is None:
-            self._scena = fascia
+            self._scena = sbirciata
             return self.presente
-        self.differenza = self._diverso(fascia, self._scena)
+        self.differenza = self._diverso(sbirciata, self._scena)
         if self.differenza >= self.soglia_arrivo:
             self.presente = False
-            self._sfondo = fascia
+            self._sfondo = sbirciata
             self._scena = None
             self._diverse = self._uguali = 0
         return self.presente
+
+    def riquadro(self) -> tuple[float, float, float, float] | None:
+        """Dove sta la bottiglia nel fotogramma, in frazioni: (x0, y0, x1, y1).
+
+        È la sua SAGOMA contro lo sfondo imparato: i pixel che sono cambiati
+        sono la bottiglia, perché è l'unica cosa che è arrivata. Serve a dare
+        all'OCR il riquadro di QUESTA bottiglia invece di un riquadro fisso —
+        una renana alta e stretta e una borgognona larga non occupano la stessa
+        parte del fotogramma, e un riquadro buono per l'una taglia l'altra o le
+        lascia dentro mezza stanza.
+
+        Restituisce `None` ogni volta che la sagoma non è credibile, e chi
+        chiama torna al riquadro fisso. Non è prudenza generica: una sagoma
+        sbagliata non si vede — taglia l'etichetta e basta.
+
+        Non chiede se la bottiglia «c'è»: a piatto vuoto la maschera è vuota da
+        sé, e i controlli qui sotto bastano. Così il mirino può disegnare il
+        riquadro vero anche a ciclo fermo, che è il momento in cui si sta
+        tarando l'inquadratura e serve vederlo.
+        """
+        if self._sfondo is None or self._intera is None:
+            return None
+        if self._sfondo.shape != self._intera.shape:
+            return None
+        # Differenza NUDA, senza la normalizzazione della luce che usa la
+        # decisione. Quella riporta il fotogramma alla luce dello sfondo
+        # guardando media e deviazione di TUTTA l'immagine, e va benissimo
+        # finché a cambiare è una striscia; ma una bottiglia larga cambia metà
+        # fotogramma, le statistiche si spostano dietro di lei, e la
+        # correzione va a riscalare anche lo sfondo che non è cambiato.
+        # Misurato: la maschera passava dal 13 % al 93 %, cioè da una sagoma a
+        # una macchia grande quanto il vetro.
+        #
+        # Qui non serve: fra lo sfondo imparato e adesso la posa è la stessa e
+        # la luce è quella di un attimo fa. E se davvero è cambiata, la
+        # maschera esplode, la sagoma non è credibile e si torna al riquadro
+        # fisso — che è il comportamento giusto.
+        maschera = np.abs(self._sfondo - self._intera) > self.tolleranza
+        h, w = maschera.shape
+        if maschera.mean() > SAGOMA_MASSIMA:
+            # Non è una bottiglia che è arrivata: è la scena che è cambiata.
+            return None
+        # PRIMA le colonne, POI le righe dentro quelle colonne. Una colonna
+        # della bottiglia è cambiata quasi tutta, perché la bottiglia va dal
+        # piatto in su; ma una riga della bottiglia è cambiata solo per quanto
+        # la bottiglia è larga — su una renana stretta il venti per cento — e
+        # misurarla sul fotogramma intero la fa sparire sotto la soglia. La
+        # riga si misura dentro la sagoma, dove il conto ha senso.
+        colonne = np.flatnonzero(maschera.mean(axis=0) >= FRAZIONE_SAGOMA)
+        if colonne.size < w * LARGHEZZA_MINIMA:
+            return None
+        dentro = maschera[:, colonne[0] : colonne[-1] + 1]
+        righe = np.flatnonzero(dentro.mean(axis=1) >= FRAZIONE_SAGOMA)
+        if righe.size < h * ALTEZZA_MINIMA:
+            return None
+        x0, x1 = colonne[0] / w, (colonne[-1] + 1) / w
+        y0, y1 = righe[0] / h, (righe[-1] + 1) / h
+        # Una bottiglia è più alta che larga, e sta in piedi sul piatto: una
+        # sagoma che non lo è non è una bottiglia, è una scena che è cambiata.
+        if (x1 - x0) >= (y1 - y0):
+            return None
+        return (x0, y0, x1, y1)
+
+    def guarda(self, sbirciata: np.ndarray) -> None:
+        """Aggiorna cosa si sta vedendo, senza decidere niente.
+
+        Serve al mirino: lì il ciclo è fermo e nessuno chiama `aggiorna`, ma il
+        riquadro da disegnare deve essere quello di ADESSO. Non tocca ne' i
+        contatori ne' la convinzione: guardare non è decidere.
+        """
+        self._intera = sbirciata
 
     def c_e_qualcosa(self) -> None:
         """Sul piatto c'è qualcosa, comunque stessero le cose fin qui.
@@ -534,7 +645,13 @@ class PresenzaOttica:
         self._diverse = self._uguali = 0
 
     def _diverso(self, a: np.ndarray, b: np.ndarray) -> float:
-        return quanto_diverso(a, b, self.tolleranza)
+        """Quanto sono diverse due sbirciate, guardando SOLO la striscia.
+
+        Le soglie sono misurate sulla striscia centrale e li' devono restare:
+        allargare il confronto a tutto il fotogramma vorrebbe dire che un
+        cameriere che passa sullo sfondo pesa quanto una bottiglia posata.
+        """
+        return quanto_diverso(self._centro(a), self._centro(b), self.tolleranza)
 
 
 def trova_camera(nome: str = "U20CAM") -> str:
@@ -624,6 +741,10 @@ class Camera:
         # e il lucchetto serve perché arrivano da due thread diversi.
         self._cap: cv2.VideoCapture | None = None
         self._lucchetto = threading.Lock()
+        # Il riquadro di QUESTA bottiglia, quando si sa dov'e': (x0,y0,x1,y1)
+        # in frazioni. Lo mette chi guarda il piatto - vedi
+        # `PresenzaOttica.riquadro` - e quando e' `None` si usa quello fisso.
+        self.riquadro: tuple[float, float, float, float] | None = None
 
     @property
     def percorso(self) -> str:
@@ -684,16 +805,20 @@ class Camera:
             self._cap = None
 
     def fascia(self, frame) -> np.ndarray:
-        """La striscia verticale dove sta la bottiglia, in grigio e piccola.
+        """Il fotogramma INTERO, in grigio e piccolo.
+
+        Si chiamava cosi' perche' restituiva solo la striscia centrale, e per
+        decidere se c'e' una bottiglia quella basta. Adesso restituisce tutto,
+        e la striscia se la ritaglia chi decide: perche' la stessa immagine
+        serve a una seconda cosa - capire DOVE sta la bottiglia, per dare
+        all'OCR il suo riquadro invece di un riquadro fisso. Vedi
+        `PresenzaOttica.riquadro`.
 
         Il fotogramma arriva gia' in piedi: raddrizzarlo e' compito di chi lo
         legge dal device, una volta sola. Vedi `_fotogramma`.
         """
         grigio = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        da, a = self.imp.fascia_bottiglia
-        w = grigio.shape[1]
-        striscia = grigio[:, int(w * da) : int(w * a)]
-        return cv2.resize(striscia, self.imp.sbirciata).astype(np.float32)
+        return cv2.resize(grigio, self.imp.sbirciata).astype(np.float32)
 
     def fotogramma(self):
         """Un fotogramma, gia' in piedi, per chi vuole guardare invece di leggere.
@@ -781,10 +906,8 @@ class Camera:
         if not ok or frame is None:
             return None
         imp = self.imp
-        return float(cv2.cvtColor(
-            ritaglia_centro(self._raddrizza(frame),
-                            imp.ritaglio_largo, imp.ritaglio_alto),
-            cv2.COLOR_BGR2GRAY).mean())
+        return float(cv2.cvtColor(self.ritaglia(self._raddrizza(frame)),
+                                  cv2.COLOR_BGR2GRAY).mean())
 
     def _aspetta_la_posa(self, cap, prima: float) -> float | None:
         """Legge finché la luce non si è **fermata** sul valore nuovo.
@@ -823,6 +946,35 @@ class Camera:
         log.warning("la posa non arriva al sensore: luce ferma a %.0f",
                     precedente if precedente is not None else -1)
         return None
+
+    def ritaglia(self, frame):
+        """Il pezzo di fotogramma che va all'OCR: quello della bottiglia.
+
+        Se si sa dove sta la bottiglia si prende il suo riquadro; altrimenti si
+        torna alle frazioni fisse, che sono larghe e non tagliano niente. Una
+        renana alta e stretta e una borgognona larga non occupano la stessa
+        parte del fotogramma: un riquadro fisso o taglia l'una o lascia dentro
+        mezza stanza per l'altra.
+
+        Il riquadro si stringe di poco ai lati. Il bordo della bottiglia e'
+        dove il vetro curva via, e li' le lettere si accartocciano: sono le
+        stesse che si perderebbero comunque, e toglierle risparmia al
+        rilevatore due regioni di testo che non sa leggere.
+        """
+        r = self.riquadro
+        if r is None:
+            return ritaglia_centro(frame, self.imp.ritaglio_largo,
+                                   self.imp.ritaglio_alto)
+        h, w = frame.shape[:2]
+        x0, y0, x1, y1 = r
+        stretta = (x1 - x0) * self.imp.margine_riquadro
+        x0, x1 = x0 + stretta, x1 - stretta
+        px0, px1 = int(w * max(0.0, x0)), int(w * min(1.0, x1))
+        py0, py1 = int(h * max(0.0, y0)), int(h * min(1.0, y1))
+        if px1 - px0 < 2 or py1 - py0 < 2:
+            return ritaglia_centro(frame, self.imp.ritaglio_largo,
+                                   self.imp.ritaglio_alto)
+        return frame[py0:py1, px0:px1]
 
     def _cerca_la_posa(self, cap) -> float:
         """Regola il tempo di posa sulla luce che c'è davvero, ora, qui.
@@ -914,8 +1066,7 @@ class Camera:
         # un'immagine coricata terrebbe la fascia sbagliata della bottiglia.
         migliore = self._raddrizza(migliore)
         return Scatto(
-            immagine=ritaglia_centro(migliore, self.imp.ritaglio_largo,
-                                     self.imp.ritaglio_alto),
+            immagine=self.ritaglia(migliore),
             nitidezza=migliore_n,
             scartati=scartati,
             nitidezze=tutte,

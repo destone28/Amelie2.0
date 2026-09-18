@@ -101,12 +101,15 @@ class TestIlDisegno:
 
     @staticmethod
     def imp(largo=0.85, alto=None):
+        """Una camera vera, che non tocca l'hardware finché non le si chiede un
+        fotogramma: `disegna` chiede a lei il riquadro, perché deve disegnare
+        QUELLO IN USO e non uno che gli somiglia."""
         from dataclasses import replace
 
-        from amelie.capture import ImpostazioniCamera
+        from amelie.capture import Camera, ImpostazioniCamera
 
-        return replace(ImpostazioniCamera(), ritaglio_largo=largo,
-                       ritaglio_alto=largo if alto is None else alto)
+        return Camera(replace(ImpostazioniCamera(), ritaglio_largo=largo,
+                              ritaglio_alto=largo if alto is None else alto))
 
     def test_lo_strumento_non_misura_se_stesso(self):
         """IL test.
@@ -151,11 +154,26 @@ class TestIlDisegno:
 
 
 class CameraFinta:
-    def __init__(self, frame=None, imp=None):
+    """Una camera che consegna sempre lo stesso fotogramma.
+
+    Il ritaglio lo delega a una camera VERA: `disegna` chiede alla camera il
+    riquadro in uso, e riscriverne qui una copia vorrebbe dire provare il
+    disegno contro un ritaglio che il dispositivo non usa.
+    """
+
+    def __init__(self, frame=None, vera=None):
         self.frame = frame
-        self.imp = imp
+        self.vera = vera
+        self.imp = vera.imp if vera is not None else None
         self.chieste = 0
         self.regolata = 0
+
+    @property
+    def riquadro(self):
+        return None if self.vera is None else self.vera.riquadro
+
+    def ritaglia(self, frame):
+        return self.vera.ritaglia(frame)
 
     def fotogramma(self):
         self.chieste += 1
