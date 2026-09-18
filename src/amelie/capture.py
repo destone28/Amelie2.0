@@ -282,6 +282,13 @@ SCARTO_DI_POSA = 2.0
 # tempo entro cui una mano che passa davanti alla camera è ancora lì.
 FRESCHEZZA_S = 0.5
 
+# Ogni quanti fotogrammi il guardiano guarda quanta luce c'è.
+#
+# Lo stream ne dà una decina al secondo, e misurare costa quindici millesimi
+# fra raddrizzo, ritaglio e conversione in grigio. Una volta al secondo e' gia'
+# piu' spesso di quanto la luce di una sala cambi.
+FOTOGRAMMI_FRA_DUE_MISURE = 10
+
 # Quanto deve essere cambiata una riga o una colonna per contare come sagoma
 # della bottiglia. Un pixel isolato è rumore; mezza colonna è un bordo vero.
 FRAZIONE_SAGOMA = 0.25
@@ -761,6 +768,7 @@ class Camera:
         # Quanti fotogrammi saltare prima di rifidarsi della luce, dopo aver
         # cambiato la posa: il driver la applica con tre fotogrammi di ritardo.
         self._da_saltare = 0
+        self._da_guardare = 1
 
     @property
     def percorso(self) -> str:
@@ -903,6 +911,14 @@ class Camera:
         if self._da_saltare > 0:
             self._da_saltare -= 1
             return
+        # Non a ogni fotogramma: misurare la luce vuol dire raddrizzare,
+        # ritagliare e convertire in grigio un fotogramma da due megapixel, e
+        # sono quindici millesimi. La luce di una sala non cambia undici volte
+        # al secondo; una volta al secondo e' gia' piu' spesso del necessario.
+        self._da_guardare -= 1
+        if self._da_guardare > 0:
+            return
+        self._da_guardare = FOTOGRAMMI_FRA_DUE_MISURE
         imp = self.imp
         luce = float(cv2.cvtColor(self.ritaglia(self._raddrizza(frame)),
                                   cv2.COLOR_BGR2GRAY).mean())
