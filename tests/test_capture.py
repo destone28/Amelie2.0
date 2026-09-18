@@ -51,31 +51,43 @@ class TestRitaglio:
         with pytest.raises(ValueError):
             ritaglia_centro(immagine(), frazione)
 
-    def test_il_ritaglio_lascia_passare_abbastanza_etichetta(self):
-        """Il compromesso va nella direzione opposta a quella che verrebbe da
-        pensare.
+    def test_le_due_frazioni_sono_indipendenti(self):
+        """Una bottiglia non è quadrata, e il ritaglio non deve esserlo."""
+        out = ritaglia_centro(immagine(100, 200), 0.5, 1.0)
+        assert out.shape[:2] == (100, 100)
 
-        Stringere migliora ogni singolo carattere — meno distorsione a barile,
-        niente vignettatura — ma toglie righe intere, e il riconoscimento lavora
-        su PAROLE, non su caratteri. Misurato tre volte, sempre nella stessa
-        direzione: 0,58 dava `'AVO`, 0,80 dava `NERO D'AV`, il fotogramma intero
-        dà `NERO D'AVOL`. Una bottiglia in piedi occupa il fotogramma per il
-        lungo, e tagliarne i bordi taglia le parole.
+    def test_una_frazione_sola_vale_per_tutti_e_due_i_lati(self):
+        out = ritaglia_centro(immagine(100, 200), 0.5)
+        assert out.shape[:2] == (50, 100)
+
+    def test_il_ritaglio_e_alto_e_stretto_come_una_bottiglia(self):
+        """I due mestieri del ritaglio stanno su assi diversi.
+
+        In larghezza si stringe per buttare fuori la stanza, che il rilevatore
+        legge come testo; in altezza si tiene quasi tutto, perché è lì che sta
+        l'etichetta. Misurato con la camera in piedi, stessa bottiglia: a
+        0,70 × 0,95 sparisce «MOLISE» — che è il calendario appeso dietro, non
+        la bottiglia — e restano `Leggiadro · Brut Rosé · METODO CLASSICO`.
+        A 0,60 comincia a sfaldarsi la parola sull'etichetta.
         """
         imp = ImpostazioniCamera()
-        assert imp.ritaglio >= 0.8
-        assert imp.ritaglio ** 2 > 0.6, "sotto questa area si perdono parole"
+        assert imp.ritaglio_alto > imp.ritaglio_largo, (
+            "una bottiglia e' alta e stretta, e il ritaglio deve seguirla")
+        assert imp.ritaglio_largo >= 0.65, "sotto questo si sfaldano le parole"
+        assert imp.ritaglio_alto >= 0.90, "e' in altezza che sta l'etichetta"
 
-    def test_il_fotogramma_arriva_gia_per_il_verso_giusto(self):
-        """Nella scocca stampata la camera guarda la bottiglia di fianco e il
-        testo dell'etichetta è già orizzontale: non c'è niente da raddrizzare.
+    def test_la_camera_e_montata_di_lato(self):
+        """Una bottiglia è alta e stretta, e un sensore 16:9 girato di fianco
+        la inquadra per il lungo.
 
-        Era 90, dal banco, dove la camera stava girata di lato. Misurato sulla
-        stessa bottiglia e sullo stesso fotogramma: a 0° l'etichetta si legge e
-        il vino si riconosce, a 90° resta `D'ABRUZZC` e non si riconosce niente.
+        Il fotogramma nativo ha la bottiglia coricata col collo a sinistra: qui
+        si rimette in piedi. Misurato sulla stessa bottiglia e sullo stesso
+        fotogramma, a 90° si leggono otto righe fra cui `Leggiadro`,
+        `Brut Rosé` e `METODO CLASSICO`, tutte dentro al fotogramma; dritta
+        (0°) la denominazione cadeva sotto il bordo.
         """
         assert ImpostazioniCamera().rotazione in (0, 90, 180, 270)
-        assert ImpostazioniCamera().rotazione == 0
+        assert ImpostazioniCamera().rotazione == 90
 
     def test_raddrizzare_scambia_i_lati(self):
         from amelie.capture import Camera
@@ -313,7 +325,8 @@ class TestLaPosaSiCerca:
     def cerca(self, partenza=900, sorda=False, ritardo=3, **extra):
         from amelie.capture import Camera
 
-        imp = ImpostazioniCamera(esposizione=partenza, ritaglio=1.0, **extra)
+        imp = ImpostazioniCamera(esposizione=partenza, ritaglio_largo=1.0,
+                                 ritaglio_alto=1.0, **extra)
         c = Camera(imp)
         c._percorso = "/dev/finto"
         finta = self.CameraFinta(posa=partenza, sorda=sorda, ritardo=ritardo)

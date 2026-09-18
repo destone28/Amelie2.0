@@ -5,8 +5,10 @@ cosa che dal racconto a schermo non si vede. Non mostra il fotogramma e basta:
 mostra le tre cose che decidono se l'etichetta verrà letta.
 
 1. **Il riquadro.** Il codice ritaglia la parte centrale prima di darla all'OCR
-   (`ImpostazioniCamera.ritaglio`): fuori da quel rettangolo non viene mai letto
-   niente. Il rettangolo è disegnato dove sta davvero.
+   (`ImpostazioniCamera.ritaglio_largo` e `ritaglio_alto`): fuori da quel
+   rettangolo non viene mai letto niente. Il rettangolo è disegnato dove sta
+   davvero, sul fotogramma **già raddrizzato** — cioè quello che il dispositivo
+   legge, non quello grezzo, che è coricato e che nessuno legge.
 
 2. **La nitidezza**, dal vivo, calcolata **sul ritaglio** e non sull'intera
    immagine — altrimenti misurerebbe la messa a fuoco di cose che l'OCR non
@@ -155,11 +157,10 @@ def disegna(frame, imp):
     from .capture import SOGLIA_NITIDEZZA, nitidezza, ritaglia_centro
 
     h, w = frame.shape[:2]
-    f = imp.ritaglio
-    nh, nw = int(h * f), int(w * f)
+    nh, nw = int(h * imp.ritaglio_alto), int(w * imp.ritaglio_largo)
     y0, x0 = (h - nh) // 2, (w - nw) // 2
 
-    ritagliato = ritaglia_centro(frame, f)
+    ritagliato = ritaglia_centro(frame, imp.ritaglio_largo, imp.ritaglio_alto)
     n = nitidezza(ritagliato)
     copia = ritagliato.copy()
     colore = (90, 220, 60) if n >= SOGLIA_NITIDEZZA else (60, 80, 240)   # BGR

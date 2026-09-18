@@ -158,68 +158,64 @@ class ImpostazioniCamera:
     fotogrammi_da_scartare: int = 3
     fotogrammi_raffica: int = 3
 
-    # Ritaglio centrale, frazione del fotogramma tenuta per lato.
+    # Il ritaglio, in due frazioni: quanto si tiene in LARGHEZZA e quanto in
+    # ALTEZZA. Due, e non una, perché una bottiglia non è quadrata.
     #
-    # Era 0,58, scelto per tenere la distorsione a barile sotto l'1% e togliere
-    # la vignettatura. Ma sul banco le etichette non venivano riconosciute
-    # ANCHE quando erano nitide, illuminate e ben visibili dentro al riquadro:
-    # il collo di bottiglia non era la qualità dell'immagine, era la quantità
-    # di testo che entrava nel ritaglio. Un'etichetta commerciale distribuisce
-    # produttore, denominazione e annata su tutta la sua altezza, e a 0,58 ne
-    # entrava la fascia centrale — spesso proprio quella con meno parole utili.
+    # La storia di questo numero è tutta una storia di compromessi sbagliati,
+    # e lo erano perché la frazione era una sola. Era 0,58, per tenere la
+    # distorsione a barile sotto l'1%: e le etichette non venivano riconosciute
+    # anche quando erano nitide e ben illuminate, perché cadevano fuori le
+    # prime e le ultime lettere e il riconoscimento lavora su PAROLE INTERE.
+    # Poi 0,80, poi 0,85 — quest'ultimo per il tempo, non per la qualità: la
+    # stanza dietro costa cara, perché il rilevatore trova una regione di testo
+    # per ogni numero di un calendario appeso al muro e ognuna passa poi dal
+    # modello che la legge.
     #
-    # A 0,80 l'area utile quasi raddoppia. MISURATO su tre scatti veri della
-    # stessa etichetta, a parità di tutto il resto:
+    # Con due frazioni il compromesso sparisce, perché i due mestieri stanno su
+    # assi diversi: in larghezza si stringe per buttare fuori la parete, in
+    # altezza si tiene quasi tutto, perché è lì che sta l'etichetta.
     #
-    #     0,58   `'AVO | SICILIA`             tipologia, 78
-    #     0,70   `'AVOL | SICILIA | ERO`      tipologia, 87
-    #     0,80   `D'AVOLA | SICILIA | NERO`   tipologia, 87
+    # MISURATO con la camera in piedi, stessa bottiglia, stesso fotogramma:
     #
-    # Non è la qualità dei caratteri a cambiare: sono le PAROLE INTERE. A 0,58
-    # la prima e l'ultima lettera cadevano fuori dal ritaglio, e il
-    # riconoscimento lavora su parole.
+    #     1,00 x 1,00   9,7 s   8 righe   `LISE · Leggiadro · Brut Rosé · METODO CLASSICO`
+    #     0,85 x 0,85   5,3 s   7 righe   `MOLISE · Leggiadro · ...`
+    #     0,80 x 1,00   5,4 s   5 righe   `OLISE · Leggiadro · ...`
+    #     0,70 x 0,95   4,3 s   4 righe   `Leggiadro · Brut Rosé · METODO CLASSICO`
+    #     0,60 x 0,90   4,2 s   4 righe   `... · METODO CLASSICC`  <- si sfalda
     #
-    # Si regola dal mirino senza toccare il codice: `--ritaglio 0.9`.
+    # A 0,70 sparisce «MOLISE», che non è sulla bottiglia: è il calendario
+    # appeso dietro. A 0,60 comincia a sfaldarsi la parola sull'etichetta.
     #
-    # Ora è 0,85, e il motivo è il TEMPO, non la qualità. Misurato nella scocca
-    # sulla stessa bottiglia, stesso fotogramma:
-    #
-    #     1,00   14,0 s   `UUISS | CERASUOLO | D'ABRUZZO`   87
-    #     0,85    6,1 s   `UUISS | CERASUOLO | D'ABRUZZO`   87
-    #     0,70    3,0 s   `CERASUOLO | D'ABRUZZO`           78
-    #     0,55    2,6 s   `D'ABRUZZO`                       60
-    #
-    # A 0,85 si legge **la stessa cosa in meno della metà del tempo**: quello
-    # che si taglia non è etichetta, è la stanza dietro. E la stanza costa cara
-    # perché il rilevatore trova una regione di testo per ogni numero di un
-    # calendario appeso al muro, e ognuna passa poi dal modello che le legge.
-    #
-    # Sotto 0,85 si scende, e si scende per la ragione di sempre: cadono fuori
-    # le prime e le ultime lettere, e il riconoscimento lavora su parole intere.
-    ritaglio: float = 0.85
+    # Si regolano dal mirino senza toccare il codice: `--ritaglio 0.8`.
+    ritaglio_largo: float = 0.70
+    ritaglio_alto: float = 0.95
 
     # Di quanto ruotare il fotogramma prima di guardarlo, in gradi orari.
     #
-    # ZERO, e viene dal montaggio: nella scocca stampata la camera guarda la
-    # bottiglia di fianco, e il testo dell'etichetta nel fotogramma nativo e'
-    # già orizzontale. Raddrizzarlo lo corica, ed è esattamente il contrario
-    # di cio' che serve.
+    # Novanta, e la camera e' montata di lato apposta: una bottiglia e' alta e
+    # stretta, e un sensore 16:9 girato di fianco la inquadra per il lungo. Il
+    # fotogramma nativo ha la bottiglia coricata col collo a sinistra; qui si
+    # rimette in piedi, e il testo dell'etichetta torna orizzontale.
     #
-    # Era 90 per il banco, dove la camera stava girata di lato. Misurato sulla
-    # scocca, stessa bottiglia e stesso fotogramma, dando all'OCR i quattro
-    # versi:
+    # Il montaggio e' cambiato due volte, e ogni volta questo numero e' rimasto
+    # indietro di un giro. Nella scocca la camera era prima dritta (0) e il
+    # dispositivo non riconosceva piu' niente; girandola di lato e' tornata a
+    # 90. Vale la pena ricordare perche' si e' girata:
     #
-    #      0°    `ULISS | CERASUOLO | D'ABRUZZO`   riconosciuto, sicurezza 87
-    #     90°    `D'ABRUZZC`                       niente
-    #    180°    `3IMER | DRZZZO | CEAVOLO`        niente
-    #    270°    `3引8到3`                          niente
+    #                    largo    alto     tolleranza laterale
+    #     camera dritta   200 mm  112 mm   +-60 mm
+    #     camera di lato  112 mm  200 mm   +-18 mm
     #
-    # Un dispositivo che «non riconosce le bottiglie» era questo, e nient'altro.
-    # Un verso sbagliato non degrada la lettura: la annulla.
+    # Un'etichetta da vino e' alta un centinaio di millimetri, piu' il
+    # collarino: 112 mm di campo verticale non bastavano, e si vedeva - la
+    # denominazione cadeva sotto il bordo e il dispositivo raccontava il vino
+    # sbagliato. E i 200 mm di campo orizzontale che si perdono erano campo che
+    # si PAGAVA: e' li' che stava la parete che il rilevatore legge come testo.
     #
-    # Il verso e il ritaglio si leggono insieme: coricata, la bottiglia occupa
-    # il fotogramma per il lungo, e ciò che avanza ai bordi non è etichetta.
-    rotazione: int = 0
+    # Un verso sbagliato non degrada la lettura: la annulla. Se il montaggio
+    # cambiera' di nuovo, `Lettore.leggi_comunque` prova gli altri versi e il
+    # dispositivo continua a leggere, piu' lentamente, invece di ammutolire.
+    rotazione: int = 90
 
     # Attesa fra accensione della luce dello scatto e primo fotogramma utile.
     assestamento_luce_s: float = 0.15
@@ -283,17 +279,29 @@ def nitidezza(immagine: np.ndarray) -> float:
     return float(cv2.Laplacian(grigio, cv2.CV_64F).var())
 
 
-def ritaglia_centro(immagine: np.ndarray, frazione: float) -> np.ndarray:
+def ritaglia_centro(immagine: np.ndarray, largo: float,
+                    alto: float | None = None) -> np.ndarray:
     """Tiene la porzione centrale del fotogramma.
 
-    Fuori da questa finestra la distorsione a barile cresce col cubo del raggio
-    e compare la vignettatura: entrambe peggiorano l'OCR senza aggiungere nulla,
-    perché l'etichetta a fuoco sta comunque al centro.
+    Due frazioni, non una, e per una ragione misurata: **una bottiglia non è
+    quadrata**. Il ritaglio serve a due mestieri opposti — togliere la
+    distorsione ai bordi, che cresce col cubo del raggio, e togliere la stanza,
+    che il rilevatore legge come testo — e i due mestieri stanno su assi
+    diversi. In larghezza si stringe per buttare fuori la parete; in altezza si
+    tiene quasi tutto, perché è lì che sta l'etichetta.
+
+    Con una frazione sola si era costretti a scegliere: stringendo si perdeva
+    la denominazione, allargando entrava il calendario. Vedi
+    `ImpostazioniCamera.ritaglio_largo`.
+
+    Se `alto` non si dice, vale `largo`: il ritaglio quadrato di prima.
     """
-    if not 0 < frazione <= 1:
-        raise ValueError(f"frazione fuori range: {frazione}")
+    alto = largo if alto is None else alto
+    for nome, f in (("largo", largo), ("alto", alto)):
+        if not 0 < f <= 1:
+            raise ValueError(f"frazione {nome} fuori range: {f}")
     h, w = immagine.shape[:2]
-    nh, nw = int(h * frazione), int(w * frazione)
+    nh, nw = int(h * alto), int(w * largo)
     y0, x0 = (h - nh) // 2, (w - nw) // 2
     return immagine[y0 : y0 + nh, x0 : x0 + nw]
 
@@ -676,8 +684,11 @@ class Camera:
             self._cap = None
 
     def fascia(self, frame) -> np.ndarray:
-        """La striscia verticale dove sta la bottiglia, in grigio e piccola."""
-        frame = self._raddrizza(frame)
+        """La striscia verticale dove sta la bottiglia, in grigio e piccola.
+
+        Il fotogramma arriva gia' in piedi: raddrizzarlo e' compito di chi lo
+        legge dal device, una volta sola. Vedi `_fotogramma`.
+        """
         grigio = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         da, a = self.imp.fascia_bottiglia
         w = grigio.shape[1]
@@ -685,23 +696,44 @@ class Camera:
         return cv2.resize(striscia, self.imp.sbirciata).astype(np.float32)
 
     def fotogramma(self):
-        """Un fotogramma grezzo, per chi vuole guardare invece di leggere.
+        """Un fotogramma, gia' in piedi, per chi vuole guardare invece di leggere.
 
-        Lo usa il mirino, che ne consuma qualcuno al secondo. Passa dallo
-        stesso lucchetto dello scatto: la camera si apre un processo per volta,
-        e dentro al processo un filo per volta.
+        Lo usa il mirino, che ne consuma qualcuno al secondo. Aspetta il suo
+        turno: la camera si apre un processo per volta, e dentro al processo un
+        filo per volta.
+
+        **Gia' raddrizzato**, e non e' un dettaglio estetico: il mirino serve a
+        far vedere cosa legge il dispositivo, e il dispositivo legge il
+        fotogramma raddrizzato. Mostrando quello grezzo si tarerebbe
+        l'inquadratura guardando un'immagine che nessuno legge - coricata,
+        mentre la bottiglia sta in piedi.
         """
-        with self._lucchetto:
-            try:
-                cap = self._apri()
-            except CameraNonDisponibile as e:
-                log.warning("mirino senza camera: %s", e)
-                return None
+        return self._fotogramma(bloccante=True)
+
+    def _fotogramma(self, *, bloccante: bool):
+        """Un fotogramma raddrizzato, o `None`.
+
+        Con `bloccante` falso si rinuncia se la camera e' occupata: una
+        sbirciata saltata non e' un guasto, e chi guarda non deve mai mettersi
+        in coda dietro a chi lavora.
+        """
+        if not self._lucchetto.acquire(blocking=bloccante):
+            return None
+        try:
+            cap = self._apri()
             ok, frame = cap.read()
             if not ok or frame is None:
+                # Uno stream che non da' piu' fotogrammi non guarisce da solo:
+                # si spegne, e la prossima richiesta lo riaccende.
+                log.warning("fotogramma a vuoto: riaccendo lo stream")
                 self._spegni()
                 return None
-            return frame
+            return self._raddrizza(frame)
+        except CameraNonDisponibile as e:
+            log.warning("camera non disponibile: %s", e)
+            return None
+        finally:
+            self._lucchetto.release()
 
     def regola_la_luce(self) -> float:
         """Cerca la posa e basta, senza scattare.
@@ -723,23 +755,8 @@ class Camera:
         sbirciata saltata non è un guasto, è una sbirciata saltata. Chi guarda
         non deve mai mettersi in coda dietro a chi lavora.
         """
-        if not self._lucchetto.acquire(blocking=False):
-            return None
-        try:
-            cap = self._apri()
-            ok, frame = cap.read()
-            if not ok or frame is None:
-                # Uno stream che non dà più fotogrammi non guarisce da solo:
-                # si spegne, e la prossima sbirciata lo riaccende.
-                log.warning("sbirciata a vuoto: riaccendo lo stream")
-                self._spegni()
-                return None
-            return self.fascia(frame)
-        except CameraNonDisponibile as e:
-            log.warning("sbirciata impossibile: %s", e)
-            return None
-        finally:
-            self._lucchetto.release()
+        frame = self._fotogramma(bloccante=False)
+        return None if frame is None else self.fascia(frame)
 
     def _raddrizza(self, frame):
         """Rimette il fotogramma per il verso in cui si legge."""
@@ -754,14 +771,20 @@ class Camera:
     def _luce(self, cap) -> float | None:
         """Quanta luce c'è in un fotogramma, misurata dove guarderà l'OCR.
 
-        Sul ritaglio, non sul fotogramma intero: gli angoli scuri
-        abbasserebbero la media di una luce che sull'etichetta c'è.
+        Raddrizzato e poi ritagliato, come lo vedrà l'OCR. Gli angoli scuri del
+        fotogramma intero abbasserebbero la media di una luce che
+        sull'etichetta c'è; e misurare il ritaglio del fotogramma NON
+        raddrizzato prenderebbe addirittura la fascia sbagliata della scena —
+        con la camera di lato, una striscia di parete invece della bottiglia.
         """
         ok, frame = cap.read()
         if not ok or frame is None:
             return None
-        return float(cv2.cvtColor(ritaglia_centro(frame, self.imp.ritaglio),
-                                  cv2.COLOR_BGR2GRAY).mean())
+        imp = self.imp
+        return float(cv2.cvtColor(
+            ritaglia_centro(self._raddrizza(frame),
+                            imp.ritaglio_largo, imp.ritaglio_alto),
+            cv2.COLOR_BGR2GRAY).mean())
 
     def _aspetta_la_posa(self, cap, prima: float) -> float | None:
         """Legge finché la luce non si è **fermata** sul valore nuovo.
@@ -891,7 +914,8 @@ class Camera:
         # un'immagine coricata terrebbe la fascia sbagliata della bottiglia.
         migliore = self._raddrizza(migliore)
         return Scatto(
-            immagine=ritaglia_centro(migliore, self.imp.ritaglio),
+            immagine=ritaglia_centro(migliore, self.imp.ritaglio_largo,
+                                     self.imp.ritaglio_alto),
             nitidezza=migliore_n,
             scartati=scartati,
             nitidezze=tutte,

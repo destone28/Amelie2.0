@@ -19,9 +19,10 @@ cosa che dallo schermo del dispositivo non si vede. Non mostra il fotogramma e
 basta: mostra le **tre cose che decidono se l'etichetta verrà letta**.
 
 1. IL RIQUADRO. Il codice ritaglia la parte centrale prima di darla all'OCR
-   (`ImpostazioniCamera.ritaglio`, oggi l'85%): fuori da quel rettangolo non
-   viene mai letto niente. Il rettangolo è disegnato dove sta davvero, e con
-   `--ritaglio` si può stringere o allargare per capire quanto conta.
+   (`ImpostazioniCamera.ritaglio_largo` e `ritaglio_alto`): fuori da quel
+   rettangolo non viene mai letto niente. Il rettangolo è disegnato dove sta
+   davvero, e con `--ritaglio` e `--ritaglio-alto` si può stringere o allargare
+   per capire quanto conta.
 
 2. LA NITIDEZZA, dal vivo. È la varianza del laplaciano, la stessa misura che
    `amelie.capture` usa per scegliere il fotogramma migliore della raffica, ed è
@@ -258,8 +259,10 @@ def main() -> None:
     ap.add_argument("--ocr", action="store_true",
                     help="legge di continuo e mostra cosa trova nel database")
     ap.add_argument("--ritaglio", type=float,
-                    help="frazione del fotogramma che va all'OCR (predefinita "
-                         "da ImpostazioniCamera)")
+                    help="frazione di LARGHEZZA che va all'OCR (predefinita da "
+                         "ImpostazioniCamera)")
+    ap.add_argument("--ritaglio-alto", type=float,
+                    help="frazione di ALTEZZA che va all'OCR")
     args = ap.parse_args()
 
     from dataclasses import replace
@@ -270,7 +273,9 @@ def main() -> None:
     if args.esposizione:
         imp = replace(imp, esposizione=args.esposizione)
     if args.ritaglio:
-        imp = replace(imp, ritaglio=args.ritaglio)
+        imp = replace(imp, ritaglio_largo=args.ritaglio)
+    if args.ritaglio_alto:
+        imp = replace(imp, ritaglio_alto=args.ritaglio_alto)
 
     if args.ocr:
         print("  OCR acceso: il primo giro richiede qualche secondo")
@@ -283,7 +288,8 @@ def main() -> None:
     mirino.avvia()
     print(f"  camera:   {mirino.percorso}")
     print(f"  posa:     {imp.esposizione} (= {imp.esposizione / 10:.0f} ms)")
-    print(f"  ritaglio: {imp.ritaglio:.0%} del fotogramma")
+    print(f"  ritaglio: {imp.ritaglio_largo:.0%} in larghezza, "
+          f"{imp.ritaglio_alto:.0%} in altezza")
     try:
         servi(mirino, args.porta)
     finally:

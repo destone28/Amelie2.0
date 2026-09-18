@@ -640,12 +640,17 @@ svg { display: block; }
   padding: var(--passo); align-items: stretch;
 }
 #mirino[hidden] { display: none; }
+/* Il video sta IN PIEDI, perche' in piedi sta la bottiglia: la camera e'
+   montata di lato e il fotogramma raddrizzato e' 1080x1920. Dargli i due terzi
+   della larghezza, come quando era orizzontale, vorrebbe dire una striscia
+   alta 700 px e larga 830 con dentro un'immagine larga 394: metà del vetro
+   spesa in bordi neri. Qui prende l'altezza e si tiene la sua proporzione. */
 #m-video {
-  flex: 1 1 66%; min-width: 0; min-height: 0; object-fit: contain;
-  border-radius: var(--raggio); background: #000;
+  flex: 0 1 auto; min-width: 0; min-height: 0; height: 100%; width: auto;
+  object-fit: contain; border-radius: var(--raggio); background: #000;
 }
 #m-lato {
-  flex: 1 1 32%; min-width: 0; display: flex; flex-direction: column;
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
   gap: calc(var(--passo) / 1.5); color: var(--avorio);
   font-size: calc(var(--t-scelta) * .5); line-height: 1.3;
 }
@@ -679,10 +684,10 @@ svg { display: block; }
   border: 2px solid var(--oro); border-radius: var(--raggio);
 }
 #m-torna.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
-@media (max-width: 900px) {
-  #mirino { flex-direction: column; }
-  #m-video { flex: 1 1 58%; }
-  #m-lato { flex: 1 1 42%; }
+/* Su un vetro basso e largo il video in piedi non ci sta in altezza: allora
+   si arrende alla larghezza, invece di sbordare. */
+@media (max-height: 520px) {
+  #m-video { height: auto; width: auto; max-width: 45%; flex: 0 1 auto; }
 }
 
 #diagnostica {

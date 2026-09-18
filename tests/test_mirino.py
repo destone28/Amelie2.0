@@ -100,12 +100,13 @@ class TestIlDisegno:
         return np.full((200, 320, 3), valore, dtype=np.uint8)
 
     @staticmethod
-    def imp(ritaglio=0.85):
+    def imp(largo=0.85, alto=None):
         from dataclasses import replace
 
         from amelie.capture import ImpostazioniCamera
 
-        return replace(ImpostazioniCamera(), ritaglio=ritaglio)
+        return replace(ImpostazioniCamera(), ritaglio_largo=largo,
+                       ritaglio_alto=largo if alto is None else alto)
 
     def test_lo_strumento_non_misura_se_stesso(self):
         """IL test.
