@@ -192,12 +192,15 @@ class Configurazione:
     # millesimi, meta' del secondo che abbiamo in tutto; a 0,05 sono
     # centocinquanta, e costano il dodici per cento di un core a non far niente.
     periodo_sensore_s: float = 0.05
-    # Ogni quanto si guarda il piatto. Non e' il battito: il battito resta a
-    # 0,15 s perche' fa scadere i timer, e una sbirciata costa novanta
-    # millesimi di camera. Mezzo secondo vuol dire accorgersi di una bottiglia
-    # in un secondo e mezzo - due letture d'accordo piu' una di assestamento -
-    # spendendo un quinto della camera e niente d'altro.
-    periodo_sbirciata_s: float = 0.5
+    # Ogni quanto si guarda il piatto. Era mezzo secondo, quando una sbirciata
+    # costava novanta millesimi di camera: accorgersi di una bottiglia voleva
+    # un secondo e mezzo - due letture d'accordo piu' una di assestamento.
+    #
+    # Col guardiano in moto il fotogramma c'e' gia' e la sbirciata costa la
+    # conversione in grigio, una decina di millesimi. Un quarto di secondo
+    # porta l'arrivo sotto il secondo, e conta: per le bottiglie di vetro
+    # chiaro, che il sensore di distanza non vede, questa e' l'unica via.
+    periodo_sbirciata_s: float = 0.25
     # La lingua di partenza. Si cambia a schermo, con un tocco, e il
     # dispositivo torna a questa quando la bottiglia viene tolta: il tavolo
     # dopo trova il dispositivo come lo trova sempre.
@@ -690,6 +693,12 @@ class Amelie:
         ottocento megabyte e nessuno deve aspettarlo. Se il comando fallisce si
         registra e basta: un dispositivo senza modello racconta dall'archivio,
         un dispositivo bloccato non racconta niente.
+
+        Senza `sudo`, di proposito: l'applicazione gira sotto
+        `NoNewPrivileges=yes` e `sudo` non puo' alzare niente - falliva con
+        exit 1 e nessun altro segno. Il permesso sta in una regola polkit
+        (`scripts/systemd/50-amelie-llm.rules`) che lascia all'utente
+        `arduino` QUESTA unita' e nessun'altra.
         """
         if self.cfg.senza_modello:
             return
@@ -698,7 +707,7 @@ class Amelie:
             import subprocess
             verbo = "start" if acceso else "stop"
             try:
-                subprocess.run(["sudo", "-n", "systemctl", verbo, SERVIZIO_MODELLO],
+                subprocess.run(["systemctl", verbo, SERVIZIO_MODELLO],
                                check=True, capture_output=True, timeout=30)
                 log.info("modello linguistico: %s", "acceso" if acceso else "spento")
             except Exception as e:                          # noqa: BLE001
@@ -839,7 +848,13 @@ class Amelie:
                         # Senza un modello acceso l'interruttore non si mostra:
                         # un comando che non fa niente e' peggio di nessun
                         # comando. E' lo stesso criterio del volume senza voce.
-                        "modello": self.narratore.genera is not None})
+                        "modello": self.narratore.genera is not None,
+                        # Il livello della batteria viaggia anche qui perche'
+                        # questo messaggio arriva a ogni pagina che si collega:
+                        # la spia di salute passa ogni venti secondi, e venti
+                        # secondi di icona vuota all'accensione sono un
+                        # allarme falso.
+                        "batteria": self._batteria_a_schermo()})
 
     def _modo_servibile(self, modo: str) -> bool:
         if modo == "carta":

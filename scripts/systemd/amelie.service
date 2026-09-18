@@ -12,7 +12,13 @@ User=arduino
 WorkingDirectory=/home/arduino/amelie
 Environment=PYTHONPATH=/home/arduino/amelie/src
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/arduino/amelie/venv/bin/python -m amelie.app --porta 8080
+# Com'e' installato: il modello e' disponibile (lo accende il modo
+# «generativa»), e' quello addestrato su questo progetto, e la carta dei vini
+# sta accanto al codice. Senza `--con-modello` il modo «generativa» non si
+# puo' scegliere e un modo salvato torna in silenzio all'archivio: e'
+# successo reinstallando questo file.
+ExecStart=/home/arduino/amelie/venv/bin/python -m amelie.app --porta 8080 \
+    --con-modello --modello-addestrato --carta /home/arduino/amelie/vini.csv
 Restart=always
 RestartSec=5
 # Un Amelie che non parte e' peggio di un Amelie muto: se il modello o l'MCU

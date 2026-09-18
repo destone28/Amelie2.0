@@ -115,6 +115,8 @@ fi
 passo "8/10  Servizi"
 sudo install -m755 scripts/systemd/amelie-*.sh scripts/systemd/azzera-*.sh /usr/local/bin/
 sudo install -m644 scripts/systemd/amelie-*.service /etc/systemd/system/
+# Il permesso con cui l'applicazione accende e spegne il modello linguistico.
+sudo install -m644 scripts/systemd/50-amelie-llm.rules /etc/polkit-1/rules.d/
 sudo mkdir -p /var/lib/amelie /usr/share/xsessions
 # La sessione grafica del dispositivo: vedi il passo 8 per come la si sceglie.
 sudo install -m644 scripts/systemd/amelie.desktop /usr/share/xsessions/

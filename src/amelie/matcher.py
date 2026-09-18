@@ -1746,6 +1746,11 @@ class Matcher:
             " GROUP BY categoria", (did,)).fetchall()
         if len(cat) == 1 and cat[0]["categoria"]:
             f.categoria = cat[0]["categoria"]
+        # Il colore con lo stesso criterio: solo se tutte le tipologie lo
+        # condividono. Senza, un Vermentino di Gallura al livello denominazione
+        # non aveva colore, e il verificatore ha lasciato passare un modello
+        # che lo descriveva «di colore rubino». Letto sul dispositivo.
+        f.colore = self._colore_di("denominazione", did)
         # Un vitigno vale come "principale della denominazione" solo se lo e' per
         # la maggioranza delle sue tipologie: altrimenti si finirebbe per
         # attribuire al Chianti generico i vitigni di una sua versione rara.

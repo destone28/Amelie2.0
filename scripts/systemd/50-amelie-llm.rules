@@ -1,0 +1,13 @@
+// L'applicazione accende e spegne il modello linguistico col modo di racconto.
+//
+// Gira come `arduino` sotto `NoNewPrivileges=yes`, quindi `sudo` non puo'
+// alzare niente: `sudo -n systemctl start` falliva con exit 1, in silenzio
+// dentro un thread. Questa regola lascia che l'utente `arduino` gestisca
+// QUELLA unita' e nessun'altra, via D-Bus, senza privilegi in piu'.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") == "amelie-llm.service" &&
+        subject.user == "arduino") {
+        return polkit.Result.YES;
+    }
+});
