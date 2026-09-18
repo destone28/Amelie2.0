@@ -637,6 +637,18 @@ class Amelie:
             self.presenza.ricorda(sfondo)
         else:
             self.presenza.reimposta()
+        # E si guarda, come all'accensione. Uscire dal mirino e' la stessa
+        # situazione: la camera stava facendo altro, il mondo davanti puo'
+        # essere cambiato, e lo sfondo appena ricaricato dice com'era il piatto
+        # quando il dispositivo CREDEVA fosse vuoto. Senza questa riga bastava
+        # entrare e uscire dal mirino con una bottiglia sul piatto per
+        # ritrovarsi a crederlo vuoto - e chi tara l'inquadratura la bottiglia
+        # ce l'ha davanti per definizione.
+        #
+        # E' anche cio' che chi ha appena spostato la camera vuole: la prova
+        # che l'aggiustamento ha funzionato, senza doverla chiedere.
+        if self.camera is not None:
+            self._da_capire = True
         self._mostra(self.macchina.stato)
 
     def _stato_mirino(self) -> dict[str, Any]:
