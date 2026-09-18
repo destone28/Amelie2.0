@@ -615,7 +615,31 @@ class Narratore:
         # torna None se il modello ha inventato due volte di fila. Allora si
         # riprende la cascata di sempre, dal gradino piu' specifico. Acceso non
         # puo' voler dire peggio.
-        if preferisci_modello and consenti_modello and self.genera is not None:
+        # Al livello GENERICO il modello non scrive, mai, nemmeno se acceso.
+        #
+        # GENERICO vuol dire: l'etichetta si e' letta benissimo e in archivio
+        # non c'e' niente che si possa nominare senza inventarlo, quindi si
+        # ripete SOLO cio' che c'e' scritto - che e' uno spumante, che e'
+        # rosato, che e' brut. Ogni parola viene dalla bottiglia, per
+        # costruzione.
+        #
+        # Dare quei quattro fatti a un modello e chiedergli una descrizione e'
+        # chiedergli di riempire il resto, e il resto se lo inventa. Visto sul
+        # dispositivo, su un Lambrusco Grasparossa: «Nasce dai vitigni
+        # Lambrusco e Grasparossa, tipico della zona castellana. Colore giallo,
+        # con sapore delicato e acidita' equilibrata. In bocca e' un vino di
+        # media struttura, con bella acidita' e buona acidita'.» Un rosso
+        # dichiarato giallo, una zona che non esiste, e l'acidita' detta due
+        # volte.
+        #
+        # `verifica` non lo prende, e non e' un suo difetto: controlla che non
+        # si nominino vitigni e denominazioni che non ci sono - e infatti su un
+        # altro tentativo ha scartato «Pinot Noir, Cabernet Sauvignon» - ma il
+        # colore di un vino non e' un nome, e' un'affermazione. A questo
+        # livello non ci sono affermazioni da fare.
+        genera_qui = (consenti_modello and self.genera is not None
+                      and f.livello is not Livello.GENERICO)
+        if preferisci_modello and genera_qui:
             if (vivo := self._dal_modello(f)) is not None:
                 return vivo
 
@@ -630,7 +654,7 @@ class Narratore:
         if (pronto := self._dalla_cache(f)) is not None:
             return pronto
 
-        if consenti_modello and self.genera is not None:
+        if genera_qui:
             if (vivo := self._dal_modello(f)) is not None:
                 return vivo
 

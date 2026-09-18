@@ -785,3 +785,58 @@ class TestIlLimiteSiDiceSoloSeSiEDetto:
             assert "non è nel mio archivio" not in testo
         finally:
             n.chiudi()
+
+
+class TestAlGenericoIlModelloNonScrive:
+    """GENERICO vuol dire: ogni parola detta viene dalla bottiglia.
+
+    Dare quei quattro fatti a un modello e chiedergli una descrizione e'
+    chiedergli di riempire il resto, e il resto se lo inventa. Visto sul
+    dispositivo su un Lambrusco Grasparossa: «Colore giallo, con sapore
+    delicato e acidita' equilibrata. In bocca e' un vino di media struttura,
+    con bella acidita' e buona acidita'.» Un rosso dichiarato giallo, e
+    l'acidita' detta due volte.
+
+    `verifica` non lo prende, e non e' un suo difetto: controlla che non si
+    nominino vitigni e denominazioni che non ci sono, ma il colore di un vino
+    non e' un nome, e' un'affermazione. A questo livello non ce ne sono da
+    fare.
+    """
+
+    def _narratore(self, chiamate):
+        from amelie.narrator import Narratore
+
+        def genera(_prompt):
+            chiamate.append(_prompt)
+            return "Colore giallo, con bella acidita' e buona acidita'."
+
+        return Narratore(genera=genera)
+
+    def test_col_modello_acceso_non_lo_si_chiama(self):
+        from amelie.matcher import Fatti, Livello
+
+        chiamate = []
+        n = self._narratore(chiamate)
+        try:
+            f = Fatti(livello=Livello.GENERICO, colore="Rosato", sicurezza=88.0)
+            f.qualificatori = ["spumante", "brut"]
+            r = n.racconta(f, preferisci_modello=True)
+            assert chiamate == [], "il modello e' stato chiamato al livello generico"
+            assert r.origine != "modello"
+            assert r.testo.strip()
+        finally:
+            n.chiudi()
+
+    def test_e_a_un_livello_vero_invece_si(self):
+        """La regola e' sul livello, non sul modello: altrove il modello serve."""
+        from amelie.matcher import Fatti, Livello
+
+        chiamate = []
+        n = self._narratore(chiamate)
+        try:
+            f = Fatti(livello=Livello.TIPOLOGIA, denominazione="Barolo",
+                      tipologia="Barolo", colore="Rosso", sicurezza=90.0)
+            n.racconta(f, preferisci_modello=True)
+            assert chiamate, "al livello tipologia il modello deve poter scrivere"
+        finally:
+            n.chiudi()
