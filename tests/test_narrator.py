@@ -840,3 +840,98 @@ class TestAlGenericoIlModelloNonScrive:
             assert chiamate, "al livello tipologia il modello deve poter scrivere"
         finally:
             n.chiudi()
+
+
+class TestLeBugieConParoleVere:
+    """Dodici testi generati sul dispositivo, riletti: cinque sbagliati, tutti
+    promossi. Non inventavano nomi, inventavano RAPPORTI fra nomi veri."""
+
+    def _fatti(self, **kw):
+        from amelie.matcher import Fatti, Livello
+        f = Fatti(livello=Livello.DENOMINAZIONE, sicurezza=85.0, **kw)
+        return f
+
+    def test_una_nota_olfattiva_non_e_un_vitigno(self):
+        from amelie.narrator import verifica
+
+        f = self._fatti(denominazione="Brunello di Montalcino", colore="Rosso",
+                        vitigni=["Sangiovese"], note_sensoriali=["amarena", "viola"])
+        ok, inv = verifica("Nasce dall'incontro di Sangiovese e Amarena, i vitigni "
+                           "più coltivati d'Italia.", f)
+        assert not ok and any("Amarena" in x for x in inv)
+
+    def test_ma_il_vitigno_vero_passa(self):
+        from amelie.narrator import verifica
+
+        f = self._fatti(denominazione="Brunello di Montalcino", colore="Rosso",
+                        vitigni=["Sangiovese"], note_sensoriali=["amarena"])
+        ok, inv = verifica("Nasce dal Sangiovese, con note di amarena.", f)
+        assert ok, inv
+
+    def test_il_vino_non_e_un_vitigno(self):
+        from amelie.narrator import verifica
+
+        f = self._fatti(denominazione="Amarone della Valpolicella",
+                        vitigni=["Corvina", "Rondinella", "Corvinone"])
+        ok, inv = verifica("Amarone della Valpolicella, un vitigno compagno dei "
+                           "Rondinella, Corvinone e Corvina.", f)
+        assert not ok and any("vino" in x for x in inv)
+
+    def test_un_vino_fermo_non_ha_bollicine(self):
+        from amelie.narrator import verifica
+
+        f = self._fatti(denominazione="Amarone della Valpolicella",
+                        categoria="Wine", vitigni=["Corvina"])
+        ok, inv = verifica("Questa spumante nasce dai sedici gradi.", f)
+        assert not ok and any("bollicine" in x for x in inv)
+
+    def test_uno_spumante_invece_si(self):
+        from amelie.narrator import verifica
+
+        f = self._fatti(denominazione="Franciacorta", categoria="Sparkling Wine",
+                        vitigni=["Chardonnay"])
+        ok, inv = verifica("Uno spumante dal perlage fine.", f)
+        assert ok, inv
+
+
+class TestUnTestoTroncoSiChiudeSullaFraseIntera:
+    def test_la_coda_a_meta_frase_si_toglie(self):
+        from amelie.narrator import _ripulisci
+
+        t = _ripulisci("Nasce dal Nebbiolo. Al palato è asciutto e pieno. "
+                       "Da servire fra i diciassette e i dici")
+        assert t == "Nasce dal Nebbiolo. Al palato è asciutto e pieno."
+
+    def test_ma_non_si_butta_piu_di_meta(self):
+        from amelie.narrator import _ripulisci
+
+        t = _ripulisci("Breve. Una frase lunghissima che non finisce mai e "
+                       "continua e continua senza un punto")
+        assert t.endswith("…")
+
+
+class TestAncheLaCacheSiVerifica:
+    """La cache l'ha scritta lo stesso modello, prima: «Borgognone, ovunque nel
+    mondo» su un Franciacorta usciva da li', e nessuno l'aveva mai riletto."""
+
+    def test_un_testo_pronto_che_inventa_si_salta(self, tmp_path, monkeypatch):
+        import sqlite3
+
+        from amelie.matcher import Fatti, Livello
+        from amelie.narrator import Narratore
+
+        db = tmp_path / "a.db"
+        con = sqlite3.connect(db)
+        con.execute("CREATE TABLE racconto (ambito TEXT, ambito_id INT, lingua TEXT, testo TEXT)")
+        con.execute("INSERT INTO racconto VALUES ('tipologia', 7, 'it', "
+                    "'Borgognone, ovunque nel mondo. Si serve fra 10 e 12 gradi.')")
+        con.commit(); con.close()
+        n = Narratore(percorso_db=db)
+        try:
+            f = Fatti(livello=Livello.TIPOLOGIA, tipologia="Franciacorta",
+                      colore="Bianco", sicurezza=90.0, origine=("tipologia", 7))
+            r = n.racconta(f)
+            assert r.origine != "cache"
+            assert "Borgognone" not in r.testo
+        finally:
+            n.chiudi()

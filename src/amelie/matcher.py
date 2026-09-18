@@ -877,6 +877,18 @@ class Matcher:
             r = self.con.execute(
                 "SELECT colore FROM tipologia WHERE id = ?", (ambito_id,)).fetchone()
             return COLORE_UE.get(r["colore"] or "") if r else None
+        if ambito == "denominazione":
+            # Una denominazione ha un colore solo se TUTTE le sue tipologie
+            # hanno quello. Lambrusco Grasparossa di Castelvetro e' rosso in
+            # ogni sua forma, e senza questo il livello «denominazione»
+            # restava senza colore: il verificatore non poteva smentire un
+            # modello che lo descriveva «di colore bianco», ed e' successo.
+            colori = {COLORE_UE.get(r["colore"] or "")
+                      for r in self.con.execute(
+                          "SELECT colore FROM tipologia WHERE denominazione_id = ?",
+                          (ambito_id,))}
+            colori.discard(None)
+            return colori.pop() if len(colori) == 1 else None
         if ambito != "vino":
             return None
         r = self.con.execute(

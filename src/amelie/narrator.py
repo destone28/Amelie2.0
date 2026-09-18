@@ -170,6 +170,17 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
         invenzioni.append("disciplinare invocato senza citazioni")
     invenzioni.extend(_cibi_inventati(testo, ammesso))
     invenzioni.extend(_provenienze_inventate(testo, ammesso))
+    # Le due classi che seguono sono uscite da una rilettura di dodici testi
+    # generati sul dispositivo: cinque erano sbagliati e la verifica li aveva
+    # promossi tutti, perche' non inventavano NOMI, inventavano RAPPORTI fra
+    # nomi veri. «Sangiovese e Amarena, i vitigni piu' coltivati d'Italia» -
+    # tre volte su dodici: l'amarena e' una nota olfattiva dei fatti, non
+    # un'uva. «Amarone della Valpolicella, un vitigno compagno dei
+    # Rondinella»: e' il vino, non un vitigno. E «questa spumante» detto di un
+    # Amarone.
+    invenzioni.extend(_vitigni_che_non_lo_sono(testo, fatti, lingua))
+    if contraddizione := _categoria_sbagliata(testo, fatti, ammesso):
+        invenzioni.append(contraddizione)
 
     return (not invenzioni), invenzioni
 
@@ -242,6 +253,70 @@ _PROVENIENZA = re.compile(
 def _provenienze_inventate(testo: str, ammesso: str) -> list[str]:
     return [m.group(0) for m in _PROVENIENZA.finditer(_senza_accenti(testo))
             if m.group(0)[:6] not in ammesso]
+
+
+# Dove un testo dichiara i vitigni: quel che segue fino alla fine della frase
+# e' un elenco di uve, e ogni nome proprio li' dentro dev'essere un'uva.
+_CONTESTO_VITIGNI = re.compile(
+    # «dall'incontro»: dopo l'apostrofo non c'e' spazio, e la prima versione
+    # di questa espressione lo pretendeva - e non prendeva proprio la frase
+    # che l'ha fatta nascere.
+    r"(?:nasce\s+(?:dall'|dalla\s+|dalle\s+|dal\s+|dai\s+)\s*(?:solo\s+|incontro\s+di\s+)?"
+    r"|vitign[oi]\s+|uv[ae]\s+(?:di\s+)?|grapes?\s+|from\s+the\s+)([^.;:!?]*)", re.I)
+_UN_VITIGNO = re.compile(r"\b(un|a)\s+(?:grande\s+)?(vitigno|grape)\b", re.I)
+
+
+def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]:
+    """Nomi detti come uve che nei fatti sono altro.
+
+    Il modello impara la forma «nasce da X e Y» e la riempie con due nomi
+    propri qualunque presi dai fatti: il vitigno vero e la prima nota
+    olfattiva che trova. Ogni nome proprio in un contesto da vitigno deve
+    stare fra i vitigni dei fatti; se invece sta fra le note sensoriali, o e'
+    il nome del vino stesso, e' una bugia con parole vere.
+    """
+    uve = {_senza_accenti(v).lower() for v in fatti.vitigni + fatti.vitigni_ammessi}
+    note = {_senza_accenti(n).lower()
+            for n in list(fatti.note_sensoriali) + list(fatti.sensoriali_in(lingua))}
+    vino = {_senza_accenti(x).lower() for x in (fatti.nome, fatti.tipologia,
+                                                  fatti.denominazione) if x}
+    fuori: list[str] = []
+    for m in _CONTESTO_VITIGNI.finditer(testo):
+        for nome in re.findall(r"\b([A-ZÀ-Ý][a-zà-ÿ']{2,})\b", m.group(1)):
+            n = _senza_accenti(nome).lower()
+            if any(n in u for u in uve):
+                continue
+            if any(n in x for x in note):
+                fuori.append(f"{nome} detto vitigno, ma e' una nota olfattiva")
+    # «Amarone della Valpolicella, un vitigno compagno...»: il vino stesso
+    # presentato come uva.
+    for m in _UN_VITIGNO.finditer(testo):
+        prima = _senza_accenti(testo[max(0, m.start() - 60):m.start()]).lower()
+        for v in vino:
+            if v and v in prima and not any(v in u for u in uve):
+                fuori.append(f"«{v}» detto vitigno, ma e' il vino")
+    return fuori
+
+
+_SPUMANTE = re.compile(r"\b(spumante|frizzante|bollicin\w*|perlage|sparkling|bubbles?)\b", re.I)
+_FERMO = frozenset(("Wine", "Vino", "wine"))
+
+
+def _categoria_sbagliata(testo: str, fatti: Fatti, ammesso: str) -> str | None:
+    """Un vino fermo raccontato con le bollicine, o il contrario.
+
+    Si controlla solo quando la categoria e' nota e non e' citata nei fatti
+    stessi: se la scheda dice «spumante», dirlo non e' un'invenzione.
+    """
+    cat = fatti.categoria or ""
+    if not cat:
+        return None
+    frizza_nei_fatti = bool(_SPUMANTE.search(ammesso))
+    frizza_nel_testo = _SPUMANTE.search(testo)
+    fermo = cat in _FERMO
+    if fermo and frizza_nel_testo and not frizza_nei_fatti:
+        return f"bollicine inventate ({frizza_nel_testo.group(1)}) su un vino fermo"
+    return None
 
 
 _ROSSO = re.compile(r"\b(rosso|rossa|rubino|granato|tannico|tannicit[àa]|tannin)", re.I)
@@ -685,6 +760,16 @@ class Narratore:
             # corpo viene dalla cache. Un testo pre-generato non puo' sapere se
             # l'etichetta e' stata letta bene, ne' quale bottiglia sia: per
             # questo il corpo e' scritto sul vino generico e l'apertura no.
+            # Verificato come un testo del modello, perche' LO E': la cache e'
+            # stata scritta dallo stesso modello, prima. Sul dispositivo un
+            # Franciacorta usciva dalla cache cosi': «Borgognone, ovunque nel
+            # mondo» - e nessuno l'aveva mai riletto. Un testo pronto che non
+            # regge si salta, e si scende al gradino dopo o al template.
+            ok, invenzioni = verifica(r["testo"], f, self.lingua)
+            if not ok:
+                log.warning("cache %s/%s scartata, ha inventato: %s",
+                            ambito, ident, invenzioni)
+                continue
             apertura = _apertura(f, self.lex, self.lingua)
             log.debug("racconto da %s/%s in cache", ambito, ident)
             return Racconto(testo=f"{apertura} {r['testo']}".strip(),
@@ -793,13 +878,17 @@ def _ripulisci(testo: str) -> str:
     parole = testo.split()
     if len(parole) > PAROLE_MAX:
         testo = " ".join(parole[:PAROLE_MAX])
-        # Si preferisce chiudere su una frase intera, ma solo se questo non
-        # butta via piu' di meta' del testo: meglio un troncamento dichiarato
-        # con i puntini che due parole al posto di cento.
-        punto = testo.rfind(".")
+    if not testo.endswith(("…", ".", "!", "?")):
+        # Il modello si e' fermato a meta' frase - il tetto dei token, o il
+        # nostro taglio qui sopra. Quattro testi su dodici, sul dispositivo,
+        # finivano cosi': «Da servire fra i diciassette e i dici». Si chiude
+        # sull'ultima frase intera, ma solo se questo non butta via piu' di
+        # meta' del testo: meglio un troncamento dichiarato con i puntini che
+        # due parole al posto di cento.
+        punto = max(testo.rfind("."), testo.rfind("!"), testo.rfind("?"))
         if punto >= len(testo) // 2:
             testo = testo[: punto + 1]
-        elif not testo.endswith(("…", ".", "!", "?")):
+        else:
             testo = testo.rstrip(" ,;:") + "…"
     return testo
 
