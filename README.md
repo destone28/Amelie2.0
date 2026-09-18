@@ -146,7 +146,7 @@ Guida completa alle prove: [`docs/03-COLLAUDO.md`](docs/03-COLLAUDO.md).
 |---|---|
 | `amelie.service` | l'applicazione |
 | `amelie-kiosk.service` | il browser a schermo intero |
-| `amelie-llm.service` | il modello linguistico, residente |
+| `amelie-llm.service` | il modello linguistico; lo accende e lo spegne l'applicazione col modo «generativa», non parte al boot |
 | `amelie-display.service` | modalità video e schermo sempre sveglio |
 | `amelie-audio-guard.service` | garantisce la scheda audio all'avvio |
 | `amelie-pregenera.service` | il lotto notturno dei racconti |
