@@ -550,6 +550,11 @@ QUALIFICATORI = frozenset((
 # le invenzioni ne hanno lo 0 %. Vedi `_tutto_letto`.
 PAROLE_GENERICHE = frozenset(QUALIFICATORI) | frozenset((
     "vino", "vini", "wine", "doc", "docg", "dop", "igp", "igt",
+    # Le sigle straniere valgono quanto le nostre: sono marchi di
+    # denominazione, non nomi di vino. Mancavano, e il conto lo pagava lo
+    # Champagne - «aoc» risultava una parola da leggere, nessun titolo passava,
+    # e una bottiglia che dice CHAMPAGNE restava senza risposta.
+    "aoc", "aop", "ava", "doca", "vdp", "qba", "aoc", "igt",
     "brut", "extra", "dry", "secco", "dolce", "abboccato", "amabile", "nature",
     "metodo", "millesimato", "cuvee", "sec", "demi", "annata", "cru",
     "rosso", "rossa", "bianco", "bianca", "rosato", "rosata", "rose", "rosa",
