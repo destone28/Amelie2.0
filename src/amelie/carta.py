@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from .matcher import PAROLE_GENERICHE
 from .text import normalizza, parole_utili, token
 
 log = logging.getLogger(__name__)
@@ -68,6 +69,7 @@ class Carta:
     def __init__(self, percorso: str | Path) -> None:
         self.percorso = Path(percorso)
         self.voci: list[Voce] = []
+        self._voci_indice: list[str] = []
         # Due elenchi di parole per ogni titolo, e servono a due cose diverse.
         # `_token` passa dal filtro delle parole vuote ed è quello su cui si
         # misura la somiglianza. `_tutte` no, e serve a contare QUANTO di un
@@ -78,6 +80,9 @@ class Carta:
         # nel file.
         self._token: list[list[str]] = []
         self._tutte: list[list[str]] = []
+        # Quali voci contengono ciascuna parola. Serve a capire cosa una parola
+        # letta IMPLICA: vedi `_implicate`.
+        self._dove: dict[str, set[int]] = {}
         self._carica()
 
     def _carica(self) -> None:
@@ -90,6 +95,9 @@ class Carta:
                 self.voci.append(Voce(titolo=titolo, descrizione=testo))
                 self._token.append(parole_utili(normalizza(titolo)))
                 self._tutte.append(token(titolo))
+                for p in self._tutte[-1]:
+                    self._dove.setdefault(p, set()).add(len(self._voci_indice))
+                self._voci_indice.append(titolo)
         log.info("carta dei vini: %d voci da %s", len(self.voci), self.percorso.name)
         if not self.voci:
             raise CartaVuota(f"nessuna voce utilizzabile in {self.percorso}")
@@ -112,6 +120,7 @@ class Carta:
             return None
 
         tutte_lette = token(" ".join(righe))
+        implicate = self._implicate(tutte_lette)
         migliore: Voce | None = None
         meglio = (-1, 1, -1.0)
         for voce, chiavi, parole in zip(self.voci, self._token, self._tutte):
@@ -121,17 +130,18 @@ class Carta:
             if punti < SOMIGLIANZA_MINIMA:
                 continue
             # Ogni parola del titolo che promette qualcosa dev'essere sul
-            # vetro. È la regola dell'archivio — non si nomina ciò che non si
-            # è letto — portata fino in fondo: lì il veto riguarda le parole
-            # che IDENTIFICANO, qui anche quelle che distinguono, perché una
-            # carta dei vini ha «Champagne Extra Brut» e «Champagne Brut Sans
-            # Année» come voci separate e sono due vini diversi.
+            # vetro, o essere IMPLICATA da quello che c'è. È la regola
+            # dell'archivio — non si nomina ciò che non si è letto — portata
+            # fino in fondo: lì il veto riguarda le parole che IDENTIFICANO,
+            # qui anche quelle che distinguono, perché una carta ha «Champagne
+            # Extra Brut» e «Champagne Brut Sans Année» come voci separate e
+            # sono due vini diversi.
             #
             # Regge solo perché esistono le voci generiche: scartando chi
             # promette troppo si deve poter atterrare da qualche parte, e
             # quella parte è «Champagne AOC».
             if any(not _si_e_letta(p, tutte_lette)
-                   for p in parole if p not in TACITE):
+                   for p in parole if p not in TACITE and p not in implicate):
                 continue
             # Fra i titoli che si POSSONO dire, vince quello che spiega di più
             # dell'etichetta. La somiglianza da sola non basta e sceglie male:
@@ -155,6 +165,37 @@ class Carta:
             log.info("carta: «%s» al %.0f%% (%d parole lette, %d no)",
                      migliore.titolo, migliore.somiglianza, meglio[0], -meglio[1])
         return migliore
+
+    def _implicate(self, lette: Sequence[str]) -> set[str]:
+        """Le parole che non serve leggere, perché la carta le dà per scontate.
+
+        Sul dispositivo, etichetta vera: l'OCR ha letto «Brunello» e tre
+        frammenti, e la regola ha scartato «Brunello di Montalcino DOCG»
+        perché «Montalcino» sul vetro non c'era. Ma in carta **non esiste un
+        altro Brunello**: ogni voce che contiene quella parola contiene anche
+        «Montalcino», e dirlo non aggiunge nessun rischio.
+
+        Non è un'eccezione scritta a mano, è una proprietà del file: una parola
+        si può dire senza averla letta quando compare in TUTTE le voci che
+        contengono quelle lette. Cambiando la carta, cambia da sola.
+
+        Non tocca «Riserva», che sta in una delle due voci e non nell'altra:
+        quella resta una promessa da guadagnarsi sul vetro. E non tocca
+        «Extra», per la stessa ragione, su otto Champagne diversi.
+        """
+        # Solo le parole che IDENTIFICANO restringono la famiglia. Se
+        # restringesse anche «brut», leggere «CHAMPAGNE BRUT» lascerebbe in
+        # piedi il solo «Champagne Extra Brut» e da li' «extra» risulterebbe
+        # implicato - cioe' la regola si smentirebbe da sola proprio sul caso
+        # che l'ha fatta nascere. Provato, e succedeva.
+        insiemi = [self._dove[p] for p in lette
+                   if p in self._dove and p not in PAROLE_GENERICHE]
+        if not insiemi:
+            return set()
+        compatibili = set.intersection(*insiemi) if len(insiemi) > 1 else insiemi[0]
+        if not compatibili:
+            return set()
+        return {p for p, dove in self._dove.items() if compatibili <= dove}
 
     def vicine(self, righe: Sequence[str], quante: int = 3) -> list[str]:
         """I titoli che si sarebbero potuti dire, ma che non si sono letti.

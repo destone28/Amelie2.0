@@ -135,3 +135,51 @@ class TestLeVicine:
 
     def test_senza_niente_da_leggere_non_dice_niente(self, carta):
         assert carta.vicine([]) == []
+
+
+class TestCioCheLaCartaDaPerScontato:
+    """Sul dispositivo, etichetta vera: l'OCR ha letto «Brunello» e tre
+    frammenti, e la regola ha scartato «Brunello di Montalcino DOCG» perché
+    «Montalcino» sul vetro non c'era. Ma in carta non esiste un altro Brunello:
+    ogni voce che contiene quella parola contiene anche «Montalcino».
+
+    Non è un'eccezione scritta a mano: è una proprietà del file, e cambiando la
+    carta cambia da sola.
+    """
+
+    @pytest.fixture
+    def carta(self, tmp_path):
+        f = tmp_path / "vini.csv"
+        with open(f, "w", encoding="utf-8", newline="") as g:
+            w = csv.writer(g, quoting=csv.QUOTE_ALL)
+            w.writerow(["titolo", "descrizione"])
+            w.writerows([
+                ("Brunello di Montalcino DOCG", "Sangiovese grosso, cinque anni."),
+                ("Brunello di Montalcino DOCG Riserva", "Sei anni, di cui due in legno."),
+                ("Rosso di Montalcino DOC", "Il fratello minore, un anno."),
+                ("Champagne AOC", "Chardonnay, Pinot Nero e Meunier."),
+                ("Champagne Extra Brut AOC", "Fra zero e sei grammi."),
+                ("Champagne Rosé AOC", "Per salasso o assemblaggio."),
+            ])
+        return Carta(f)
+
+    def test_una_parola_che_non_ha_omonimi_basta(self, carta):
+        v = carta.cerca(["Affinato in botidm", "0E61", "Brunello"])
+        assert v is not None and v.titolo == "Brunello di Montalcino DOCG"
+
+    def test_ma_la_riserva_resta_da_guadagnarsi(self, carta):
+        """«Riserva» sta in una delle due voci e non nell'altra: non è
+        implicata da niente."""
+        v = carta.cerca(["Brunello"])
+        assert "Riserva" not in v.titolo
+
+    def test_e_l_extra_brut_pure(self, carta):
+        """Il caso che ha fatto nascere la regola non deve smentirla: se a
+        restringere la famiglia bastasse «brut», resterebbe in piedi il solo
+        Extra Brut e «extra» risulterebbe implicato."""
+        v = carta.cerca(["CHAMPAGNE", "BRUT", "RESERVE"])
+        assert v.titolo == "Champagne AOC"
+
+    def test_e_il_rosso_di_montalcino_non_diventa_un_brunello(self, carta):
+        v = carta.cerca(["ROSSO", "DI", "MONTALCINO", "DOC"])
+        assert v.titolo == "Rosso di Montalcino DOC"
