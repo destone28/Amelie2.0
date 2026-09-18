@@ -1579,3 +1579,79 @@ class TestAnnullamento:
         for _ in range(4):
             asyncio.run(amelie._un_battito())
         assert amelie.macchina.stato is not Stato.ATTESA
+
+
+class TestLaSceltaCheNessunoFa:
+    """Dodici secondi davanti a tre candidati, e nessuno tocca lo schermo.
+
+    Succede quasi sempre: l'ospite guarda, non capisce che deve scegliere, o
+    sta versando. Allora si prende il PRIMO CANDIDATO, cioè la prima riga che
+    aveva davanti.
+
+    Prima si raccontava il match primario, che è un'altra cosa. Visto sul
+    dispositivo con uno spumante rosa: a schermo tre Metodo Classico Rosé,
+    nessuno li tocca, e la voce racconta il Moscato d'Asti — un quarto vino,
+    che in quella lista non c'era.
+    """
+
+    def amelie(self):
+        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                  senza_voce=True, senza_modello=True))
+        return a
+
+    def test_scaduta_la_scelta_si_prende_il_primo_candidato(self, monkeypatch):
+        a = self.amelie()
+        try:
+            adottati = []
+            monkeypatch.setattr(a, "_adotta_candidato",
+                                lambda i: adottati.append(i) or True)
+            monkeypatch.setattr(a, "_avvia", lambda _f: None)
+            a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
+            a.macchina.invia(Evento.SCADENZA)          # assestamento -> scansione
+            a.macchina.invia(Evento.LETTURA_RIUSCITA)  # -> riconoscimento
+            a.macchina.invia(Evento.MATCH_DUBBIO)      # -> conferma
+            assert a.macchina.stato is Stato.CONFERMA
+            a.macchina.invia(Evento.SCADENZA)          # -> racconto
+            assert a.macchina.stato is Stato.RACCONTO
+            assert adottati == [0], (
+                "ha raccontato senza prendere il candidato che mostrava")
+        finally:
+            a.matcher.chiudi()
+            a.narratore.chiudi()
+
+    def test_se_invece_si_sceglie_si_prende_quello_toccato(self, monkeypatch):
+        a = self.amelie()
+        try:
+            adottati = []
+            monkeypatch.setattr(a, "_adotta_candidato",
+                                lambda i: adottati.append(i) or True)
+            monkeypatch.setattr(a, "_avvia", lambda _f: None)
+            a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
+            a.macchina.invia(Evento.SCADENZA)
+            a.macchina.invia(Evento.LETTURA_RIUSCITA)
+            a.macchina.invia(Evento.MATCH_DUBBIO)
+            a.scegli(2)
+            assert a.macchina.stato is Stato.RACCONTO
+            assert adottati == [2]
+        finally:
+            a.matcher.chiudi()
+            a.narratore.chiudi()
+
+    def test_un_racconto_normale_non_adotta_niente(self, monkeypatch):
+        """Un match sicuro non passa dalla schermata di scelta, e non deve
+        trovarsi sostituito da un candidato che nessuno ha visto."""
+        a = self.amelie()
+        try:
+            adottati = []
+            monkeypatch.setattr(a, "_adotta_candidato",
+                                lambda i: adottati.append(i) or True)
+            monkeypatch.setattr(a, "_avvia", lambda _f: None)
+            a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
+            a.macchina.invia(Evento.SCADENZA)
+            a.macchina.invia(Evento.LETTURA_RIUSCITA)
+            a.macchina.invia(Evento.MATCH_SICURO)      # -> racconto, diretto
+            assert a.macchina.stato is Stato.RACCONTO
+            assert adottati == []
+        finally:
+            a.matcher.chiudi()
+            a.narratore.chiudi()

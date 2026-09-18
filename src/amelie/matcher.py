@@ -461,6 +461,37 @@ def sotto_lucchetto(f):
 COLORE_UE = {"Red": "Rosso", "White": "Bianco", "Rosé": "Rosato",
              "Rosso": "Rosso", "Bianco": "Bianco", "Rosato": "Rosato"}
 
+# Le parole con cui un'etichetta dichiara il proprio colore, nelle lingue in
+# cui le etichette italiane lo scrivono. Quando una di queste si legge, non e'
+# un indizio: e' la bottiglia che lo dice di se stessa, e nessun record di
+# colore diverso puo' essere quella bottiglia.
+#
+# Viene da un caso vero. Su «Leggiadro · Brut Rose · METODO CLASSICO» il
+# riconoscitore proponeva per primo «Asti Metodo Classico» - che e' BIANCO, di
+# Moscato, e dolce - all'86 %, e il dispositivo raccontava il Moscato d'Asti a
+# chi aveva in mano uno spumante rosa. I tre candidati che offriva accanto
+# erano tutti Metodo Classico Rose', cioe' giusti: il colore non entrava nella
+# scelta, e bastava a farla.
+# Quanto in basso si scende nella lista cercando il colore giusto. Oltre, la
+# somiglianza e' troppo lontana da quella del primo perche' il colore possa
+# giustificare il salto: si starebbe raccontando un altro vino.
+#
+# Sedici e non otto, e il motivo e' che la lista si appiattisce: su «metodo
+# classico» duecento candidati hanno tutti somiglianza 80,0, e fra loro quello
+# del colore giusto stava al nono posto. Ordinarli meglio non si puo' - sono
+# davvero equivalenti per il testo letto - e il colore e' l'unica cosa che li
+# distingue.
+CANDIDATI_PER_COLORE = 16
+
+COLORE_DETTO = {
+    "rosato": "Rosato", "rosata": "Rosato", "rose": "Rosato",
+    "rosa": "Rosato", "rosado": "Rosato",
+    "rosso": "Rosso", "rossa": "Rosso", "rouge": "Rosso", "red": "Rosso",
+    "tinto": "Rosso", "nero": "Rosso",
+    "bianco": "Bianco", "bianca": "Bianco", "blanc": "Bianco",
+    "white": "Bianco", "blanco": "Bianco",
+}
+
 # Parole che nel nome di una tipologia denotano un PRODOTTO DIVERSO, non una
 # sfumatura: un passito non e' la versione dolce del bianco, e' un altro vino.
 QUALIFICATORI = frozenset((
@@ -595,7 +626,7 @@ class Matcher:
         for c in candidati:
             c.somiglianza = min(c.somiglianza, tetto)
 
-        migliore = candidati[0]
+        migliore = self._del_colore_giusto(candidati, token)
         fatti = self._componi(migliore)
         fatti.sicurezza = migliore.somiglianza
         # La garanzia: un produttore non si nomina se non lo si e' letto.
@@ -609,16 +640,117 @@ class Matcher:
         # Per la schermata di conferma servono alternative DIVERSE fra loro:
         # tre righe che dicono quasi la stessa cosa non aiutano a scegliere.
         visti = {migliore.testo}
-        for c in candidati[1:]:
+        detto = self._colore_detto(token)
+        for c in candidati:
+            if c is migliore:
+                continue
             if len(fatti.candidati) >= 3:
                 break
             if c.testo in visti or self._stesso_vino(fatti, c):
                 continue
+            # Un candidato del colore sbagliato non e' un'alternativa: e' lo
+            # stesso errore, spostato sotto il dito dell'ospite. Se la
+            # bottiglia dice «Rose'», proporre un Moscato bianco e' chiedere di
+            # scegliere fra una risposta e una che sappiamo gia' falsa.
+            if detto is not None:
+                suo = self._colore_di(c.ambito, c.ambito_id)
+                if suo is not None and suo != detto:
+                    continue
             visti.add(c.testo)
             fatti.candidati.append(self.etichetta(c.ambito, c.ambito_id)
                                    or c.testo)
             fatti.riferimenti.append((c.ambito, c.ambito_id))
         return fatti
+
+    def _del_colore_giusto(self, candidati: list[Candidato],
+                           token: Sequence[str]) -> Candidato:
+        """Il migliore, ma senza contraddire il colore scritto sull'etichetta.
+
+        Quando la bottiglia dichiara il proprio colore - «Rose'», «Rosso»,
+        «Bianco» - quella parola non e' un indizio da pesare insieme agli
+        altri: e' la bottiglia che lo dice di se stessa. Nessun record di
+        colore diverso puo' essere quella bottiglia, per quanto il suo nome
+        somigli a quello che c'e' scritto.
+
+        Misurato su un caso vero. «Leggiadro · Brut Rose · METODO CLASSICO»
+        dava per primo «Asti Metodo Classico» all'86 % - bianco, di Moscato,
+        dolce - e il dispositivo raccontava il Moscato d'Asti a chi aveva in
+        mano uno spumante rosa. I tre candidati offerti accanto erano gia'
+        tutti Metodo Classico Rose': la risposta giusta era in lista, solo non
+        per prima.
+
+        Non si butta via niente: si scende nella lista fino al primo che non
+        contraddice, e chi contraddice resta fra le alternative. Se nessuno va
+        bene si tiene il primo, perche' un archivio che non ha quel colore non
+        e' una ragione per tacere.
+        """
+        detto = self._colore_detto(token)
+        if detto is None:
+            return candidati[0]
+        vicini = candidati[:CANDIDATI_PER_COLORE]
+        colori = [self._colore_di(c.ambito, c.ambito_id) for c in vicini]
+        if colori[0] in (None, detto):
+            # Il primo non contraddice niente: non c'e' nulla da correggere.
+            return candidati[0]
+
+        # Si scende SOLO su chi il colore giusto ce l'ha detto. Accontentarsi
+        # di chi non lo dichiara e' stato provato e fa danni: la lista sotto un
+        # bianco e' piena di record senza colore, e il primo che capita non ha
+        # nessuna ragione di essere quella bottiglia - misurato, su «Brut
+        # Rose'» si finiva a raccontare un Brachetto passito rosso.
+        for c, colore in zip(vicini, colori):
+            if colore == detto:
+                log.info("colore letto %s: scelgo «%s» invece di «%s», che e' %s",
+                         detto, c.testo, candidati[0].testo, colori[0])
+                return c
+        return candidati[0]
+
+    @staticmethod
+    def _colore_detto(token: Sequence[str]) -> str | None:
+        """Il colore che l'etichetta dichiara di se stessa, se lo dichiara.
+
+        Uno solo: due parole di colore diverso sulla stessa etichetta - e
+        capita, «Rosso» di una denominazione accanto a «bianco» di una nota -
+        vogliono dire che non si sa, e non sapere e' meglio che scegliere a
+        caso quale delle due vale.
+        """
+        trovati = {COLORE_DETTO[x] for x in token if x in COLORE_DETTO}
+        return trovati.pop() if len(trovati) == 1 else None
+
+    def _colore_di(self, ambito: str, ambito_id: int) -> str | None:
+        """Di che colore e' questo record, tradotto, o `None` se non lo dice.
+
+        Per un VINO il colore sta in `tipo`, e spessissimo quella colonna non
+        contiene un colore: contiene «Sparkling» o «Dessert», che dicono che
+        tipo di vino e', non di che colore. In quel caso il colore vero sta
+        sulla tipologia a cui il vino appartiene, e li' si va a prenderlo -
+        altrimenti meta' degli spumanti risulterebbe senza colore proprio
+        quando il colore e' l'unica cosa che l'etichetta dichiara.
+        """
+        if ambito == "tipologia":
+            r = self.con.execute(
+                "SELECT colore FROM tipologia WHERE id = ?", (ambito_id,)).fetchone()
+            return COLORE_UE.get(r["colore"] or "") if r else None
+        if ambito != "vino":
+            return None
+        r = self.con.execute(
+            "SELECT tipo, denominazione_id, nome_norm FROM vino WHERE id = ?",
+            (ambito_id,)).fetchone()
+        if not r:
+            return None
+        # PRIMA la tipologia, poi `tipo`. Sembra il contrario di quello che si
+        # farebbe - il record piu' specifico dovrebbe saperne di piu' - ed e'
+        # sbagliato: la colonna `tipo` dei vini commerciali e' sporca. Misurato
+        # in archivio, «fiegl metodo classico brut ROSE» ci sta dentro come
+        # «Rosso». Il colore delle tipologie viene invece dal registro UE, ed
+        # e' il documento che definisce cosa quel vino ha il diritto di essere.
+        if r["denominazione_id"]:
+            tid = self._tipologia_del_vino(r["denominazione_id"], r["nome_norm"])
+            if tid is not None:
+                colore = self._colore_di("tipologia", tid)
+                if colore is not None:
+                    return colore
+        return COLORE_UE.get(r["tipo"] or "")
 
     def _stesso_vino(self, f: Fatti, c: Candidato) -> bool:
         """Questo candidato e' lo stesso vino di un altro produttore?

@@ -307,6 +307,17 @@ class Amelie:
             # battito, cioe' un decimo di secondo dopo il tocco.
             if t.a is Stato.CONCLUSO or t.evento is Evento.ANNULLA:
                 self._bottiglia_chiusa = True
+            # Nessuno ha scelto, e i dodici secondi sono finiti: si prende il
+            # PRIMO CANDIDATO, cioe' la prima riga che l'ospite aveva davanti.
+            #
+            # Prima si raccontava il match primario, che e' un'altra cosa: lo
+            # schermo mostrava tre nomi, nessuno li toccava, e la voce ne
+            # diceva un quarto che non era in lista. Visto sul dispositivo con
+            # uno spumante rosa: tre candidati Metodo Classico Rose' a schermo,
+            # e il racconto del Moscato d'Asti.
+            if (t.da is Stato.CONFERMA and t.a is Stato.RACCONTO
+                    and t.evento is Evento.SCADENZA):
+                self._adotta_candidato(0)
             # Una scansione rimasta senza esito qui ha finito comunque, e va a
             # giornale con il modo in cui e' finita. Succede quando l'ospite
             # chiude la scelta fra candidati, o toglie la bottiglia a meta':
@@ -1115,6 +1126,13 @@ class Amelie:
             "nome": self._fatti.nome or "",
             "cantina": self._fatti.cantina or "",
             "annata": self._fatti.annata or "",
+            # A livello di tipologia o denominazione il `nome` e' vuoto, e
+            # senza questi due il giornale diceva «riconosciuto» senza dire
+            # CHE COSA. Il colore sta qui perche' e' il vincolo che non si puo'
+            # sbagliare: nessuna descrizione di un bianco vale per un rosato.
+            "tipologia": self._fatti.tipologia or "",
+            "denominazione": self._fatti.denominazione or "",
+            "colore": self._fatti.colore or "",
             "candidati": list(self._candidati),
         })
         if self._fatti.certo:
@@ -1392,7 +1410,12 @@ class Amelie:
         return {"ok": True, "cartella": nome}
 
     def scegli(self, indice: int) -> None:
-        """L'ospite ha toccato uno dei candidati.
+        """L'ospite ha toccato uno dei candidati."""
+        self._adotta_candidato(indice)
+        self.macchina.invia(Evento.CANDIDATO_SCELTO)
+
+    def _adotta_candidato(self, indice: int) -> bool:
+        """Prende per buono il candidato numero `indice`, se c'e'.
 
         Si compone il record TOCCATO. Rifare la ricerca sul suo nome sarebbe
         un secondo tiro di dadi: la stringa normalizzata di un candidato puo'
@@ -1400,11 +1423,12 @@ class Amelie:
         vedrebbe raccontare un vino diverso da quello che ha scelto.
         """
         rif = self._fatti.riferimenti
-        if 0 <= indice < len(rif):
-            annata = self._fatti.annata
-            self._fatti = self.matcher.fatti_di(*rif[indice])
-            self._fatti.annata = annata     # l'annata viene dall'etichetta
-        self.macchina.invia(Evento.CANDIDATO_SCELTO)
+        if not 0 <= indice < len(rif):
+            return False
+        annata = self._fatti.annata
+        self._fatti = self.matcher.fatti_di(*rif[indice])
+        self._fatti.annata = annata         # l'annata viene dall'etichetta
+        return True
 
     def _genera(self, prompt: str) -> str:
         from .llm import Modello

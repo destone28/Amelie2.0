@@ -669,3 +669,50 @@ class TestCandidatiCheNonAggiungonoNiente:
         f = m.cerca(["MARCHESI DI BAROLO", "Barolo", "Cannubi", "2016"])
         assert f.cantina
         assert f.candidati
+
+
+class TestIlColoreScrittoSullEtichetta:
+    """Quando la bottiglia dichiara il proprio colore, quella parola non è un
+    indizio da pesare insieme agli altri: è la bottiglia che lo dice di sé.
+
+    Viene da un caso vero, visto sul dispositivo. Su «Leggiadro · Brut Rosé ·
+    METODO CLASSICO» il riconoscitore proponeva per primo «Asti Metodo
+    Classico» — bianco, di Moscato, dolce — all'86 %, e la voce raccontava il
+    Moscato d'Asti a chi aveva in mano uno spumante rosa. I tre candidati
+    offerti accanto erano già tutti Metodo Classico Rosé: la risposta giusta
+    era in lista, solo non per prima.
+    """
+
+    ROSA = ["Leggiadro", "Brut Rosé", "METODO CLASSICO"]
+
+    def test_un_rosato_non_si_racconta_come_un_bianco(self, m):
+        f = m.cerca(self.ROSA)
+        assert f.colore is not None
+        assert f.colore in ("Rosé", "Rosato"), (
+            f"ha scelto un {f.colore} per un'etichetta che dice «Rosé»")
+
+    def test_e_nemmeno_si_propone(self, m):
+        """Un candidato del colore sbagliato è lo stesso errore, spostato sotto
+        il dito dell'ospite."""
+        f = m.cerca(self.ROSA)
+        for nome in f.candidati:
+            assert "asti" not in nome.lower() or "rosé" in nome.lower(), nome
+
+    def test_senza_colore_scritto_non_cambia_niente(self, m):
+        """La regola si applica solo quando l'etichetta il colore lo DICE."""
+        f = m.cerca(["BAROLO", "2016", "MARCHESI DI BAROLO", "CANNUBI"])
+        assert f.livello is Livello.VINO
+        assert f.sicurezza == pytest.approx(100, abs=1)
+
+    def test_due_colori_diversi_valgono_come_nessuno(self, m):
+        """Capita: «Rosso» di una denominazione accanto a «bianco» di una nota.
+        Non sapere è meglio che scegliere a caso quale delle due vale."""
+        assert m._colore_detto(["rosso", "bianco", "chianti"]) is None
+        assert m._colore_detto(["rosso", "chianti"]) == "Rosso"
+
+    def test_il_colore_di_un_vino_viene_dalla_sua_tipologia(self, m):
+        """La colonna `tipo` dei vini commerciali è sporca: in archivio
+        «fiegl metodo classico brut ROSE» ci sta dentro come «Rosso». Il colore
+        delle tipologie viene invece dal registro UE."""
+        f = m.cerca(["BARDOLINO", "CHIARETTO", "ROSATO"])
+        assert f.colore in ("Rosé", "Rosato")
