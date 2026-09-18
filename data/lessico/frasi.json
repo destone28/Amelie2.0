@@ -172,6 +172,34 @@
       "it": "Il racconto viene scritto sul momento per questa bottiglia. Richiede qualche secondo in più.",
       "en": "The description is written on the spot for this bottle. It takes a few seconds longer."
     },
+    "modo_titolo": {
+      "it": "Come racconta",
+      "en": "How it tells"
+    },
+    "modo_archivio": {
+      "it": "Dall'archivio",
+      "en": "From the archive"
+    },
+    "modo_archivio_spiega": {
+      "it": "I testi già pronti, composti dai dati del disciplinare. Istantanei.",
+      "en": "Ready-written texts, composed from the appellation data. Instant."
+    },
+    "modo_generativa": {
+      "it": "Scritto sul momento",
+      "en": "Written on the spot"
+    },
+    "modo_generativa_spiega": {
+      "it": "Gli stessi dati, ma il testo lo scrive il modello per questa bottiglia. Richiede qualche secondo in più.",
+      "en": "The same data, but the text is written by the model for this bottle. It takes a few seconds longer."
+    },
+    "modo_carta": {
+      "it": "Carta dei vini",
+      "en": "Wine list"
+    },
+    "modo_carta_spiega": {
+      "it": "Le descrizioni scritte a mano nel file. Solo i vini che ci sono dentro, e per quelli parla chi le ha scritte.",
+      "en": "The descriptions hand-written in the file. Only the wines it contains, and for those it speaks with their author's words."
+    },
     "mirino": {
       "it": "Mirino",
       "en": "Viewfinder"

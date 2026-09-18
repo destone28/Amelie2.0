@@ -433,7 +433,12 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str) -> list[str]:
     # un'esitazione - quelle si sono tolte, e riguardavano il leggere - e' un
     # fatto: questa bottiglia in archivio non c'e'. Senza, un racconto di due
     # righe sembra un dispositivo rotto; con, e' un dispositivo onesto.
-    if f.livello is Livello.GENERICO:
+    #
+    # Ma solo se qualcosa si e' detto. Senza colore ne' tipo, l'apertura ripiega
+    # su «provi a girare l'etichetta», e dirle dietro «quello che le ho detto e'
+    # scritto sull'etichetta» significa vantare una risposta che non c'e' stata.
+    # Sentito sul dispositivo, parola per parola.
+    if f.livello is Livello.GENERICO and (f.qualificatori or f.colore):
         frasi.append(d("generico_limite"))
 
     return [x for x in frasi if x]

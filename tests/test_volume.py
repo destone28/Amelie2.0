@@ -646,11 +646,16 @@ class TestStimaDellaVoce:
         assert min(misurate) <= CARATTERI_AL_SECONDO_RIPIEGO <= max(misurate)
 
 
-class TestDescrizioniGenerate:
-    """L'interruttore delle descrizioni generate.
+class TestIlModoDiRaccontare:
+    """Il selettore di dove viene quello che il dispositivo dice.
 
     Sta nello stesso file dei test del volume perché è la stessa cosa: una
     scelta di chi apre il locale, che deve sopravvivere alla spina staccata.
+
+    Tre modi, e la differenza fra loro non è di stile: è la FONTE. L'archivio
+    compone dai dati del registro; la generativa fa scrivere al modello quegli
+    stessi dati; la carta legge un file scritto a mano. Era un interruttore a
+    due posizioni, e l'interruttore resta come scorciatoia per chi lo chiamava.
     """
 
     @pytest.fixture
@@ -659,6 +664,7 @@ class TestDescrizioniGenerate:
 
         monkeypatch.setattr(modulo, "PERCORSO_VOLUME", tmp_path / "volume")
         monkeypatch.setattr(modulo, "PERCORSO_GENERATI", tmp_path / "generati")
+        monkeypatch.setattr(modulo, "PERCORSO_MODO", tmp_path / "modo")
         a = modulo.Amelie(modulo.Configurazione(
             simula_mcu=True, senza_camera=True, senza_voce=True,
             senza_modello=True))
@@ -666,29 +672,55 @@ class TestDescrizioniGenerate:
         a.matcher.chiudi()
         a.narratore.chiudi()
 
-    def test_spente_di_partenza(self, amelie):
+    def test_dall_archivio_di_partenza(self, amelie):
         """Un dispositivo appena acceso deve rispondere subito."""
+        assert amelie.modo == "archivio"
         assert amelie.genera_racconti is False
 
-    def test_si_accende_e_si_spegne(self, amelie):
-        assert amelie.imposta_generati(True)["generati"] is True
-        assert amelie.genera_racconti is True
-        assert amelie.imposta_generati(False)["generati"] is False
+    def test_un_modo_che_non_si_puo_servire_si_rifiuta(self, amelie):
+        """Senza modello caricato non si può scrivere sul momento, e dirlo è
+        meglio che accettare e poi raccontare qualcos'altro."""
+        esito = amelie.imposta_modo("generativa")
+        assert esito["ok"] is False
+        assert amelie.modo == "archivio"
+
+    def test_e_nemmeno_uno_che_non_esiste(self, amelie):
+        assert amelie.imposta_modo("fantasia")["ok"] is False
+
+    def test_col_modello_la_generativa_si_accende(self, tmp_path, monkeypatch):
+        from amelie import app as modulo
+
+        monkeypatch.setattr(modulo, "PERCORSO_VOLUME", tmp_path / "volume")
+        monkeypatch.setattr(modulo, "PERCORSO_MODO", tmp_path / "modo")
+        a = modulo.Amelie(modulo.Configurazione(
+            simula_mcu=True, senza_camera=True, senza_voce=True,
+            senza_modello=True))
+        try:
+            a.narratore.genera = lambda _p: "x"      # un modello finto, ma c'e'
+            assert a.imposta_modo("generativa")["ok"] is True
+            assert a.genera_racconti is True
+            assert a.imposta_generati(False)["ok"] is True
+            assert a.modo == "archivio"
+        finally:
+            a.matcher.chiudi(); a.narratore.chiudi()
 
     def test_si_ricorda_da_una_sera_all_altra(self, tmp_path, monkeypatch):
         from amelie import app as modulo
 
         monkeypatch.setattr(modulo, "PERCORSO_VOLUME", tmp_path / "volume")
-        monkeypatch.setattr(modulo, "PERCORSO_GENERATI", tmp_path / "generati")
+        monkeypatch.setattr(modulo, "PERCORSO_MODO", tmp_path / "modo")
         cfg = modulo.Configurazione(simula_mcu=True, senza_camera=True,
                                     senza_voce=True, senza_modello=True)
         prima = modulo.Amelie(cfg)
-        prima.imposta_generati(True)
+        prima.narratore.genera = lambda _p: "x"
+        prima.imposta_modo("generativa")
         prima.matcher.chiudi(); prima.narratore.chiudi()
 
         dopo = modulo.Amelie(cfg)
         try:
-            assert dopo.genera_racconti is True
+            # Il modo salvato c'e', ma il modello no: non si resta muti, si
+            # torna all'archivio, che c'e' sempre.
+            assert dopo.modo == "archivio"
         finally:
             dopo.matcher.chiudi(); dopo.narratore.chiudi()
 
@@ -697,27 +729,29 @@ class TestDescrizioniGenerate:
         """Come per il volume: un file rovinato non deve impedire di accendere."""
         from amelie import app as modulo
 
-        rovinato = tmp_path / "generati"
+        rovinato = tmp_path / "modo"
         rovinato.mkdir()                       # una cartella al posto del file
         monkeypatch.setattr(modulo, "PERCORSO_VOLUME", tmp_path / "volume")
-        monkeypatch.setattr(modulo, "PERCORSO_GENERATI", rovinato)
+        monkeypatch.setattr(modulo, "PERCORSO_MODO", rovinato)
+        monkeypatch.setattr(modulo, "PERCORSO_GENERATI", tmp_path / "generati")
         a = modulo.Amelie(modulo.Configurazione(
             simula_mcu=True, senza_camera=True, senza_voce=True,
             senza_modello=True))
         try:
-            assert a.genera_racconti is False
+            assert a.modo == "archivio"
         finally:
             a.matcher.chiudi(); a.narratore.chiudi()
 
-    def test_senza_modello_l_interruttore_non_si_mostra(self, amelie):
+    def test_si_mostrano_solo_i_modi_servibili(self, amelie):
         """Un comando che non fa niente è peggio di nessun comando."""
         visti = []
         amelie._pubblica = lambda m: visti.append(m)
         amelie._manda_impostazioni()
-        assert visti[-1]["modello"] is False
+        assert visti[-1]["modi"] == ["archivio"]
+        assert visti[-1]["modo"] == "archivio"
 
-    def test_il_narratore_lo_riceve(self, amelie):
-        """L'interruttore deve arrivare fino a `racconta`, non fermarsi qui."""
+    def test_il_narratore_riceve_il_modo(self, amelie):
+        """La scelta deve arrivare fino a `racconta`, non fermarsi qui."""
         from amelie.matcher import Fatti, Livello
 
         chiesto = {}
@@ -729,6 +763,7 @@ class TestDescrizioniGenerate:
             return Racconto(testo="x.", origine="template", livello=f.livello)
 
         amelie.narratore.racconta = finto
-        amelie.imposta_generati(True)
+        amelie.narratore.genera = lambda _p: "x"
+        amelie.imposta_modo("generativa")
         amelie._racconta()
         assert chiesto["preferisci_modello"] is True

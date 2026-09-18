@@ -48,6 +48,7 @@ from .bridge import (
 from .capture import (
     Camera, CameraNonDisponibile, PresenzaOttica, blocca_esposizione,
 )
+from .carta import Carta, CartaVuota
 from .giornale import Giornale
 from .mirino import LetturaContinua, Mirino
 from .matcher import Fatti, Livello, Matcher
@@ -100,6 +101,19 @@ PERCORSO_VOLUME = RADICE / "var" / "volume"
 # volume e si ricorda allo stesso modo, perche' e' la stessa cosa - una scelta
 # di chi apre il locale, non un parametro di collaudo.
 PERCORSO_GENERATI = RADICE / "var" / "racconti_generati"
+# Come il dispositivo racconta. Tre modi, e la differenza fra loro non e' di
+# stile: e' DA DOVE VIENE quello che dice.
+#
+#   archivio    i testi gia' pronti, composti dai dati del registro UE.
+#               Istantanei, e veri per costruzione.
+#   generativa  gli stessi dati, ma il testo lo scrive il modello sul momento
+#               per QUELLA bottiglia. Costa l'attesa della generazione, e passa
+#               dalla stessa verifica di sempre.
+#   carta       una carta dei vini scritta a mano, in un file. Solo i vini che
+#               ci sono dentro, e per quelli il testo e' quello che ha scritto
+#               una persona. Vedi `amelie.carta`.
+MODI = ("archivio", "generativa", "carta")
+PERCORSO_MODO = RADICE / "var" / "modo"
 # Dove finiscono le bottiglie che il dispositivo non ha saputo riconoscere,
 # quando qualcuno lo segnala toccando lo schermo. Vedi `segnala()`.
 CARTELLA_SEGNALAZIONI = RADICE / "var" / "segnalazioni"
@@ -175,6 +189,10 @@ class Configurazione:
     # La lingua di partenza. Si cambia a schermo, con un tocco, e il
     # dispositivo torna a questa quando la bottiglia viene tolta: il tavolo
     # dopo trova il dispositivo come lo trova sempre.
+    # Una carta dei vini al posto dell'archivio: un CSV con titolo e
+    # descrizione, e il dispositivo legge quella invece di comporre dai dati.
+    # E' una PROVA - vedi `amelie.carta` - e si spegne togliendo l'opzione.
+    carta: str | None = None
     lingua: str = "it"
     # Il volume di partenza, che il file in `var` sovrascrive se c'e'. 100 e'
     # il fondo scala del PCM: sopra non si puo' andare, vedi speech.guadagno_di.
@@ -190,6 +208,10 @@ class Amelie:
         self.camera = None if cfg.senza_camera else Camera()
         self.lettore = None if cfg.senza_camera else Lettore()
         self.giornale = Giornale(CARTELLA_GIORNALE)
+        self.carta = self._apri_carta(cfg.carta)
+        # La voce della carta scelta per questa bottiglia, in attesa di essere
+        # raccontata. Sostituisce i fatti per tutto il giro.
+        self._voce: object | None = None
         self.matcher = Matcher()
         self.voce = None if cfg.senza_voce else Voce(
             ImpostazioniVoce(device_alsa=cfg.device_audio))
@@ -266,7 +288,22 @@ class Amelie:
         # Spente di partenza: un dispositivo appena acceso deve rispondere
         # subito. Chi vuole la generazione dal vivo la accende sapendo che
         # costa un'attesa.
-        self.genera_racconti = self._generati_salvati()
+        self.modo = self._modo_salvato()
+
+    @staticmethod
+    def _apri_carta(percorso: str | None):
+        """La carta dei vini, se ne e' stata chiesta una.
+
+        Un file illeggibile non deve impedire al dispositivo di accendersi: si
+        dice perche', e si torna all'archivio - che c'e' sempre.
+        """
+        if not percorso:
+            return None
+        try:
+            return Carta(percorso)
+        except (OSError, CartaVuota, KeyError) as e:
+            log.error("carta dei vini non caricata (%s): uso l'archivio", e)
+            return None
 
     # --------------------------------------------------------- comunicazione
 
@@ -423,7 +460,11 @@ class Amelie:
                 for chiave in ("impostazioni", "descrizioni_generate",
                                "generate_spiega", "stato_tecnico", "chiudi",
                                "mirino", "mirino_spiega", "mirino_torna",
-                               "mirino_legge", "mirino_trova", "mirino_niente")
+                               "mirino_legge", "mirino_trova", "mirino_niente",
+                               "modo_titolo", "modo_archivio",
+                               "modo_archivio_spiega", "modo_generativa",
+                               "modo_generativa_spiega", "modo_carta",
+                               "modo_carta_spiega")
             },
         })
 
@@ -530,33 +571,61 @@ class Amelie:
 
     # ------------------------------------------------------- impostazioni
 
-    def _generati_salvati(self) -> bool:
-        """Le descrizioni generate erano accese l'ultima volta?
+    def _modo_salvato(self) -> str:
+        """Come raccontava l'ultima volta.
 
         Come il volume, non solleva mai: un file illeggibile deve costare le
-        impostazioni predefinite, non un dispositivo che non si accende.
+        impostazioni predefinite, non un dispositivo che non si accende. E un
+        modo salvato che non si puo' piu' servire - la carta, quando il file
+        non c'e' piu' - torna all'archivio invece di lasciare il dispositivo
+        muto: l'archivio c'e' sempre.
         """
         try:
-            return PERCORSO_GENERATI.read_text(encoding="utf-8").strip() == "1"
+            salvato = PERCORSO_MODO.read_text(encoding="utf-8").strip()
         except OSError:
-            return False
+            salvato = ""
+        if salvato not in MODI:
+            # Dalla versione di prima, che sapeva dire solo si' e no.
+            try:
+                acceso = PERCORSO_GENERATI.read_text(encoding="utf-8").strip() == "1"
+            except OSError:
+                acceso = False
+            salvato = "generativa" if acceso else "archivio"
+        if salvato == "carta" and self.carta is None:
+            log.warning("modo «carta» salvato ma la carta non c'e': uso l'archivio")
+            return "archivio"
+        if salvato == "generativa" and self.narratore.genera is None:
+            return "archivio"
+        return salvato
 
-    def imposta_generati(self, acceso: bool) -> dict[str, Any]:
-        """L'interruttore delle descrizioni generate.
+    @property
+    def genera_racconti(self) -> bool:
+        """Il modello scrive sul momento? È il modo «generativa», detto com'era
+        detto prima: lo chiedono il narratore e i test."""
+        return self.modo == "generativa"
+
+    def imposta_modo(self, modo: str) -> dict[str, Any]:
+        """Il selettore di come raccontare.
 
         Non tocca il racconto in corso: cambiare a meta' di una lettura
         significherebbe interromperla, e chi sta ascoltando non ha chiesto
         nulla. Vale dalla bottiglia dopo.
         """
-        self.genera_racconti = bool(acceso)
-        self._salva_generati(self.genera_racconti)
+        if modo not in MODI:
+            return {"ok": False, "motivo": f"modi: {', '.join(MODI)}"}
+        if modo == "carta" and self.carta is None:
+            return {"ok": False, "motivo": "nessuna carta caricata"}
+        if modo == "generativa" and self.narratore.genera is None:
+            return {"ok": False, "motivo": "nessun modello caricato"}
+        self.modo = modo
+        self._scrivi_durevole(PERCORSO_MODO, modo, "il modo di raccontare")
         self._manda_impostazioni()
-        log.info("descrizioni generate: %s", "accese" if acceso else "spente")
-        return {"ok": True, "generati": self.genera_racconti}
+        log.info("modo di racconto: %s", modo)
+        return {"ok": True, "modo": modo}
 
-    def _salva_generati(self, acceso: bool) -> None:
-        self._scrivi_durevole(PERCORSO_GENERATI, "1" if acceso else "0",
-                              "impostazione delle descrizioni generate")
+    def imposta_generati(self, acceso: bool) -> dict[str, Any]:
+        """L'interruttore di prima, tenuto perche' qualcuno lo chiama ancora."""
+        return self.imposta_modo("generativa" if acceso else "archivio")
 
     # --------------------------------------------------------------- mirino
 
@@ -679,11 +748,22 @@ class Amelie:
 
     def _manda_impostazioni(self) -> None:
         self._pubblica({"tipo": "impostazioni",
+                        "modo": self.modo,
+                        # Un modo che non si puo' servire non si mostra: un
+                        # comando che non fa niente e' peggio di nessun comando.
+                        "modi": [m for m in MODI if self._modo_servibile(m)],
                         "generati": self.genera_racconti,
                         # Senza un modello acceso l'interruttore non si mostra:
                         # un comando che non fa niente e' peggio di nessun
                         # comando. E' lo stesso criterio del volume senza voce.
                         "modello": self.narratore.genera is not None})
+
+    def _modo_servibile(self, modo: str) -> bool:
+        if modo == "carta":
+            return self.carta is not None
+        if modo == "generativa":
+            return self.narratore.genera is not None
+        return True
 
     def imposta_volume(self, valore: int) -> int:
         """Il tocco sui due pulsanti del volume. Restituisce quello effettivo."""
@@ -1129,6 +1209,9 @@ class Amelie:
             self.macchina.invia(Evento.RINUNCIA)
 
     def _riconosci(self) -> None:
+        if self.modo == "carta" and self.carta is not None:
+            self._riconosci_dalla_carta()
+            return
         self._fatti = self.matcher.cerca(getattr(self, "_righe", []))
         self._candidati = self._fatti.candidati
         log.info("livello %s, sicurezza %.0f", self._fatti.livello.value,
@@ -1158,10 +1241,52 @@ class Amelie:
         else:
             self.macchina.invia(Evento.MATCH_ASSENTE)
 
+    def _riconosci_dalla_carta(self) -> None:
+        """Il riconoscimento quando al posto dell'archivio c'e' un file di testo.
+
+        Si cerca il titolo e basta: niente cascata, niente candidati da
+        proporre. Una carta dei vini o ce l'ha, quella bottiglia, o non ce
+        l'ha - e quando non ce l'ha lo si dice, invece di scendere a qualcosa
+        di piu' generico che nel file non esiste.
+        """
+        righe = getattr(self, "_righe", [])
+        self._voce = self.carta.cerca(righe)
+        self._candidati = []
+        if self._voce is None:
+            self._scansione["vicine"] = self.carta.vicine(righe)
+            log.info("carta: nessun titolo per %s", righe)
+            self._annota("non in carta")
+            self.macchina.invia(Evento.LETTURA_FALLITA)
+            return
+        self._scansione.update({
+            "livello": "carta",
+            "sicurezza": round(self._voce.somiglianza),
+            "titolo": self._voce.titolo,
+        })
+        self.macchina.invia(Evento.MATCH_SICURO)
+
+    def _racconta_dalla_carta(self):
+        """Il racconto e' la descrizione scritta nel file, letta com'e'.
+
+        Davanti si mette il titolo, perche' il dispositivo deve prima dire
+        CHE COSA ha in mano: la descrizione lo spiega, ma non lo nomina.
+        """
+        from .narrator import Racconto, _con_articolo
+        from .matcher import Livello
+
+        v = self._voce
+        apre = self.lex.frase("apertura", "tipologia_nota", lingua=self.lingua,
+                              cosa=_con_articolo(v.titolo, self.lingua))
+        return Racconto(testo=f"{apre} {v.descrizione}", origine="carta",
+                        livello=Livello.TIPOLOGIA)
+
     def _racconta(self) -> None:
         self._ferma_voce.clear()
-        racconto = self.narratore.racconta(
-            self._fatti, preferisci_modello=self.genera_racconti)
+        if self.modo == "carta" and self._voce is not None:
+            racconto = self._racconta_dalla_carta()
+        else:
+            racconto = self.narratore.racconta(
+                self._fatti, preferisci_modello=self.genera_racconti)
         log.info("racconto da %s (%d parole)", racconto.origine,
                  len(racconto.testo.split()))
         frasi = racconto.frasi
@@ -1701,6 +1826,10 @@ def crea_app(amelie: Amelie):
     async def generati(acceso: int):
         return JSONResponse(amelie.imposta_generati(bool(acceso)))
 
+    @app.post("/modo/{nome}")
+    async def modo(nome: str):
+        return JSONResponse(amelie.imposta_modo(nome))
+
     @app.post("/mirino/{acceso}")
     async def mirino(acceso: int):
         return JSONResponse(amelie.imposta_mirino(bool(acceso)))
@@ -1829,6 +1958,9 @@ def crea_app(amelie: Amelie):
             "posa": amelie.camera.imp.esposizione if amelie.camera else None,
             "voce": bool(amelie.voce and amelie.voce.disponibile),
             "volume": amelie.volume,
+            "modo": amelie.modo,
+            "carta": (amelie.carta.percorso.name if amelie.carta else None),
+            "voci_in_carta": (len(amelie.carta.voci) if amelie.carta else 0),
             "racconti_generati": amelie.genera_racconti,
             "pronta": amelie._pronta,
             "ultimo_livello": amelie._fatti.livello.value,
@@ -1851,6 +1983,10 @@ def main() -> None:
     ap.add_argument("--con-modello", action="store_true",
                     help="genera dal vivo per cio' che non e' in cache "
                          "(lento e di qualita' incerta: vedi docs/04-QUALITA.md)")
+    ap.add_argument("--carta", metavar="FILE.csv",
+                    help="una carta dei vini al posto dell'archivio: un CSV "
+                         "con le colonne «titolo» e «descrizione». E' una "
+                         "prova, e si spegne togliendo l'opzione")
     ap.add_argument("--porta", type=int, default=8080)
     ap.add_argument("--audio", default="plughw:0,3")
     ap.add_argument("--volume", type=int, default=VOLUME_PREDEFINITO,
@@ -1866,7 +2002,8 @@ def main() -> None:
         simula_mcu=args.simula_mcu, senza_camera=args.senza_camera,
         senza_voce=args.senza_voce, senza_modello=not args.con_modello,
         modello_addestrato=args.modello_addestrato,
-        device_audio=args.audio, porta=args.porta, volume=args.volume)
+        device_audio=args.audio, porta=args.porta, volume=args.volume,
+        carta=args.carta)
 
     import uvicorn
     # Il tetto sullo spegnimento e' una rete di sicurezza, non la soluzione:

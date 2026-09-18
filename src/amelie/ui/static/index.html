@@ -626,9 +626,21 @@ svg { display: block; }
   background: rgba(200,134,13,.55); border-color: var(--oro);
 }
 .i-riga.acceso .i-pallina { transform: translateX(48px); }
-/* Senza modello acceso l'interruttore non si mostra: un comando che non fa
-   niente e' peggio di nessun comando. E' lo stesso criterio del volume. */
-#i-generate[hidden] { display: none; }
+/* Un modo che il dispositivo non puo' servire non si mostra: un comando che non
+   fa niente e' peggio di nessun comando. E' lo stesso criterio del volume. */
+.i-scelta[hidden] { display: none; }
+.i-titoletto {
+  width: min(860px, 88%); font-size: calc(var(--t-scelta) * .5);
+  letter-spacing: .14em; text-transform: uppercase; color: var(--oro);
+}
+/* Il segno di spunta occupa il suo posto anche quando non si vede: senza,
+   scegliendo una riga tutte le altre si sposterebbero di lato. */
+.i-segno {
+  flex: none; width: var(--tocco); text-align: center;
+  font-size: var(--t-scelta); color: var(--oro); visibility: hidden;
+}
+.i-scelta.acceso .i-segno { visibility: visible; }
+.i-scelta.acceso { border-color: var(--oro); }
 
 /* Il mirino. Occupa tutto il vetro perche' quello che si sta guardando e'
    l'inquadratura: ridurla per far posto a una cornice vorrebbe dire tarare
@@ -835,12 +847,18 @@ svg { display: block; }
 
   <section id="impostazioni" hidden>
     <div id="i-titolo">Impostazioni</div>
-    <button class="i-riga" id="i-generate">
-      <div>
-        <div class="i-nome" id="i-generate-nome">Descrizioni generate</div>
-        <div class="i-spiega" id="i-generate-spiega"></div>
-      </div>
-      <div class="i-interruttore"><div class="i-pallina"></div></div>
+    <div class="i-titoletto" id="i-modo-titolo">Come racconta</div>
+    <button class="i-riga i-scelta" id="i-modo-archivio" data-modo="archivio">
+      <div><div class="i-nome"></div><div class="i-spiega"></div></div>
+      <div class="i-segno">&#10003;</div>
+    </button>
+    <button class="i-riga i-scelta" id="i-modo-generativa" data-modo="generativa">
+      <div><div class="i-nome"></div><div class="i-spiega"></div></div>
+      <div class="i-segno">&#10003;</div>
+    </button>
+    <button class="i-riga i-scelta" id="i-modo-carta" data-modo="carta">
+      <div><div class="i-nome"></div><div class="i-spiega"></div></div>
+      <div class="i-segno">&#10003;</div>
     </button>
     <button class="i-riga" id="i-mirino">
       <div>
@@ -1232,8 +1250,14 @@ eventi.onmessage = (e) => {
       disegnaLingue(m);
       if (m.impostazioni) {
         $("i-titolo").textContent = m.impostazioni.impostazioni;
-        $("i-generate-nome").textContent = m.impostazioni.descrizioni_generate;
-        $("i-generate-spiega").textContent = m.impostazioni.generate_spiega;
+        $("i-modo-titolo").textContent = m.impostazioni.modo_titolo;
+        for (const nome of ["archivio", "generativa", "carta"]) {
+          const riga = $("i-modo-" + nome);
+          riga.querySelector(".i-nome").textContent =
+            m.impostazioni["modo_" + nome];
+          riga.querySelector(".i-spiega").textContent =
+            m.impostazioni["modo_" + nome + "_spiega"];
+        }
         $("i-mirino-nome").textContent = m.impostazioni.mirino;
         $("i-mirino-spiega").textContent = m.impostazioni.mirino_spiega;
         $("m-torna").textContent = m.impostazioni.mirino_torna;
@@ -1305,27 +1329,36 @@ function apriDiagnostica() {
 
 /* Le descrizioni generate. `modelloAcceso` e' falso quando il dispositivo gira
    senza modello: allora la riga non si mostra affatto. */
-let generatiAccesi = false;
+const MODI = ["archivio", "generativa", "carta"];
+let modoScelto = "archivio";
+let modiServibili = MODI.slice();
 
 function disegnaImpostazioni(m) {
-  if (typeof m.generati === "boolean") generatiAccesi = m.generati;
-  if (typeof m.modello === "boolean") $("i-generate").hidden = !m.modello;
-  $("i-generate").classList.toggle("acceso", generatiAccesi);
-  $("i-generate").setAttribute("aria-pressed", String(generatiAccesi));
+  if (typeof m.modo === "string") modoScelto = m.modo;
+  if (Array.isArray(m.modi)) modiServibili = m.modi;
+  for (const nome of MODI) {
+    const riga = $("i-modo-" + nome);
+    riga.hidden = !modiServibili.includes(nome);
+    riga.classList.toggle("acceso", nome === modoScelto);
+    riga.setAttribute("aria-pressed", String(nome === modoScelto));
+  }
 }
 
 (function preparaImpostazioni() {
-  rendiToccabile($("i-generate"), () => {
-    /* Si disegna subito e si chiede dopo: al tocco l'interruttore deve
-       muoversi, non aspettare la rete. Se la richiesta fallisce, il messaggio
-       di ritorno del server rimette le cose come stanno. */
-    generatiAccesi = !generatiAccesi;
-    disegnaImpostazioni({});
-    fetch("/generati/" + (generatiAccesi ? 1 : 0), { method: "POST" })
-      .then(r => r.json())
-      .then(d => disegnaImpostazioni(d))
-      .catch(() => { generatiAccesi = !generatiAccesi; disegnaImpostazioni({}); });
-  });
+  for (const nome of MODI) {
+    rendiToccabile($("i-modo-" + nome), () => {
+      /* Si disegna subito e si chiede dopo: al tocco la scelta deve muoversi,
+         non aspettare la rete. Se la richiesta fallisce o il server rifiuta,
+         il messaggio di ritorno rimette le cose come stanno. */
+      const prima = modoScelto;
+      modoScelto = nome;
+      disegnaImpostazioni({});
+      fetch("/modo/" + nome, { method: "POST" })
+        .then(r => r.json())
+        .then(d => { if (!d.ok) modoScelto = prima; disegnaImpostazioni(d); })
+        .catch(() => { modoScelto = prima; disegnaImpostazioni({}); });
+    });
+  }
   rendiToccabile($("i-mirino"), () => chiediMirino(!mirinoAcceso));
   rendiToccabile($("i-stato"), apriDiagnostica);
   rendiToccabile($("i-chiudi"), () => { $("impostazioni").hidden = true; });

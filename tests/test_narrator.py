@@ -748,3 +748,40 @@ class TestRaccontoAFrasi:
             assert any("Nebbiolo" in f for f in frasi)
         finally:
             n.chiudi()
+
+
+class TestIlLimiteSiDiceSoloSeSiEDetto:
+    """«Questa bottiglia non è nel mio archivio: quello che le ho detto è
+    scritto sull'etichetta» è una frase onesta — ma solo dopo aver detto
+    qualcosa.
+
+    Senza colore né tipo l'apertura ripiega su «provi a girare l'etichetta», e
+    dirle dietro quella frase significa vantare una risposta che non c'è stata.
+    Sentito sul dispositivo, parola per parola.
+    """
+
+    def test_col_tipo_la_frase_c_e(self):
+        from amelie.matcher import Fatti, Livello
+        from amelie.narrator import Narratore
+
+        n = Narratore()
+        try:
+            f = Fatti(livello=Livello.GENERICO, colore="Rosato",
+                      qualificatori=["spumante", "brut"])
+            testo = n.racconta(f, consenti_modello=False).testo
+            assert "non è nel mio archivio" in testo
+            assert "spumante" in testo
+        finally:
+            n.chiudi()
+
+    def test_senza_niente_da_dire_la_frase_non_c_e(self):
+        from amelie.matcher import Fatti, Livello
+        from amelie.narrator import Narratore
+
+        n = Narratore()
+        try:
+            testo = n.racconta(Fatti(livello=Livello.GENERICO),
+                               consenti_modello=False).testo
+            assert "non è nel mio archivio" not in testo
+        finally:
+            n.chiudi()
