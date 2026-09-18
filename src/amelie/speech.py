@@ -457,16 +457,53 @@ PRONUNCIA: dict[str, str] = {
     r"\bml\b": "millilitri",
 }
 
-_COMPILATE = [(re.compile(k, re.I), v) for k, v in PRONUNCIA.items()]
+# E la stessa tabella in inglese, perche' una sigla italiana letta dalla voce
+# inglese e' due errori in uno.
+#
+# Sentito sul dispositivo: in inglese «DOCG» diventava «denominazione di
+# origine controllata e garantita» - la tabella qui sopra si applicava a
+# qualunque lingua - e la voce inglese lo compitava all'inglese. Una frase
+# italiana, pronunciata male, in mezzo a un testo inglese.
+#
+# Le sigle si sciolgono anche qui, e nella loro forma inglese: sono le diciture
+# che stanno sulle etichette esportate. Le respellature fonetiche NON ci sono
+# di proposito: «sciardonè» serve a una voce italiana che leggerebbe
+# «Chardonnay» all'italiana, mentre una voce inglese quel nome lo sa gia' dire,
+# e darle «sciardonè» sarebbe peggio di non fare niente.
+PRONUNCIA_EN: dict[str, str] = {
+    r"\bD\.?O\.?C\.?G\.?\b": "controlled and guaranteed designation of origin",
+    r"\bD\.?O\.?C\.?\b": "controlled designation of origin",
+    r"\bI\.?G\.?T\.?\b": "typical geographical indication",
+    r"\bI\.?G\.?P\.?\b": "protected geographical indication",
+    r"\bD\.?O\.?P\.?\b": "protected designation of origin",
+    r"\bV\.?S\.?Q\.?\b": "quality sparkling wine",
+    r"(\d+)\s*°C\b": r"\1 degrees Celsius",
+    r"(\d+)\s*%": r"\1 percent",
+    r"\bcl\b": "centilitres",
+    r"\bml\b": "millilitres",
+}
+
+_COMPILATE = {
+    "it": [(re.compile(k, re.I), v) for k, v in PRONUNCIA.items()],
+    "en": [(re.compile(k, re.I), v) for k, v in PRONUNCIA_EN.items()],
+}
 
 
-def per_la_voce(testo: str) -> str:
-    """Riscrive il testo come va pronunciato.
+def lingua_del_modello(modello: str) -> str:
+    """«en_US-ljspeech-medium» -> «en». Il nome della voce dice la lingua."""
+    codice = (modello or "")[:2].lower()
+    return codice if codice in _COMPILATE else "it"
+
+
+def per_la_voce(testo: str, lingua: str = "it") -> str:
+    """Riscrive il testo come va pronunciato, nella lingua in cui si parla.
 
     >>> per_la_voce("Un Barolo DOCG al 14%.")
     'Un Barolo denominazione di origine controllata e garantita al 14 per cento.'
+    >>> per_la_voce("A Barolo DOCG at 14%.", "en")
+    'A Barolo controlled and guaranteed designation of origin at 14 percent.'
     """
-    for pattern, sostituto in _COMPILATE:
+    for pattern, sostituto in _COMPILATE.get(lingua, _COMPILATE["it"]):
         testo = pattern.sub(sostituto, testo)
     # Il trattino fra numeri si legge "meno": va sciolto.
     testo = re.sub(r"(\d)\s*-\s*(\d)", r"\1 e \2", testo)
@@ -487,7 +524,7 @@ def byte_stimati(frase: str, modello: str, frequenza: int = 22050) -> int:
     Zero per una frase che non si pronuncia: `sintetizza` restituisce b"" nello
     stesso caso, e le due cose devono dire la stessa cosa.
     """
-    detto = per_la_voce(frase)
+    detto = per_la_voce(frase, lingua_del_modello(modello))
     if not detto:
         return 0
     cifre = sum(c.isdigit() for c in detto)
@@ -655,7 +692,7 @@ class Voce:
         Un ristorante ha poche decine di etichette: alla seconda bottiglia
         uguale la voce parte istantaneamente.
         """
-        frase = per_la_voce(frase)
+        frase = per_la_voce(frase, lingua_del_modello(self.imp.modello))
         if not frase:
             return b""
         percorso = self._chiave(frase)

@@ -767,3 +767,37 @@ class TestIlModoDiRaccontare:
         amelie.imposta_modo("generativa")
         amelie._racconta()
         assert chiesto["preferisci_modello"] is True
+
+
+class TestLaPronunciaSegueLaLingua:
+    """Sentito sul dispositivo: in inglese «DOCG» diventava «denominazione di
+    origine controllata e garantita», e la voce inglese lo compitava
+    all'inglese. La tabella di pronuncia era una sola, italiana, e si
+    applicava a qualunque voce."""
+
+    def test_in_inglese_la_sigla_si_scioglie_in_inglese(self):
+        from amelie.speech import per_la_voce
+
+        detto = per_la_voce("A Barolo DOCG at 14%.", "en")
+        assert "denominazione" not in detto
+        assert "designation of origin" in detto
+        assert "percent" in detto
+
+    def test_in_italiano_come_prima(self):
+        from amelie.speech import per_la_voce
+
+        assert "denominazione di origine controllata e garantita" in per_la_voce(
+            "Un Barolo DOCG.")
+
+    def test_i_nomi_francesi_non_si_riscrivono_per_la_voce_inglese(self):
+        """«sciardonè» serve a una voce italiana; a una inglese fa solo danno."""
+        from amelie.speech import per_la_voce
+
+        assert per_la_voce("A Chardonnay.", "en") == "A Chardonnay."
+
+    def test_la_lingua_si_legge_dal_nome_della_voce(self):
+        from amelie.speech import lingua_del_modello
+
+        assert lingua_del_modello("en_US-ljspeech-medium") == "en"
+        assert lingua_del_modello("it_IT-serena-medium") == "it"
+        assert lingua_del_modello("") == "it"
