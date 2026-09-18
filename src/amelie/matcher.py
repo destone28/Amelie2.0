@@ -483,14 +483,43 @@ COLORE_UE = {"Red": "Rosso", "White": "Bianco", "Rosé": "Rosato",
 # distingue.
 CANDIDATI_PER_COLORE = 16
 
+# La temperatura di servizio la decide la CATEGORIA, non l'uva, tutte le volte
+# che il vino non e' fermo. Le schede dei vitigni in `data/vitigni.json` danno
+# la temperatura del vino fermo di quell'uva - giusta per un Pinot Nero, giusta
+# per un Moscato - e uno spumante di Pinot Nero la ereditava: il dispositivo ha
+# consigliato di servire un Trentodoc rosato a QUINDICI-DICIASSETTE GRADI. Non
+# e' un caso isolato: in archivio 819 tipologie su 4.300 sono spumanti o
+# frizzanti, piu' 212 fra passiti e liquorosi.
+#
+# I valori sono quelli della pratica corrente, non una nostra opinione; e la
+# categoria e' quella del registro UE, che e' il documento che dice cos'e' quel
+# vino. Per i vini fermi («Wine») non c'e' nessuna regola: li' l'uva sa piu'
+# della categoria, e resta la sua.
+TEMPERATURA_PER_CATEGORIA = {
+    "Sparkling Wine": "6-8",
+    "Quality Sparkling Wine": "6-8",
+    "Quality Aromatic Sparkling Wine": "6-8",
+    "Semi-Sparkling Wine": "8-10",
+    "Wine From Raisined Grapes": "10-12",
+    "Wine Of Overripe Grapes": "10-12",
+    "Liqueur Wine": "12-14",
+}
+
 COLORE_DETTO = {
     "rosato": "Rosato", "rosata": "Rosato", "rose": "Rosato",
-    "rosa": "Rosato", "rosado": "Rosato",
+    "rosado": "Rosato",
     "rosso": "Rosso", "rossa": "Rosso", "rouge": "Rosso", "red": "Rosso",
-    "tinto": "Rosso", "nero": "Rosso",
+    "tinto": "Rosso",
     "bianco": "Bianco", "bianca": "Bianco", "blanc": "Bianco",
     "white": "Bianco", "blanco": "Bianco",
 }
+# «Nero» e «rosa» NON sono in elenco, e ci sono stati. Su un'etichetta italiana
+# non sono dichiarazioni di colore: sono pezzi di nomi di vitigno - Nero
+# d'Avola, Nerello, Nero di Troia, Pinot Nero, Moscato Rosa. E il Pinot Nero e'
+# la trappola: un blanc de noirs e' un metodo classico BIANCO fatto di Pinot
+# Nero, e leggendo «nero» come colore si scarterebbe la risposta giusta per
+# andare a cercarne una rossa. Un'etichetta che vuole dire rosso scrive
+# «Rosso»; il colore dell'uva lo sa gia' l'archivio.
 
 # Parole che nel nome di una tipologia denotano un PRODOTTO DIVERSO, non una
 # sfumatura: un passito non e' la versione dolce del bianco, e' un altro vino.
@@ -1464,7 +1493,11 @@ class Matcher:
         spezza = lambda v: [x.strip() for x in (v or "").split(";") if x.strip()]
 
         f.note_vitigno = r["descrizione"]
-        f.temperatura_c = f.temperatura_c or r["temperatura_c"]
+        # La temperatura dell'uva vale solo per un vino FERMO. Uno spumante di
+        # Pinot Nero non si serve alla temperatura di un Pinot Nero: vedi
+        # TEMPERATURA_PER_CATEGORIA, e il Trentodoc rosato a quindici gradi.
+        della_categoria = TEMPERATURA_PER_CATEGORIA.get(f.categoria or "")
+        f.temperatura_c = f.temperatura_c or della_categoria or r["temperatura_c"]
         # La scheda del vitigno SUBENTRA solo dove il vino non ha nulla di suo:
         # gli abbinamenti di una bottiglia precisa valgono piu' di quelli
         # generici dell'uva. E la sostituzione dev'essere la stessa in tutte le

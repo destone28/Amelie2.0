@@ -710,9 +710,56 @@ class TestIlColoreScrittoSullEtichetta:
         assert m._colore_detto(["rosso", "bianco", "chianti"]) is None
         assert m._colore_detto(["rosso", "chianti"]) == "Rosso"
 
+    def test_nero_non_e_un_colore_dichiarato(self, m):
+        """Su un'etichetta italiana «nero» è un pezzo di nome di vitigno — Nero
+        d'Avola, Nerello, Pinot Nero — non una dichiarazione di colore. E il
+        Pinot Nero è la trappola: un blanc de noirs è un metodo classico BIANCO
+        fatto di Pinot Nero, e leggendo «nero» come colore si scarterebbe la
+        risposta giusta per cercarne una rossa. Chi vuole dire rosso scrive
+        «Rosso»."""
+        assert m._colore_detto(["pinot", "nero", "metodo", "classico"]) is None
+        assert m._colore_detto(["nero", "d", "avola", "sicilia"]) is None
+        assert m._colore_detto(["moscato", "rosa"]) is None
+        # e la parola vera continua a valere
+        assert m._colore_detto(["montepulciano", "rosso"]) == "Rosso"
+
     def test_il_colore_di_un_vino_viene_dalla_sua_tipologia(self, m):
         """La colonna `tipo` dei vini commerciali è sporca: in archivio
         «fiegl metodo classico brut ROSE» ci sta dentro come «Rosso». Il colore
         delle tipologie viene invece dal registro UE."""
         f = m.cerca(["BARDOLINO", "CHIARETTO", "ROSATO"])
         assert f.colore in ("Rosé", "Rosato")
+
+
+class TestLaTemperaturaDiServizio:
+    """La decide la categoria, non l'uva, tutte le volte che il vino non è fermo.
+
+    Le schede in `data/vitigni.json` danno la temperatura del vino FERMO di
+    quell'uva — giusta per un Pinot Nero — e uno spumante di Pinot Nero la
+    ereditava: il dispositivo ha consigliato di servire un Trentodoc rosato a
+    quindici-diciassette gradi. In archivio 819 tipologie su 4.300 sono
+    spumanti o frizzanti, più 212 fra passiti e liquorosi: non è un caso
+    isolato, è una classe.
+    """
+
+    def test_uno_spumante_si_serve_freddo(self, m):
+        f = m.cerca(["Leggiadro", "Brut Rosé", "METODO CLASSICO"])
+        assert "Sparkling" in (f.categoria or "")
+        assert f.temperatura_c == "6-8", (
+            f"uno spumante a {f.temperatura_c} gradi")
+
+    def test_un_liquoroso_ha_la_sua(self, m):
+        f = m.cerca(["MARSALA", "SUPERIORE"])
+        assert f.categoria == "Liqueur Wine"
+        assert f.temperatura_c == "12-14"
+
+    def test_un_vino_fermo_resta_all_uva(self, m):
+        """Per un vino fermo l'uva ne sa più della categoria, e la regola non
+        deve toccarla: un Barolo non si serve a sei gradi."""
+        f = m.cerca(["BAROLO", "2016"])
+        assert f.categoria == "Wine"
+        assert f.temperatura_c == "17-19"
+
+    def test_e_un_bianco_fermo_pure(self, m):
+        f = m.cerca(["SOAVE", "CLASSICO"])
+        assert f.temperatura_c == "10-12"
