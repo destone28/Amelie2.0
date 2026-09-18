@@ -119,7 +119,10 @@ sudo mkdir -p /var/lib/amelie /usr/share/xsessions
 # La sessione grafica del dispositivo: vedi il passo 8 per come la si sceglie.
 sudo install -m644 scripts/systemd/amelie.desktop /usr/share/xsessions/
 sudo systemctl daemon-reload
-sudo systemctl enable amelie-llm amelie-audio-guard amelie-audio-rotta \
+# amelie-llm NON si abilita: lo accende l'applicazione quando il modo di
+# racconto e' «generativa», e lo spegne altrimenti. Fermo a vuoto costa un core.
+sudo systemctl disable amelie-llm 2>/dev/null || true
+sudo systemctl enable amelie-audio-guard amelie-audio-rotta \
     amelie-sipario amelie-display amelie amelie-kiosk amelie-scrivania
 
 passo "9/10  Avvio automatico della sessione grafica"

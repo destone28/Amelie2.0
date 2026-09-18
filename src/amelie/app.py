@@ -41,6 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .batteria import Batteria
 from .bridge import (
     AMBRA, BIANCO_SCATTO, ROSSO, SPENTO, VERDE,
     Colore, ErroreMCU, Ponte, PonteNonDisponibile, PonteSimulato,
@@ -115,6 +116,10 @@ PERCORSO_GENERATI = RADICE / "var" / "racconti_generati"
 #               una persona. Vedi `amelie.carta`.
 MODI = ("archivio", "generativa", "carta")
 PERCORSO_MODO = RADICE / "var" / "modo"
+# Il servizio di sistema che tiene su il modello linguistico. Lo accende e lo
+# spegne il modo di racconto: vedi `Amelie._accendi_il_modello`.
+SERVIZIO_MODELLO = "amelie-llm.service"
+PERCORSO_BATTERIA = RADICE / "var" / "batteria.json"
 # Dove finiscono le bottiglie che il dispositivo non ha saputo riconoscere,
 # quando qualcuno lo segnala toccando lo schermo. Vedi `segnala()`.
 CARTELLA_SEGNALAZIONI = RADICE / "var" / "segnalazioni"
@@ -223,14 +228,12 @@ class Amelie:
         # non deve rendere cieco il dispositivo.
         self.presenza = PresenzaOttica()
         self.distanza = PresenzaDistanza()
-        # Se il sensore ha mai risposto. Finche' non risponde si guarda, e se
-        # smette di rispondere si torna a guardare.
-        self._sensore_risponde = False
         # Quando la bottiglia e' comparsa: lo scatto deve essere di DOPO.
         self._apparsa = 0.0
         self.camera = None if cfg.senza_camera else Camera()
         self.lettore = None if cfg.senza_camera else Lettore()
         self.giornale = Giornale(CARTELLA_GIORNALE)
+        self.batteria = Batteria(PERCORSO_BATTERIA)
         self.carta = self._apri_carta(cfg.carta)
         # La voce della carta scelta per questa bottiglia, in attesa di essere
         # raccontata. Sostituisce i fatti per tutto il giro.
@@ -513,7 +516,8 @@ class Amelie:
                                "modo_titolo", "modo_archivio",
                                "modo_archivio_spiega", "modo_generativa",
                                "modo_generativa_spiega", "modo_carta",
-                               "modo_carta_spiega")
+                               "modo_carta_spiega", "batteria_ricaricata",
+                               "batteria_spiega")
             },
         })
 
@@ -670,7 +674,37 @@ class Amelie:
         self._scrivi_durevole(PERCORSO_MODO, modo, "il modo di raccontare")
         self._manda_impostazioni()
         log.info("modo di racconto: %s", modo)
+        self._accendi_il_modello(modo == "generativa")
         return {"ok": True, "modo": modo}
+
+    def _accendi_il_modello(self, acceso: bool) -> None:
+        """Il servizio del modello linguistico si accende solo se serve.
+
+        Misurato sul dispositivo: `llama-server` fermo, senza nessuna richiesta,
+        sta all'88% di un core - e sono i quattro core su cui l'OCR deve
+        leggere un'etichetta in meno di un secondo. Con la generazione spenta
+        dalle impostazioni quel core era regalato a nessuno: la rilevazione
+        del testo passava da 274 a 750 millesimi.
+
+        Si accende e si spegne col modo, in un thread perche' avviarlo carica
+        ottocento megabyte e nessuno deve aspettarlo. Se il comando fallisce si
+        registra e basta: un dispositivo senza modello racconta dall'archivio,
+        un dispositivo bloccato non racconta niente.
+        """
+        if self.cfg.senza_modello:
+            return
+
+        def esegui() -> None:
+            import subprocess
+            verbo = "start" if acceso else "stop"
+            try:
+                subprocess.run(["sudo", "-n", "systemctl", verbo, SERVIZIO_MODELLO],
+                               check=True, capture_output=True, timeout=30)
+                log.info("modello linguistico: %s", "acceso" if acceso else "spento")
+            except Exception as e:                          # noqa: BLE001
+                log.warning("modello linguistico, %s fallito: %s", verbo, e)
+
+        threading.Thread(target=esegui, name="modello", daemon=True).start()
 
     def imposta_generati(self, acceso: bool) -> dict[str, Any]:
         """L'interruttore di prima, tenuto perche' qualcuno lo chiama ancora."""
@@ -1345,6 +1379,13 @@ class Amelie:
         self._fatti = self.matcher.cerca(righe)
         self.macchina.invia(Evento.MATCH_SICURO)
 
+    def _aspetta_il_modello(self, secondi: float = 45.0) -> None:
+        from .llm import Modello
+        if not hasattr(self, "_modello"):
+            self._modello = Modello()
+        if not self._modello.attendi(secondi):
+            log.warning("il modello non risponde: racconto dall'archivio")
+
     def _si_generera(self) -> bool:
         """Questo racconto passera' dal modello, cioe' fara' aspettare?
 
@@ -1396,6 +1437,11 @@ class Amelie:
             # l'unica differenza fra un dispositivo che lavora e uno fermo.
             if self._si_generera():
                 self._pubblica({"tipo": "scrivendo"})
+                # Il servizio puo' essere stato acceso un attimo fa, dal
+                # selettore, e carica ottocento megabyte: si aspetta che
+                # risponda, con la scritta gia' a schermo. Se non arriva si
+                # racconta dall'archivio, come se il modo fosse l'altro.
+                self._aspetta_il_modello()
             racconto = self.narratore.racconta(
                 self._fatti, preferisci_modello=self.genera_racconti)
         log.info("racconto da %s (%d parole)", racconto.origine,
@@ -1689,6 +1735,10 @@ class Amelie:
 
     async def sorveglia(self) -> None:
         """Legge il sensore e fa scadere i timer. È il battito del dispositivo."""
+        # Il modello si accende solo se il modo salvato lo vuole: all'avvio
+        # nessun servizio lo tira su piu', ci pensa questo.
+        self._accendi_il_modello(self.modo == "generativa")
+        self.batteria.avvia()
         if self.camera is not None:
             try:
                 blocca_esposizione(self.camera.imp, self.camera.percorso)
@@ -1781,27 +1831,37 @@ class Amelie:
         return deciso if deciso is not None else self.presenza.presente
 
     def _lo_dice_il_sensore(self) -> bool | None:
-        """La presenza secondo il Modulino Distance, o `None` se non risponde.
+        """La presenza secondo il Modulino Distance, quando lui puo' saperla.
 
-        `None` non e' «non c'e' nessuno»: e' «questo sensore non sta dicendo
-        niente», e allora decide la camera. Un Modulino scollegato o un
-        firmware vecchio devono costare una scansione piu' lenta, non un
-        dispositivo cieco.
+        Il sensore e' autorevole su cio' che ha VISTO ARRIVARE, e su niente
+        altro. Misurato sul dispositivo: un Brunello, fondo scuro e opaco, si
+        legge a 20 mm; un Cerasuolo, vetro chiaro e vino rosato, da' la stessa
+        firma del piatto vuoto - `distanza 0, stato 5` - perche' l'infrarosso
+        attraversa il fondo trasparente e non torna. Per il sensore quella
+        bottiglia non esiste, e non esiste nemmeno la sua assenza.
+
+        Quindi tre risposte, non due. `True`: vede qualcosa, e vale come
+        innesco, che e' il motivo per cui e' tornato. `False`: aveva visto
+        qualcosa e non lo vede piu', cioe' una bottiglia opaca e' stata tolta -
+        e questo interrompe il racconto anche se la camera non se n'e' ancora
+        accorta. `None`: non ha mai visto niente, e allora **non sa**: decide
+        la camera, che il vetro chiaro lo vede benissimo.
+
+        Un Modulino scollegato o un firmware vecchio danno `None` per sempre,
+        e costano una scansione piu' lenta, non un dispositivo cieco.
         """
         try:
             mm = self.ponte.distanza_mm()
         except (PonteNonDisponibile, ErroreMCU):
             mm = None
-        if mm is None:
-            if self._sensore_risponde:
-                # Ha risposto e ha smesso: si lascia decidere alla camera
-                # invece di credere a un silenzio.
-                log.warning("il sensore di distanza non risponde piu'")
-                self._sensore_risponde = False
-                self.distanza.reimposta()
-            return None
-        self._sensore_risponde = True
-        return self.distanza.aggiorna(mm)
+        vedeva = self.distanza.presente
+        vede = self.distanza.aggiorna(mm)
+        if vede:
+            return True
+        if vedeva:
+            # L'ha vista andare via: e' l'unica assenza che puo' dichiarare.
+            return False
+        return None
 
     async def _guarda_il_piatto(self, secondo_il_sensore: bool | None = None) -> None:
         """La sbirciata: non decide piu' niente, ma serve ancora a due cose.
@@ -1883,9 +1943,33 @@ class Amelie:
 
     async def salute(self) -> None:
         while True:
+            # La stima della batteria avanza a questo passo: venti secondi
+            # bastano a integrare la potenza, e la scrittura su disco con
+            # fsync ogni venti secondi non consuma la eMMC in nessun tempo
+            # ragionevole.
+            try:
+                self.batteria.aggiorna(
+                    voce_accesa=self.macchina.stato is Stato.RACCONTO)
+                self.batteria.salva()
+            except Exception:                               # noqa: BLE001
+                log.exception("stima della batteria")
             self._pubblica({"tipo": "salute", "tutto_bene": self._tutto_bene(),
-                            "voce_muta": not self._voce_disponibile()})
+                            "voce_muta": not self._voce_disponibile(),
+                            "batteria": self._batteria_a_schermo()})
             await asyncio.sleep(20)
+
+    def _batteria_a_schermo(self) -> dict[str, Any]:
+        return {"tacche": self.batteria.tacche,
+                "frazione": round(self.batteria.frazione, 3)}
+
+    def batteria_ricaricata(self) -> dict[str, Any]:
+        """Qualcuno ha ricaricato il power bank e lo dice dalle impostazioni."""
+        self.batteria.ricaricata()
+        log.info("batteria: dichiarata ricaricata")
+        self._pubblica({"tipo": "salute", "tutto_bene": self._tutto_bene(),
+                        "voce_muta": not self._voce_disponibile(),
+                        "batteria": self._batteria_a_schermo()})
+        return {"ok": True, **self._batteria_a_schermo()}
 
     def _tutto_bene(self) -> bool:
         return self.ponte.disponibile
@@ -1998,6 +2082,18 @@ def crea_app(amelie: Amelie):
     @app.post("/racconto/{azione}")
     async def racconto(azione: str):
         return JSONResponse(amelie.comanda_racconto(azione))
+
+    @app.post("/batteria/ricaricata")
+    async def batteria_ricaricata():
+        return JSONResponse(amelie.batteria_ricaricata())
+
+    @app.get("/batteria")
+    async def batteria():
+        b = amelie.batteria
+        return JSONResponse({**amelie._batteria_a_schermo(),
+                             "consumato_wh": round(b.consumato_wh, 2),
+                             "capacita_wh": b.capacita,
+                             "ore_rimaste_stimate": round(b.ore_rimaste, 1)})
 
     @app.post("/lingua/{codice}")
     async def lingua(codice: str):

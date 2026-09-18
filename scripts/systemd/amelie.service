@@ -1,7 +1,10 @@
 [Unit]
 Description=Amelie - applicazione
-After=network.target amelie-llm.service amelie-audio-guard.service
-Wants=amelie-llm.service
+After=network.target amelie-audio-guard.service
+# Il modello linguistico NON si tira su da qui: lo accende e lo spegne
+# l'applicazione col modo di racconto, perche' fermo a vuoto costa un core
+# intero - misurato, 88% - e quel core serve all'OCR. Vedi
+# `Amelie._accendi_il_modello`.
 
 [Service]
 Type=simple
