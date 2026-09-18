@@ -166,6 +166,58 @@ class TestIlVersoDelFotogramma:
         assert [r.testo for r in letta.righe] == ["CERASUOLO", "D'ABRUZZO", "ULISS"]
         assert len(versi) > 1, "non ha nemmeno provato a girare"
 
+    def test_ma_un_etichetta_letta_a_meta_non_si_gira(self):
+        """Due parole sono una lettura: il verso e' giusto, manca altro.
+
+        Misurato sul dispositivo su «Azienda Agricola Brunello 1930»: letto
+        `1930 | Brunello | Affinato inboti`, e il ripiego girava tre volte per
+        4,6 secondi per poi tenere comunque la prima lettura - che era gia'
+        quella con cui il vino e' stato riconosciuto.
+        """
+        from amelie import ocr as modulo
+
+        immagine = self._fotogramma()
+        versi = []
+
+        def finta(self, fotogramma):
+            versi.append(fotogramma.shape)
+            return modulo.Lettura(righe=[modulo.Riga(testo=x, confidenza=0.9)
+                                         for x in ("1930", "Brunello",
+                                                   "Affinato inboti")])
+
+        modulo.Lettore.leggi, vera = finta, modulo.Lettore.leggi
+        try:
+            modulo.Lettore().leggi_comunque(immagine)
+        finally:
+            modulo.Lettore.leggi = vera
+        assert len(versi) == 1, "ha girato un'etichetta che stava dritta"
+
+    def test_il_tempo_dichiarato_e_quello_di_tutti_i_versi(self):
+        """A giornale comparivano «1,1 s» per una lettura costata 4,6.
+
+        `durata_s` era quella della `leggi` che aveva vinto, non della
+        `leggi_comunque`: il costo del ripiego era invisibile proprio a chi
+        doveva accorgersene.
+        """
+        import time
+
+        from amelie import ocr as modulo
+
+        immagine = self._fotogramma()
+
+        def finta(self, fotogramma):
+            time.sleep(0.02)
+            return modulo.Lettura(righe=[modulo.Riga(testo="ab", confidenza=0.9)],
+                                  durata_s=0.02)
+
+        modulo.Lettore.leggi, vera = finta, modulo.Lettore.leggi
+        try:
+            letta = modulo.Lettore().leggi_comunque(immagine)
+        finally:
+            modulo.Lettore.leggi = vera
+        assert letta.durata_s >= 0.08, (
+            "il tempo dichiarato e' quello di un verso solo, non di tutti")
+
     def test_se_il_primo_verso_basta_non_si_gira_niente(self, monkeypatch):
         """Girare costa secondi, e si pagano solo quando servono."""
         from amelie import ocr as modulo

@@ -128,6 +128,20 @@ class ImpostazioniOCR:
     # riconoscere.
     parole_che_bastano: int = 3
 
+    # Sotto quante parole utili vale la pena provare a girare il fotogramma.
+    #
+    # Due, ed e' il confine fra i due casi misurati sul dispositivo:
+    #
+    #     camera montata storta   `D'ABRUZZC`                        1 parola
+    #     etichetta letta a meta' `1930 | Brunello | Affinato inboti` 2 parole
+    #
+    # Nel primo caso girare recupera tutto e vale i secondi che costa; nel
+    # secondo non recupera niente - la lettura buona era gia' la prima, e il
+    # vino e' stato riconosciuto lo stesso. Una parola sola non e' una lettura,
+    # e' un frammento, e un frammento e' proprio cio' che da' un verso
+    # sbagliato.
+    parole_che_sono_una_lettura: int = 2
+
     # Oltre quante righe si smette di cercare un verso migliore. Un'etichetta
     # letta bene ne da' tre o cinque, un verso sbagliato una o tre: sopra otto
     # non si sta guardando un'etichetta, si sta guardando una stanza.
@@ -324,25 +338,33 @@ class Lettore:
         else:
             piccola, scala = immagine, 1.0
 
+        inizio = time.perf_counter()
         trovato = motore(piccola, use_det=True, use_cls=False, use_rec=False)
+        trovate_in = time.perf_counter() - inizio
         riquadri = [] if trovato is None or trovato.boxes is None else list(trovato.boxes)
         if not riquadri:
+            log.debug("OCR: niente trovato in %.0f ms", trovate_in * 1000)
             return []
         # Le righe più alte per prime, e poi si taglia: su un'etichetta la
         # denominazione è scritta grande, i solfiti no, e una parete dietro la
         # bottiglia dà trentotto righe da 40 ms l'una.
         riquadri.sort(key=lambda b: -_altezza_del_riquadro(b))
         scelti = riquadri[:self.imp.righe_massime]
-        if len(riquadri) > len(scelti):
-            log.debug("OCR: %d righe trovate, se ne leggono %d",
-                      len(riquadri), len(scelti))
 
         ritagli = [self._normalizza_riga(
             get_rotate_crop_image(immagine, np.array(b, dtype=np.float32) / scala))
             for b in scelti]
         if self.imp.usa_classificatore:
             ritagli, _ = motore.cls_and_rotate(ritagli)
+        inizio = time.perf_counter()
         letto = motore.recognize_txt(ritagli)
+        # I due numeri separati, perche' si curano in modi diversi: il primo
+        # scende abbassando la risoluzione del provino, il secondo leggendo
+        # meno righe. Confonderli ha gia' fatto perdere un anno - vedi la
+        # premessa del modulo.
+        log.info("OCR: %d righe trovate in %.0f ms, %d lette in %.0f ms",
+                 len(riquadri), trovate_in * 1000, len(scelti),
+                 (time.perf_counter() - inizio) * 1000)
 
         testi = getattr(letto, "txts", None) or []
         punteggi = getattr(letto, "scores", None)
@@ -399,6 +421,7 @@ class Lettore:
         """
         import cv2
 
+        inizio = time.perf_counter()
         migliore = self.leggi(immagine)
         if _parole_utili(migliore) >= self.imp.parole_che_bastano:
             return migliore
@@ -410,6 +433,18 @@ class Lettore:
             # riconosce. Girare il fotogramma altre tre volte vorrebbe dire
             # due minuti e mezzo, e il verso non c'entra niente - qualunque
             # verso, quella parete resta piena di scritte.
+            return migliore
+        if _parole_utili(migliore) >= self.imp.parole_che_sono_una_lettura:
+            # Due parole sono una lettura, anche se non e' completa: il verso
+            # e' quello giusto, e quel che manca manca per altri motivi -
+            # l'etichetta gira via col vetro, un riflesso, il nome in corsivo.
+            # Girare il fotogramma non lo recupera, e costa tre letture intere.
+            #
+            # Misurato sul dispositivo su «Azienda Agricola Brunello 1930»:
+            # letto `1930 | Brunello | Affinato inboti`, due parole utili
+            # contro le tre che bastano per fermarsi, e il ripiego girava tre
+            # volte per 4,6 secondi - per poi tenere comunque la prima lettura,
+            # che era gia' quella che ha fatto riconoscere il vino.
             return migliore
         if not _c_e_una_lettera(migliore):
             # Righe, ma nemmeno una lettera: numeri e frammenti. Girare il
@@ -440,6 +475,13 @@ class Lettore:
                 migliore = altra
                 if _parole_utili(migliore) >= self.imp.parole_che_bastano:
                     break
+        # Il tempo dichiarato e' quello di TUTTO, non dell'ultimo giro.
+        #
+        # Non e' una finezza: a giornale comparivano «1,1 s» per una lettura
+        # che ne era costati 4,6, perche' `durata_s` era quella della `leggi`
+        # che aveva vinto. Il costo del ripiego era invisibile proprio a chi
+        # doveva accorgersene.
+        migliore.durata_s = time.perf_counter() - inizio
         return migliore
 
     def _tieni(self, r: Riga) -> bool:

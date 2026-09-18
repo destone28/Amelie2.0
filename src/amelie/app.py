@@ -1163,6 +1163,7 @@ class Amelie:
         # c'era. Alzare l'anello per poi riabbassarlo un decimo dopo sarebbe un
         # lampo che non illumina niente — cinque livelli su 255, misurati,
         # contro i quaranta che dà la posa.
+        inizio_scatto = time.perf_counter()
         scatto = self.camera.al_volo(dopo=self._apparsa)
         if scatto is None:
             try:
@@ -1188,8 +1189,13 @@ class Amelie:
                     except (PonteNonDisponibile, ErroreMCU):
                         pass
 
+        durata_scatto = time.perf_counter() - inizio_scatto
         try:
-            lettura = self.lettore.leggi_comunque(scatto.immagine)
+            # Il guardiano si ferma per il tempo della lettura: il fotogramma
+            # buono ce l'abbiamo gia', e decodificare MJPEG mentre l'OCR gira
+            # vuol dire toglierle un core su quattro.
+            with self.camera.in_pausa():
+                lettura = self.lettore.leggi_comunque(scatto.immagine)
         except OCRNonDisponibile as e:
             log.error("OCR: %s", e)
             self.macchina.invia(Evento.ERRORE)
@@ -1199,11 +1205,16 @@ class Amelie:
         # Si tiene l'ultimo scatto: se l'ospite segnala che il vino non e' fra
         # quelli proposti, e' l'unica cosa che permette di capire perche'.
         self._ultimo_scatto = scatto.immagine
-        log.info("lette %d righe in %.1f s (nitidezza %.0f)",
-                 len(self._righe), lettura.durata_s, scatto.nitidezza)
+        log.info("scatto in %.2f s, lette %d righe in %.2f s (nitidezza %.0f)",
+                 durata_scatto, len(self._righe), lettura.durata_s,
+                 scatto.nitidezza)
         self._scansione = {
             "righe": list(self._righe),
-            "ocr_s": round(lettura.durata_s, 1),
+            # Due numeri e non uno: quando la scansione e' lenta, il primo dice
+            # se il tempo se n'e' andato davanti alla camera o dentro l'OCR, e
+            # da qui non si puo' guardare il dispositivo per capirlo.
+            "scatto_s": round(durata_scatto, 2),
+            "ocr_s": round(lettura.durata_s, 2),
             "nitidezza": round(scatto.nitidezza),
             "posa": self.camera.imp.esposizione,
             "tentativo": self._tentativi + 1,
@@ -1699,7 +1710,7 @@ class Amelie:
         if self._bottiglia_finta is not None:
             return self.presenza.aggiorna_a_mano(self._bottiglia_finta)
         deciso = self._lo_dice_il_sensore()
-        await self._guarda_il_piatto()
+        await self._guarda_il_piatto(deciso)
         return deciso if deciso is not None else self.presenza.presente
 
     def _lo_dice_il_sensore(self) -> bool | None:
@@ -1725,7 +1736,7 @@ class Amelie:
         self._sensore_risponde = True
         return self.distanza.aggiorna(mm)
 
-    async def _guarda_il_piatto(self) -> None:
+    async def _guarda_il_piatto(self, secondo_il_sensore: bool | None = None) -> None:
         """La sbirciata: non decide piu' niente, ma serve ancora a due cose.
 
         Il riquadro dell'etichetta, che dipende dalla forma della bottiglia, e
@@ -1756,6 +1767,28 @@ class Amelie:
             # avviata - imparerebbe come «piatto vuoto» proprio la bottiglia
             # che si sta per fotografare, e la salverebbe pure.
             self.presenza.c_e_qualcosa()
+            return
+        if secondo_il_sensore is False and self.macchina.stato is Stato.ATTESA:
+            # Il sensore dice che sul piatto non c'e' niente, e lo dice meglio
+            # di quanto possa dirlo la camera: quello che si vede ORA e' il
+            # piatto vuoto, per definizione. Non c'e' niente da dedurre.
+            #
+            # Non e' pulizia, e' la cura di un guasto vero. Lo sfondo che il
+            # rivelatore ottico teneva era stato imparato CON UNA BOTTIGLIA
+            # DAVANTI: da allora la differenza restava a zero, il riquadro
+            # dell'etichetta non si trovava piu', e all'OCR arrivava il
+            # ritaglio fisso con dentro mezza stanza. Misurato sul
+            # dispositivo: tredici regioni di testo invece di cinque, e la
+            # rilevazione da 274 a 750 millesimi - perche' la
+            # post-elaborazione del rilevatore costa per regione trovata, e le
+            # regioni di troppo sono il calendario appeso dietro il piatto.
+            #
+            # Prima questa correzione esisteva, ma arrivava solo dopo tre
+            # scansioni fallite di fila: era una via di scampo. Adesso e' la
+            # regola, e il caso che la faceva servire non si presenta piu'.
+            self.presenza.non_e_una_bottiglia(fascia)
+            self.camera.riquadro = None
+            self._ricorda_sfondo()
             return
         c_e = self.presenza.aggiorna(fascia)
         # Dove sta la bottiglia, per darlo all'OCR al posto di un riquadro

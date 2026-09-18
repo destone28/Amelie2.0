@@ -6,6 +6,7 @@ flusso verso lo schermo siano coerenti fra loro, senza dipendere da una
 bottiglia vera.
 """
 
+import contextlib
 import threading
 import time
 from pathlib import Path
@@ -244,6 +245,10 @@ class TestCicloCompleto:
             def sorveglia(self): pass
             def sbircia(self): return None
             riquadro = None
+
+            @contextlib.contextmanager
+            def in_pausa(self):
+                yield
 
         class LettoreFinto:
             def __init__(self, righe): self.righe = righe
@@ -1148,6 +1153,10 @@ class TestLuceDelloScatto:
         def al_volo(self, **_):
             return None
 
+        @contextlib.contextmanager
+        def in_pausa(self):
+            yield
+
     def _amelie(self, fabbrica_camera):
         a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
                                   senza_voce=True, senza_modello=True))
@@ -1233,6 +1242,10 @@ class TestLuceDelloScatto:
 
             def scatta(self, **_):
                 raise AssertionError("non si deve arrivare alla raffica")
+
+            @contextlib.contextmanager
+            def in_pausa(self):
+                yield
 
         a = self._amelie(CameraInMoto)
         try:

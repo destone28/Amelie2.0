@@ -43,6 +43,7 @@ import logging
 import subprocess
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -765,6 +766,7 @@ class Camera:
         self._recente: tuple[float, np.ndarray] | None = None
         self._guardiano: threading.Thread | None = None
         self._basta = threading.Event()
+        self._in_pausa = threading.Event()
         # Quanti fotogrammi saltare prima di rifidarsi della luce, dopo aver
         # cambiato la posa: il driver la applica con tre fotogrammi di ritardo.
         self._da_saltare = 0
@@ -868,9 +870,32 @@ class Camera:
     def sorvegliata(self) -> bool:
         return self._guardiano is not None and self._guardiano.is_alive()
 
+    @contextmanager
+    def in_pausa(self):
+        """Ferma il guardiano per il tempo di un blocco, e poi lo rimette.
+
+        Serve durante la lettura. Prendere un fotogramma da questa camera vuol
+        dire decodificare un MJPEG da due megapixel, undici volte al secondo,
+        e l'OCR gira su quattro thread sugli stessi quattro core: misurato
+        sulla board, la rilevazione passa da 274 a oltre mille millesimi
+        quando qualcun altro lavora.
+
+        Il fotogramma buono e' gia' stato preso: durante la lettura il
+        guardiano non serve a nessuno, e quello che risparmia lo restituisce
+        all'unica cosa che in quel momento ha fretta.
+        """
+        self._in_pausa.set()
+        try:
+            yield
+        finally:
+            self._in_pausa.clear()
+
     def _veglia(self) -> None:
         """Il giro del guardiano: un fotogramma, e ogni tanto un ritocco."""
         while not self._basta.is_set():
+            if self._in_pausa.is_set():
+                self._basta.wait(0.02)
+                continue
             try:
                 with self._lucchetto:
                     if self._basta.is_set():
