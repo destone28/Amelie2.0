@@ -576,6 +576,28 @@ svg { display: block; }
 }
 #spia.rotto { background: var(--errore-luce); opacity: .95; }
 
+/* La batteria: quattro tacche in basso a destra, senza numero. E' una stima
+   - il power bank non dice niente di se' - e un numero le darebbe una
+   precisione che non ha. Discreta come la spia: sta sotto il gesto dei tre
+   secondi e non lo intercetta. */
+#batteria {
+  position: absolute; right: 26px; bottom: 7px; height: 10px;
+  display: flex; gap: 2px; align-items: flex-end;
+  padding: 1px 2px; border: 1px solid var(--oro-scuro); border-radius: 2px;
+  opacity: .45; pointer-events: none; z-index: 6;
+}
+#batteria::after {  /* il polo */
+  content: ""; position: absolute; right: -4px; top: 2px;
+  width: 2px; height: 4px; background: var(--oro-scuro); border-radius: 1px;
+}
+#batteria i { display: block; width: 4px; height: 6px; background: var(--oro-scuro); opacity: .25; }
+#batteria.t1 i:nth-child(-n+1), #batteria.t2 i:nth-child(-n+2),
+#batteria.t3 i:nth-child(-n+3), #batteria.t4 i:nth-child(-n+4) { opacity: 1; }
+/* Con una tacca sola si fa vedere di piu'; con nessuna, si fa notare. */
+#batteria.t1 { opacity: .85; border-color: var(--oro); }
+#batteria.t1 i:first-child { background: var(--oro); }
+#batteria.t0 { opacity: .95; border-color: var(--errore-luce); animation: respiro 1.6s ease-in-out infinite; }
+
 /* Lo stato tecnico si APRE SOPRA la scena, non ci si naviga. Prima era un
    `location.href`: su un chiosco senza barra degli indirizzi, senza tasto
    indietro e senza tastiera, chi ci finiva restava su un blocco di JSON finche'
@@ -647,6 +669,7 @@ svg { display: block; }
   font-size: var(--t-scelta); color: var(--oro); visibility: hidden;
 }
 .i-scelta.acceso .i-segno { visibility: visible; }
+#i-batteria-segno.acceso { visibility: visible; }
 .i-scelta.acceso { border-color: var(--oro); }
 
 /* Il mirino. Occupa tutto il vetro perche' quello che si sta guardando e'
@@ -873,6 +896,7 @@ svg { display: block; }
   </button>
   <div id="muto"></div>
   <div id="spia"></div>
+  <div id="batteria" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div id="angolo"></div>
 
   <section id="impostazioni" hidden>
@@ -896,6 +920,13 @@ svg { display: block; }
         <div class="i-spiega" id="i-mirino-spiega"></div>
       </div>
       <div class="i-interruttore"><div class="i-pallina"></div></div>
+    </button>
+    <button class="i-riga" id="i-batteria">
+      <div>
+        <div class="i-nome" id="i-batteria-nome">Batteria ricaricata</div>
+        <div class="i-spiega" id="i-batteria-spiega"></div>
+      </div>
+      <div class="i-segno" id="i-batteria-segno">&#10003;</div>
     </button>
     <button class="i-riga" id="i-stato">
       <div class="i-nome" id="i-stato-nome">Stato tecnico</div>
@@ -968,6 +999,13 @@ function didascalia(testo) {
 function segnaVoceMuta(muta) {
   $("muto").classList.toggle("visibile", muta);
   $("racconto").classList.toggle("senza-voce", muta);
+}
+
+/* -------------------------------------------------------------- batteria */
+
+function segnaBatteria(tacche) {
+  const b = $("batteria");
+  b.className = "t" + Math.max(0, Math.min(4, tacche | 0));
 }
 
 /* --------------------------------------------------------------- racconto */
@@ -1310,6 +1348,8 @@ eventi.onmessage = (e) => {
                           trova: m.impostazioni.mirino_trova,
                           niente: m.impostazioni.mirino_niente };
         $("i-stato-nome").textContent = m.impostazioni.stato_tecnico;
+        $("i-batteria-nome").textContent = m.impostazioni.batteria_ricaricata;
+        $("i-batteria-spiega").textContent = m.impostazioni.batteria_spiega;
         $("i-chiudi").textContent = m.impostazioni.chiudi;
         $("d-chiudi").textContent = m.impostazioni.chiudi;
       }
@@ -1335,6 +1375,7 @@ eventi.onmessage = (e) => {
     case "salute":
       $("spia").classList.toggle("rotto", !m.tutto_bene);
       segnaVoceMuta(m.voce_muta === true);
+      if (m.batteria) segnaBatteria(m.batteria.tacche);
       break;
   }
 };
@@ -1406,6 +1447,19 @@ function disegnaImpostazioni(m) {
   }
   rendiToccabile($("i-mirino"), () => chiediMirino(!mirinoAcceso));
   rendiToccabile($("i-stato"), apriDiagnostica);
+  /* «Batteria ricaricata»: la stima riparte da piena, e il segno di spunta
+     resta acceso un attimo per dire che il tocco e' arrivato. */
+  rendiToccabile($("i-batteria"), () => {
+    fetch("/batteria/ricaricata", { method: "POST" })
+      .then(r => r.json())
+      .then(d => {
+        if (typeof d.tacche === "number") segnaBatteria(d.tacche);
+        const segno = $("i-batteria-segno");
+        segno.classList.add("acceso");
+        setTimeout(() => segno.classList.remove("acceso"), 1400);
+      })
+      .catch(() => {});
+  });
   rendiToccabile($("i-chiudi"), () => { $("impostazioni").hidden = true; });
 })();
 

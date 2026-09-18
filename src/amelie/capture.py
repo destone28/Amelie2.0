@@ -149,7 +149,12 @@ class ImpostazioniCamera:
     # nemmeno in pieno giorno; sopra il massimo la raffica costa più del
     # racconto, e una bottiglia che oscilla viene mossa.
     posa_minima: int = 300
-    posa_massima: int = 4000
+    # Il massimo e' quello della camera: `v4l2-ctl` dice `exposure_time_absolute
+    # max=5000`. Era 4000, e nella sala a luci basse ci si arrivava contro -
+    # «posa 4000» a giornale, con la luce ancora sotto il bersaglio. Un
+    # fotogramma a 5000 costa 110 ms invece di 90: si paga solo al buio, dove
+    # senza si leggeva meno.
+    posa_massima: int = 5000
 
     # Raffica. Erano cinque e cinque, scelti quando un fotogramma costava 30 ms.
     # A 90 ms costavano un secondo intero, e la scena è FERMA: bottiglia e

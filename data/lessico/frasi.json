@@ -243,6 +243,14 @@
     "chiudi": {
       "it": "chiudi",
       "en": "close"
+    },
+    "batteria_ricaricata": {
+      "it": "Batteria ricaricata",
+      "en": "Battery recharged"
+    },
+    "batteria_spiega": {
+      "it": "Tocca dopo aver ricaricato: la stima riparte da piena.",
+      "en": "Tap after charging: the estimate restarts from full."
     }
   },
   "sigle": {
