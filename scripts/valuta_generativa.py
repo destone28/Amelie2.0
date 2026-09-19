@@ -44,7 +44,8 @@ sys.path.insert(0, str(RADICE / "src"))
 from amelie.llm import ImpostazioniLLM                            # noqa: E402
 from amelie.matcher import Matcher                                # noqa: E402
 from amelie.narrator import (                                     # noqa: E402
-    _ripulisci, prompt_addestrato, spezza_in_frasi, verifica,
+    _abbastanza_per_il_modello, _ripulisci, prompt_addestrato, spezza_in_frasi,
+    verifica,
 )
 
 # Parole che una scheda di sala usa senza affermare niente del vino: verbi di
@@ -162,7 +163,7 @@ def strato_di(ambito: str, f) -> tuple[str, ...]:
             "citato" if f.disciplinare else "senza citazioni")
 
 
-def campiona_a_strati(m: Matcher, quanti: int, seme: int):
+def campiona_a_strati(m: Matcher, quanti: int, seme: int, solo_cancello: bool = False):
     """Tanti casi per ogni strato, non tanti casi in tutto.
 
     Gli strati rari - un rosato con le bolle, una denominazione povera -
@@ -179,6 +180,8 @@ def campiona_a_strati(m: Matcher, quanti: int, seme: int):
             if f.vuoto:
                 continue
             f.sicurezza = 95.0
+            if solo_cancello and not _abbastanza_per_il_modello(f):
+                continue
             strato = strato_di(ambito, f)
             dentro = per_strato.setdefault(strato, [])
             if len(dentro) < quanti:
@@ -262,6 +265,9 @@ def main() -> None:
     ap.add_argument("--vocabolario", default=str(Path.home() / "modello/parole_it.txt"))
     ap.add_argument("--uscita", help="JSONL con ogni testo e il suo giudizio")
     ap.add_argument("--etichetta", default="", help="un nome per questa prova, nei risultati")
+    ap.add_argument("--solo-cancello", action="store_true",
+                    help="solo le bottiglie su cui il dispositivo chiamerebbe "
+                         "davvero il modello: vedi `_abbastanza_per_il_modello`")
     ap.add_argument("--strati", action="store_true",
                     help="campiona tanti casi per STRATO invece che in tutto")
     ap.add_argument("--gabbia", metavar="LESSICO.txt",
@@ -272,7 +278,7 @@ def main() -> None:
     temperature = a.temperatura or [0.7]
     imp = ImpostazioniLLM()
     m = Matcher(a.db)
-    casi = (campiona_a_strati(m, a.quanti, a.seme) if a.strati
+    casi = (campiona_a_strati(m, a.quanti, a.seme, a.solo_cancello) if a.strati
             else [(x[0], x[1], x[2], ("tutti",)) for x in campiona(m, a.quanti, a.seme)])
     vocabolario = carica_vocabolario(Path(a.vocabolario))
     print(f"{len(casi)} vini (seme {a.seme}), lingua {a.lingua}, modello su {a.url}")

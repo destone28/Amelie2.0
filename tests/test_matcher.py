@@ -943,3 +943,46 @@ class TestIlColoreDiUnVinoEUnColore:
         for i in ids:
             cat = m._fatti_vino(i).categoria
             assert cat is None or "Sparkling" in cat, cat
+
+
+class TestIlBloccoInglesePerDavvero:
+    """Le etichette erano italiane e due campi restavano italiani dentro un
+    blocco inglese. Un ingresso cosi' insegna che l'italiano e' la lingua
+    delle etichette, e nei testi inglesi ricompariva la forma del blocco con
+    le etichette tradotte a orecchio: «Disgust: Red with garnet notes»."""
+
+    def _con_tutto(self, m):
+        for r in m.con.execute(
+                "SELECT id FROM vino WHERE denominazione_id IS NOT NULL LIMIT 300"):
+            f = m._fatti_vino(r[0])
+            if f.vitigni and f.abbinamenti and f.note_sensoriali and f.colore:
+                return f
+        return None
+
+    def test_le_etichette_sono_nella_lingua_del_blocco(self, m):
+        f = self._con_tutto(m)
+        assert f is not None
+        b = f.blocco_fatti(lingua="en")
+        for parola in ("Name:", "Producer:", "Grapes:", "Pairings:",
+                       "Serving temperature:", "Typical sensory notes:"):
+            assert parola in b, (parola, b[:200])
+        for italiana in ("Nome:", "Produttore:", "Vitigni:", "Abbinamenti:",
+                         "Temperatura di servizio:"):
+            assert italiana not in b
+
+    def test_il_colore_si_traduce_nelle_due_scritture(self, m):
+        """`_colore_di` risponde in italiano, i vocabolari hanno chiavi
+        inglesi: senza il ponte usciva «Colour: Rosso»."""
+        f = self._con_tutto(m)
+        b = f.blocco_fatti(lingua="en")
+        assert "Colour: Rosso" not in b and "Colour: Bianco" not in b
+        assert "gradi" not in b and "degrees" in b
+
+    def test_le_note_e_la_scheda_seguono_la_lingua(self, m):
+        f = self._con_tutto(m)
+        it, en = f.blocco_fatti(lingua="it"), f.blocco_fatti(lingua="en")
+        assert it != en
+        # Quel che la riga compatta traduce, il blocco esteso deve tradurlo.
+        note_en = ", ".join(f.sensoriali_in("en"))
+        if note_en and note_en != ", ".join(f.note_sensoriali):
+            assert note_en in en

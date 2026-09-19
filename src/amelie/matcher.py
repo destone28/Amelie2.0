@@ -296,9 +296,22 @@ class Fatti:
         def t(vocabolario: str, valore: str | None, forma: str = "etichetta") -> str | None:
             return lessico.traduci(vocabolario, valore, lingua=lingua, forma=forma) if valore else None
 
+        def colore_tradotto() -> str | None:
+            # Due vocabolari dicono i colori, con chiavi di due fonti: «Red»
+            # per X-Wines, «Rosso» per il registro. `traduci` restituisce il
+            # valore com'e' quando non lo conosce, quindi un `or` fra i due
+            # non ripiega mai: si guarda CHI lo conosce. Da quando il colore
+            # di un vino viene dal registro, usciva «Colour: Rosso».
+            chiave = CHIAVE_COLORE.get(self.colore or "", self.colore)
+            for vocabolario in ("colore", "tipo"):
+                if chiave and not lessico.manca(vocabolario, [chiave]):
+                    return t(vocabolario, chiave)
+            return self.colore
+
         abbinamenti = (
-            ", ".join(lessico.traduci_molti("abbinamento", self.abbinamenti, lingua=lingua))
-            if self.abbinamenti else None
+            ", ".join(lessico.traduci_molti(
+                "abbinamento", self.abbinamenti_in(lingua), lingua=lingua))
+            if self.abbinamenti_in(lingua) else None
         )
         # X-Wines usa spesso la denominazione anche come "regione": ripeterla
         # non aggiunge nulla e induce il modello a trattarla come un luogo
@@ -309,27 +322,37 @@ class Fatti:
             or (self.tipologia and regione in self.tipologia)):
             regione = None
 
+        # Le etichette nella lingua del blocco. Erano italiane sempre, e in
+        # inglese il modello leggeva «Nome: ... Gradazione: ...» con i valori
+        # tradotti: meta' e meta'. Un ingresso cosi' insegna che l'italiano e'
+        # la lingua delle etichette, e infatti nei testi inglesi ricompariva
+        # la forma del blocco, con le etichette tradotte a orecchio -
+        # «Disgust: Red with garnet notes», letto sul dispositivo.
+        e = _ETICHETTE_BLOCCO.get(lingua, _ETICHETTE_BLOCCO["it"])
         righe = []
         for etichetta, valore in (
-            ("Nome", self.nome),
-            ("Produttore", self.cantina),
-            ("Regione", regione),
-            ("Annata", self.annata),
-            ("Denominazione", self.denominazione),
-            ("Tipologia", self.tipologia),
-            ("Colore", t("tipo", self.colore) or t("colore", self.colore)),
-            ("Colore della bacca", self.colore_bacca),
-            ("Categoria", t("categoria_ue", self.categoria)),
-            ("Corpo", t("corpo", self.corpo, "narrativa")),
-            ("Acidità", t("acidita", self.acidita, "narrativa")),
-            ("Come nasce", t("elaborazione", self.elaborazione, "narrativa")),
-            ("Gradazione", f"{self.abv}%" if self.abv else None),
-            ("Vitigni", ", ".join(self.vitigni) if self.vitigni else None),
-            ("Abbinamenti", abbinamenti),
-            ("Note sensoriali tipiche",
-             ", ".join(self.note_sensoriali) if self.note_sensoriali else None),
-            ("Temperatura di servizio", f"{self.temperatura_c} gradi" if self.temperatura_c else None),
-            ("Nota sul vitigno", self.note_vitigno),
+            (e["nome"], self.nome),
+            (e["produttore"], self.cantina),
+            (e["regione"], regione),
+            (e["annata"], self.annata),
+            (e["denominazione"], self.denominazione),
+            (e["tipologia"], self.tipologia),
+            (e["colore"], colore_tradotto()),
+            (e["bacca"], self.colore_bacca),
+            (e["categoria"], t("categoria_ue", self.categoria)),
+            (e["corpo"], t("corpo", self.corpo, "narrativa")),
+            (e["acidita"], t("acidita", self.acidita, "narrativa")),
+            (e["elaborazione"], t("elaborazione", self.elaborazione, "narrativa")),
+            (e["gradazione"], f"{self.abv}%" if self.abv else None),
+            (e["vitigni"], ", ".join(self.vitigni) if self.vitigni else None),
+            (e["abbinamenti"], abbinamenti),
+            # Nella lingua chiesta, come fa la riga compatta: queste due
+            # restavano italiane dentro un blocco inglese.
+            (e["note"], ", ".join(self.sensoriali_in(lingua))
+             if self.sensoriali_in(lingua) else None),
+            (e["temperatura"], f"{self.temperatura_c} {e['gradi']}"
+             if self.temperatura_c else None),
+            (e["nota_vitigno"], self.nota_in(lingua)),
         ):
             if valore not in (None, "", []):
                 righe.append(f"{etichetta}: {valore}")
@@ -384,13 +407,19 @@ class Fatti:
                 or (self.tipologia and regione in self.tipologia)):
             regione = None
 
+        colore = CHIAVE_COLORE.get(self.colore or "", self.colore)
+        for vocabolario in ("colore", "tipo"):
+            if colore and not lessico.manca(vocabolario, [colore]):
+                colore = lessico.traduci(vocabolario, colore, lingua=lingua)
+                break
+
         pezzi = [
             self.nome, self.cantina, self.denominazione, self.tipologia,
             # La regione: e' il fatto che il modello inventa quando non ce
             # l'ha - «un grande abruzzese del Piemonte» - e la si conosce.
             regione,
             ", ".join(self.vitigni) or None,
-            t("tipo", self.colore) or t("colore", self.colore),
+            colore,
             # La categoria c'e' anche qui, e non e' un di piu': da quando il
             # colore e' un colore, «spumante» e «passito» non stanno piu' nel
             # suo posto, e senza questa riga lo studente non saprebbe piu' che
@@ -483,6 +512,33 @@ def sotto_lucchetto(f):
 # In archivio convivono le due scritture, perche' convivono le due fonti.
 # «Sparkling» e «Dessert» invece NON sono colori: dicono che tipo di vino e',
 # non di che colore, e per un vino cosi' il vincolo non si puo' applicare.
+# Il ponte fra le due scritture del colore. `_colore_di` risponde in italiano,
+# perche' e' la lingua del registro; i vocabolari hanno le chiavi di X-Wines,
+# che sono inglesi. Senza questa riga, in inglese usciva «Colour: Rosso».
+CHIAVE_COLORE = {"Rosso": "Red", "Bianco": "White", "Rosato": "Rosé"}
+
+# Le etichette del blocco dei fatti, una serie per lingua.
+_ETICHETTE_BLOCCO = {
+    "it": {"nome": "Nome", "produttore": "Produttore", "regione": "Regione",
+           "annata": "Annata", "denominazione": "Denominazione",
+           "tipologia": "Tipologia", "colore": "Colore",
+           "bacca": "Colore della bacca", "categoria": "Categoria",
+           "corpo": "Corpo", "acidita": "Acidità", "elaborazione": "Come nasce",
+           "gradazione": "Gradazione", "vitigni": "Vitigni",
+           "abbinamenti": "Abbinamenti", "note": "Note sensoriali tipiche",
+           "temperatura": "Temperatura di servizio", "gradi": "gradi",
+           "nota_vitigno": "Nota sul vitigno"},
+    "en": {"nome": "Name", "produttore": "Producer", "regione": "Region",
+           "annata": "Vintage", "denominazione": "Appellation",
+           "tipologia": "Type", "colore": "Colour",
+           "bacca": "Berry colour", "categoria": "Category",
+           "corpo": "Body", "acidita": "Acidity", "elaborazione": "How it is made",
+           "gradazione": "Alcohol", "vitigni": "Grapes",
+           "abbinamenti": "Pairings", "note": "Typical sensory notes",
+           "temperatura": "Serving temperature", "gradi": "degrees",
+           "nota_vitigno": "About the grape"},
+}
+
 COLORE_UE = {"Red": "Rosso", "White": "Bianco", "Rosé": "Rosato",
              "Rosso": "Rosso", "Bianco": "Bianco", "Rosato": "Rosato"}
 
