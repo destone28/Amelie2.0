@@ -640,10 +640,18 @@ _PARAMETRI_DI_LEGGE = re.compile(
 _CITAZIONE_MASSIMA = 120
 
 
+# «leggermente erbaceo, erbaceo, secco»: il registro porta cinque citazioni
+# con una parola ripetuta di seguito, e il racconto - composto o scritto dal
+# modello, che le copia - veniva bocciato dalla verifica per una ripetizione
+# che non era sua. Si toglie qui, una volta, dove la citazione entra.
+_PAROLA_DOPPIA = re.compile(r"\b(\w{4,})\b([,\s]+)\1\b", re.I)
+
+
 def _citazioni_utili(r) -> dict[str, str]:
     fuori = {}
     for ambito in ("colore", "odore", "sapore"):
         v = (r[f"desc_{ambito}"] or "").strip().rstrip(".")
+        v = _PAROLA_DOPPIA.sub(r"\1", v)
         if v and len(v) <= _CITAZIONE_MASSIMA and not _PARAMETRI_DI_LEGGE.search(v):
             fuori[ambito] = v
     return fuori

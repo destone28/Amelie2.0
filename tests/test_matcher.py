@@ -884,3 +884,17 @@ class TestQuelCheDiceLEtichetta:
         correggere: senza la parola «rosé» il Prosecco è quello di sempre."""
         f = m.cerca(["PROSECCO", "DOC", "EXTRA", "DRY"])
         assert f.colore == "White"
+
+
+class TestLeCitazioniEntranoPulite:
+    def test_una_parola_doppia_del_registro_si_toglie_una_volta(self):
+        """«leggermente erbaceo, erbaceo, secco»: cinque citazioni cosi' nel
+        registro, e il racconto che le copiava veniva bocciato per una
+        ripetizione che non era sua."""
+        from amelie.matcher import _citazioni_utili
+        r = {"desc_colore": "rosso rubino", "desc_odore": "leggermente erbaceo, erbaceo, secco",
+             "desc_sapore": "asciutto, asciutto e armonico"}
+        c = _citazioni_utili(r)
+        assert c["odore"] == "leggermente erbaceo, secco"
+        assert c["sapore"] == "asciutto e armonico"
+        assert c["colore"] == "rosso rubino"
