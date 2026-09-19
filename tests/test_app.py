@@ -707,7 +707,7 @@ class TestLaSchermataNonResta:
         # E il filtro l'ha gia' vista: quando un racconto finisce, la presenza
         # e' vera da un pezzo. Senza questo si proverebbe un fronte di salita
         # che nella realta' e' gia' passato.
-        amelie.presenza.presente = True
+        amelie._presente = True
         # Dal percorso vero: e' la transizione a segnare che si e' raccontato,
         # non l'assegnazione dello stato.
         amelie.macchina.stato = Stato.RACCONTO
@@ -728,11 +728,11 @@ class TestLaSchermataNonResta:
 
         amelie._bottiglia_chiusa = True
         amelie.macchina.stato = Stato.ATTESA
-        amelie.presenza.presente = True      # la bottiglia c'era
+        amelie._presente = True      # la bottiglia c'era
         amelie._bottiglia_finta = False        # e adesso e' tolta
         for _ in range(6):
             asyncio.run(amelie._un_battito())
-        assert not amelie.presenza.presente
+        assert not amelie._presente
         assert not amelie._bottiglia_chiusa
 
         amelie._bottiglia_finta = True          # rimessa
@@ -1669,7 +1669,7 @@ class TestAnnullamento:
         import asyncio
 
         amelie._bottiglia_finta = True          # la bottiglia c'e', e resta
-        amelie.presenza.presente = True      # il filtro l'ha gia' vista
+        amelie._presente = True      # il filtro l'ha gia' vista
         amelie.macchina.stato = Stato.RACCONTO
         amelie.annulla()
         assert amelie.macchina.stato is Stato.ATTESA
@@ -1684,7 +1684,7 @@ class TestAnnullamento:
         import asyncio
 
         amelie._bottiglia_finta = True
-        amelie.presenza.presente = True
+        amelie._presente = True
         amelie.macchina.stato = Stato.RACCONTO
         amelie.annulla()
 

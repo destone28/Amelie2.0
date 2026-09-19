@@ -253,6 +253,18 @@ class Lettura:
     def vuota(self) -> bool:
         return not self.righe
 
+    @property
+    def utile(self) -> bool:
+        """C'e' almeno una PAROLA, non solo cifre e frammenti?
+
+        E' la lettura che conta come lettura. Un calendario dietro al piatto
+        da' cinque righe di numeri a ogni scatto: righe, ma niente da
+        riconoscere. Contarle come una lettura riuscita azzerava i tentativi,
+        e il dispositivo scandiva ogni sei secondi per sempre - visto sul
+        dispositivo, con carico a 3, davanti a un piatto vuoto.
+        """
+        return _parole_utili(self) > 0
+
     def righe_grandi(self, *, frazione: float = 0.6) -> list[Riga]:
         """Le righe scritte in grande, dove sta la denominazione.
 

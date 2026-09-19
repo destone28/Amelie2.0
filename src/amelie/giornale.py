@@ -111,7 +111,14 @@ class Giornale:
     def _salva_immagine(self, quando: datetime, immagine) -> str | None:
         import cv2
 
-        nome = quando.strftime("%Y%m%d-%H%M%S-%f")[:-3] + ".jpg"
+        base = quando.strftime("%Y%m%d-%H%M%S-%f")[:-3]
+        nome = base + ".jpg"
+        # Due scatti nello stesso millesimo si sovrascrivevano: sulla board
+        # non succede, su un PC il test lo fa sei volte di fila.
+        n = 1
+        while (self.cartella / nome).exists():
+            nome = f"{base}-{n}.jpg"
+            n += 1
         if not cv2.imwrite(str(self.cartella / nome), immagine,
                            [cv2.IMWRITE_JPEG_QUALITY, 80]):
             return None
