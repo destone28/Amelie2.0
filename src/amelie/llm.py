@@ -39,11 +39,26 @@ log = logging.getLogger(__name__)
 class ImpostazioniLLM:
     url: str = "http://127.0.0.1:8081"
     max_token: int = 120
-    temperatura: float = 0.7
+    # Misurato con `scripts/valuta_generativa.py`, trenta vini, stesso
+    # modello, tre temperature:
+    #
+    #     0,7   18 su 30 passano la verifica   1,2 parole fuori dai fatti a testo
+    #     0,2   20 su 30                       0,7
+    #     0     19 su 30                       0,8
+    #
+    # Un modello da mezzo miliardo non ha varieta' da spendere: a 0,7 le
+    # parole in piu' sono quasi tutte invenzioni. Lo zero secco non e' meglio
+    # di 0,2 e ripete di piu'.
+    temperatura: float = 0.2
     # Sopra 0.9 il modello comincia a divagare e la verifica anti-invenzione
     # scarta troppo spesso, costringendo a rigenerare: si perde piu' tempo di
     # quanto se ne guadagni in varieta'.
     top_p: float = 0.9
+    # «con bella acidita' e bella acidita'», «delicato, delicato»: il modello
+    # che gira a vuoto. Una penalita' leggera sulle ripetizioni costa niente e
+    # toglie il caso piu' frequente; sopra 1,2 comincia a evitare anche le
+    # parole giuste, tipo il nome del vitigno detto due volte.
+    ripetizione: float = 1.1
     # Le sequenze su cui fermarsi: il modello tende a continuare con un secondo
     # paragrafo o a commentare quello che ha scritto.
     stop: tuple[str, ...] = (
@@ -88,6 +103,7 @@ class Modello:
             "n_predict": self.imp.max_token,
             "temperature": self.imp.temperatura,
             "top_p": self.imp.top_p,
+            "repeat_penalty": self.imp.ripetizione,
             "stop": list(self.imp.stop),
             # Il prefisso costante viene riconosciuto e non rielaborato: e' la
             # differenza fra 34 secondi di prefill e zero.

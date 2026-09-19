@@ -392,11 +392,18 @@ _COPPIA = re.compile(r"\b([a-zà-ÿ]{4,} [a-zà-ÿ]{4,})\b")
 def _coppie_ripetute(testo: str) -> list[str]:
     fuori = []
     for frase in spezza_in_frasi(testo):
-        piano = _senza_accenti(frase).lower()
         viste: set[str] = set()
-        parole = re.findall(r"[a-z]{4,}", piano)
+        # Le parole con l'originale davanti: un nome proprio ripetuto -
+        # «Nasce dal Cabernet Sauvignon ... il Cabernet Sauvignon» - non e'
+        # il modello che gira a vuoto, e' il nome del vitigno. Misurato: la
+        # prima versione bocciava «Malvasia Nera» e «Moscato Giallo».
+        # Sulla frase ORIGINALE, perche' `_senza_accenti` toglie anche le
+        # maiuscole, e senza maiuscole non si distingue un nome.
+        parole = re.findall(r"[A-Za-zÀ-ÿ]{4,}", frase)
         for a, b in zip(parole, parole[1:]):
-            coppia = f"{a} {b}"
+            if a[:1].isupper() or b[:1].isupper():
+                continue
+            coppia = f"{_senza_accenti(a)} {_senza_accenti(b)}".lower()
             if coppia in viste:
                 fuori.append(f"ripetizione: {coppia}")
                 break

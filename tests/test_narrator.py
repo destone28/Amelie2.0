@@ -1262,6 +1262,10 @@ class TestCioCheLaVerificaLasciavaPassare:
     def test_la_stessa_coppia_due_volte(self):
         f = Fatti(livello=Livello.VINO, nome="Cannubi", colore="Rosso", sicurezza=95.0)
         assert not verifica("È di corpo medio, con bella acidità e bella acidità.", f)[0]
+        # Un nome proprio che torna non e' una ripetizione: e' il vitigno.
+        f2 = Fatti(livello=Livello.VINO, nome="Piave Cabernet", colore="Rosso",
+                   vitigni=["Cabernet Sauvignon"], sicurezza=95.0)
+        assert verifica("Nasce dal Cabernet Sauvignon, e il Cabernet Sauvignon qui è pieno.", f2)[0]
         assert verifica("Nasce da Schiava, Schiava Gentile e Schiava Grigia.",
                         Fatti(livello=Livello.VINO, nome="Santa Maddalena", colore="Rosso",
                               vitigni=["Schiava", "Schiava Gentile", "Schiava Grigia"],
