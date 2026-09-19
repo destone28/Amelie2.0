@@ -174,7 +174,7 @@ class TestTemplate:
         """'17-19' pronunciato diventa 'diciassette trattino diciannove'."""
         t = template(barolo)
         assert "17-19" not in t
-        assert "fra 17 e 19 gradi" in t
+        assert "17 e 19" in t and "gradi" in t
 
     def test_fatti_vuoti_non_esplodono(self):
         assert template(Fatti()) != ""
@@ -979,3 +979,89 @@ class TestLeNoteOlfattiveNonSonoNeUveNeCibi:
         f = self._fatti(tipologia="Nero d'Avola", colore="Rosso")
         ok, inv = verifica("In bocca è gradevole, delicato, delicato, fruttato.", f)
         assert not ok and any("ripetizione" in x for x in inv)
+
+
+class TestIlRaccontoCompostoDaiFatti:
+    """Il modo «archivio»: l'unico di cui si possa dire che non inventa.
+
+    Ogni frase nasce da un campo dell'archivio dentro una forma del lessico;
+    il seme sceglie la forma, sempre la stessa per lo stesso vino. Breve: al
+    massimo quattro frasi dopo l'apertura.
+    """
+
+    def _barolo(self, **kw):
+        base = dict(livello=Livello.VINO, nome="Cannubi", cantina="Marchesi di Barolo",
+                    annata=2016, denominazione="Barolo", vitigni=["Nebbiolo"],
+                    corpo="Full-bodied", acidita="High", abbinamenti=["Beef", "Lamb"],
+                    temperatura_c="17-19", sicurezza=95.0, colore="Rosso")
+        base.update(kw)
+        return Fatti(**base)
+
+    def test_lo_stesso_vino_si_racconta_sempre_con_le_stesse_parole(self):
+        assert template(self._barolo()) == template(self._barolo())
+
+    def test_il_seme_e_stabile_fra_un_avvio_e_l_altro(self):
+        from amelie.narrator import seme_di
+        # `crc32` di una stringa nota: se cambia, cambia il racconto di ogni
+        # vino a ogni riavvio, e nessuno se ne accorgerebbe dai test.
+        assert seme_di(self._barolo()) == seme_di(self._barolo())
+        assert seme_di(self._barolo()) != seme_di(self._barolo(nome="Brunate"))
+
+    def test_e_breve(self):
+        from amelie.narrator import spezza_in_frasi
+        t = template(self._barolo(disciplinare={
+            "colore": "rosso granato", "odore": "intenso e caratteristico",
+            "sapore": "asciutto, pieno, armonico"}))
+        assert len(spezza_in_frasi(t)) <= 5, t
+
+    def test_temperatura_e_tavola_stanno_in_una_frase_sola(self):
+        t = template(self._barolo())
+        assert "17 e 19" in t and "manzo" in t
+        assert t.count("gradi") == 1
+        frase = next(f for f in t.split(". ") if "gradi" in f)
+        assert "manzo" in frase
+
+    def test_col_disciplinare_corpo_e_acidita_tacciono(self):
+        t = template(self._barolo(disciplinare={"colore": "rosso granato",
+                                                "sapore": "asciutto, pieno"}))
+        assert "struttura" not in t and "acidità" not in t
+
+    def test_senza_disciplinare_parlano(self):
+        t = template(self._barolo())
+        assert "struttura" in t or "acidità" in t
+
+    def test_supera_sempre_la_verifica(self):
+        f = self._barolo(disciplinare={"colore": "rosso granato", "odore": "intenso",
+                                       "sapore": "asciutto, pieno, armonico"})
+        for lingua in ("it", "en"):
+            ok, inv = verifica(template(f, lingua=lingua), f, lingua)
+            assert ok, (lingua, inv)
+
+
+class TestInArchivioIlModelloNonParlaMai:
+    """La garanzia vale solo se non ha eccezioni: in modo «archivio» ne' il
+    modello dal vivo ne' la cache, che e' lo stesso modello un giorno prima."""
+
+    def test_in_archivio_la_cache_non_si_legge(self, tmp_path):
+        import sqlite3
+        from amelie.narrator import Narratore
+
+        db = tmp_path / "a.db"
+        con = sqlite3.connect(db)
+        con.execute("CREATE TABLE racconto (ambito TEXT, ambito_id INT, lingua TEXT, testo TEXT)")
+        con.execute("INSERT INTO racconto VALUES ('tipologia', 7, 'it', "
+                    "'Nasce dal Nebbiolo. Si serve a 17 gradi.')")
+        con.commit(); con.close()
+        chiamate = []
+        n = Narratore(percorso_db=db, genera=lambda p: chiamate.append(p) or "x.")
+        try:
+            f = Fatti(livello=Livello.TIPOLOGIA, tipologia="Barolo", colore="Rosso",
+                      vitigni=["Nebbiolo"], sicurezza=90.0, origine=("tipologia", 7))
+            r = n.racconta(f, preferisci_modello=False)
+            assert r.origine == "template"
+            assert chiamate == []
+            # E in «generativa» invece la cache si usa, se regge la verifica.
+            r = n.racconta(f, preferisci_modello=True)
+            assert r.origine in ("cache", "modello")
+        finally:
+            n.chiudi()

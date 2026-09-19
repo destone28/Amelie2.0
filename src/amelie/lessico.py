@@ -49,11 +49,12 @@ class Lessico:
     vocabolari: dict[str, dict[str, dict]]
     lingue: tuple[str, ...]
     predefinita: str
-    # gruppo -> chiave -> lingua -> frase. Vedi data/lessico/frasi.json.
-    frasi: dict[str, dict[str, dict[str, str]]] = field(default_factory=dict)
+    # gruppo -> chiave -> lingua -> frase, o ELENCO di frasi equivalenti.
+    # Vedi data/lessico/frasi.json.
+    frasi: dict[str, dict[str, dict[str, str | list[str]]]] = field(default_factory=dict)
 
     def frase(self, gruppo: str, chiave: str, *, lingua: str | None = None,
-              **segnaposto: object) -> str:
+              seme: int | None = None, **segnaposto: object) -> str:
         """Una frase del racconto, nella lingua chiesta, coi buchi riempiti.
 
         Se la lingua non ha quella frase si ripiega sulla predefinita: meglio
@@ -61,17 +62,34 @@ class Lessico:
         schermo. Se manca del tutto si restituisce stringa vuota, e chi chiama
         se ne accorge perche' la frase sparisce - non perche' il dispositivo si
         ferma davanti a un tavolo.
+
+        Una voce puo' avere PIU' frasi equivalenti, e `seme` sceglie quale:
+        sempre la stessa per lo stesso seme, cosi' lo stesso vino si racconta
+        sempre con le stesse parole e due vini diversi con parole diverse.
+        Senza seme si prende la prima, che e' quella di riferimento: le
+        varianti dicono la stessa cosa in un altro modo, e la prima e' quella
+        su cui si e' scritto tutto il resto.
         """
         voce = self.frasi.get(gruppo, {}).get(chiave, {})
-        modello = voce.get(lingua or self.predefinita) or voce.get(self.predefinita)
-        if not modello:
+        modelli = voce.get(lingua or self.predefinita) or voce.get(self.predefinita)
+        if isinstance(modelli, str):
+            modelli = [modelli]
+        if not modelli:
             log.warning("frase mancante: %s.%s in %s", gruppo, chiave, lingua)
             return ""
+        modello = modelli[(seme or 0) % len(modelli)]
         try:
             return modello.format(**segnaposto)
         except KeyError as e:
             log.warning("segnaposto %s mancante per %s.%s", e, gruppo, chiave)
             return modello
+
+    def varianti(self, gruppo: str, chiave: str, lingua: str | None = None) -> list[str]:
+        """Tutte le forme equivalenti di una frase, per chi le deve controllare."""
+        modelli = self.frasi.get(gruppo, {}).get(chiave, {}).get(lingua or self.predefinita)
+        if isinstance(modelli, str):
+            return [modelli]
+        return list(modelli or [])
 
     def traduci(
         self,
@@ -145,7 +163,7 @@ def carica(percorso: str | Path | None = None) -> Lessico:
         if nome not in _META and isinstance(contenuto, dict)
     }
 
-    frasi: dict[str, dict[str, dict[str, str]]] = {}
+    frasi: dict[str, dict[str, dict[str, str | list[str]]]] = {}
     percorso_frasi = p.parent / "frasi.json"
     if percorso_frasi.exists():
         grezze = json.loads(percorso_frasi.read_text(encoding="utf-8"))

@@ -207,15 +207,32 @@ class TestFrasi:
         problemi = []
         for gruppo, voci in lex.frasi.items():
             for chiave, per_lingua in voci.items():
-                attesi = set(re.findall(r"\{(\w+)\}",
-                                        per_lingua.get(lex.predefinita, "")))
-                for lingua, modello in per_lingua.items():
-                    trovati = set(re.findall(r"\{(\w+)\}", modello))
-                    if trovati != attesi:
-                        problemi.append(
-                            f"{gruppo}.{chiave} [{lingua}]: {sorted(trovati)} "
-                            f"invece di {sorted(attesi)}")
+                riferimento = lex.varianti(gruppo, chiave, lex.predefinita)
+                attesi = set(re.findall(r"\{(\w+)\}", riferimento[0] if riferimento else ""))
+                # Ogni variante, in ogni lingua: una variante con un segnaposto
+                # in meno direbbe una cosa diversa, e una con uno in piu'
+                # esploderebbe a runtime, ma solo quando il seme la sceglie.
+                for lingua in per_lingua:
+                    for n, modello in enumerate(lex.varianti(gruppo, chiave, lingua)):
+                        trovati = set(re.findall(r"\{(\w+)\}", modello))
+                        if trovati != attesi:
+                            problemi.append(
+                                f"{gruppo}.{chiave} [{lingua} #{n}]: {sorted(trovati)} "
+                                f"invece di {sorted(attesi)}")
         assert not problemi, problemi
+
+    def test_le_varianti_si_scelgono_col_seme_e_senza_seme_la_prima(self):
+        """Stesso vino, stesse parole; vini diversi, parole diverse. E la
+        prima e' quella di riferimento, su cui si e' scritto tutto il resto."""
+        from amelie.lessico import Lessico
+        lex = Lessico(vocabolari={}, lingue=("it", "en"), predefinita="it",
+                      frasi={"corpo": {"x": {"it": ["Uno {a}.", "Due {a}.", "Tre {a}."],
+                                             "en": "One {a}."}}})
+        assert lex.frase("corpo", "x", a="k") == "Uno k."
+        assert lex.frase("corpo", "x", seme=4, a="k") == "Due k."
+        assert lex.frase("corpo", "x", seme=4, a="k") == lex.frase("corpo", "x", seme=4, a="k")
+        assert lex.frase("corpo", "x", lingua="en", seme=4, a="k") == "One k."
+        assert lex.varianti("corpo", "x") == ["Uno {a}.", "Due {a}.", "Tre {a}."]
 
     def test_una_frase_sconosciuta_non_ferma_il_dispositivo(self):
         """Meglio una riga in meno che un'eccezione davanti a un tavolo."""

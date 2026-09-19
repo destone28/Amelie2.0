@@ -405,6 +405,33 @@ def _colore_sbagliato(testo: str, fatti: Fatti, ammesso: str = "") -> str | None
 
 # ---------------------------------------------------------------- template
 
+def seme_di(f: Fatti) -> int:
+    """Un numero stabile per ogni vino: e' cio' che sceglie le varianti.
+
+    Le frasi del lessico hanno piu' forme equivalenti, e questo seme decide
+    quale tocca a questo vino - la stessa ogni volta, perche' un ospite che
+    rimette la bottiglia deve sentire lo stesso racconto, e diversa da vino a
+    vino, perche' due bottiglie di fila non devono suonare come un modulo
+    riempito due volte. E' `crc32`, non `hash()`: quello cambia a ogni avvio
+    del processo, e il racconto cambierebbe con lui.
+    """
+    import zlib
+
+    identita = "|".join(str(x) for x in (
+        f.origine, f.nome, f.cantina, f.annata, f.tipologia, f.denominazione,
+        *f.vitigni))
+    return zlib.crc32(identita.encode("utf-8"))
+
+
+def _seme_per(seme: int, chiave: str) -> int:
+    """Lo stesso seme, ma diverso per ogni frase: altrimenti con tre varianti
+    per frase un vino prenderebbe sempre «la seconda» di tutte, e i racconti
+    si assomiglierebbero a gruppi di tre."""
+    import zlib
+
+    return seme ^ zlib.crc32(chiave.encode("utf-8"))
+
+
 def _con_articolo(nome: str, lingua: str) -> str:
     """«Etna Rosso» -> «un Etna Rosso» / «an Etna Rosso».
 
@@ -417,7 +444,7 @@ def _con_articolo(nome: str, lingua: str) -> str:
     return f"un {nome}"
 
 
-def _apertura(f: Fatti, lex: Lessico, lingua: str) -> str:
+def _apertura(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> str:
     """La prima frase dice CHE COSA si ha davanti, con l'onestà del livello.
 
     E con l'onestà della SICUREZZA. Il livello dice quanto è specifico il record
@@ -430,7 +457,8 @@ def _apertura(f: Fatti, lex: Lessico, lingua: str) -> str:
     Le frasi vengono da `data/lessico/frasi.json`: qui c'è solo la logica di
     quale dire, mai il testo, perché il testo cambia con la lingua.
     """
-    d = lambda chiave, **kw: lex.frase("apertura", chiave, lingua=lingua, **kw)
+    d = lambda chiave, **kw: lex.frase("apertura", chiave, lingua=lingua,
+                                       seme=_seme_per(seme, chiave), **kw)
 
     if f.livello is Livello.VINO and f.nome:
         pezzi = [d("pezzo_nome", nome=f.nome)]
@@ -498,63 +526,97 @@ def _che_tipo_di_vino(f: Fatti, lex: Lessico, lingua: str) -> str:
     return f"{testo}, {dosaggio}" if dosaggio else testo
 
 
-def _corpo(f: Fatti, lex: Lessico, lingua: str) -> list[str]:
-    d = lambda chiave, **kw: lex.frase("corpo", chiave, lingua=lingua, **kw)
+def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
+    """Le frasi dopo l'apertura: poche, e ognuna nata da un campo dell'archivio.
+
+    Al massimo quattro. Prima erano fino a sette - vitigno, tre frasi di
+    disciplinare, corpo e acidita', abbinamenti, temperatura - e un racconto
+    da sette frasi di formula si sente che e' una formula. Qui si sceglie:
+    da dove viene; che cosa ne dice il disciplinare, in due frasi al massimo;
+    corpo e acidita' solo se il disciplinare tace; e una frase sola per
+    temperatura e tavola, che prima erano due.
+
+    Ogni frase ha piu' forme equivalenti nel lessico e il seme sceglie quale:
+    vedi `seme_di`. Le forme dicono la stessa cosa - il test del lessico
+    controlla che abbiano gli stessi segnaposto - e non aggiungono niente:
+    questo e' il racconto che si puo' garantire, e la garanzia sta tutta qui.
+    """
+    d = lambda chiave, **kw: lex.frase("corpo", chiave, lingua=lingua,
+                                       seme=_seme_per(seme, chiave), **kw)
     frasi = []
 
+    # 1. Da dove viene. La scheda del vitigno e' prosa scritta da una persona
+    #    e vale piu' di una formula; se non c'e', i vitigni.
     if (nota := f.nota_in(lingua)):
         frasi.append(nota)
     elif f.vitigni:
         frasi.append(d("nasce_da", vitigni=elenca_in_lingua(f.vitigni[:3], lingua)))
 
-    # Le parole del disciplinare vengono prima dei tratti generici: sono la
-    # descrizione sensoriale VERA di questo vino, mentre «corpo» e «acidita'»
-    # sono due caselle di un vocabolario. Dove ci sono le prime, le seconde
-    # sono il contorno.
+    # 2. Il disciplinare: la descrizione sensoriale VERA di questo vino. In
+    #    italiano e' la citazione parola per parola; in inglese e' una resa
+    #    nostra (vedi `amelie.organolettico`), e per questo la frase dice cosa
+    #    il disciplinare CHIEDE invece di virgolettare - metterla fra
+    #    virgolette attribuirebbe a un ente pubblico parole che non ha scritto.
     #
-    # In italiano sono la citazione parola per parola. In inglese sono una
-    # traduzione (vedi `amelie.organolettico`), e per questo la frase dice cosa
-    # il disciplinare CHIEDE invece di virgolettare: quella resa e' nostra, e
-    # metterla fra virgolette attribuirebbe a un ente pubblico parole che non
-    # ha scritto.
+    #    Due frasi al massimo: colore e sapore, che sono quelle che si
+    #    riconoscono nel bicchiere; l'odore entra solo se una delle due manca.
+    resi: dict[str, str] = {}
     if f.disciplinare:
         from .organolettico import carica as carica_organolettico
 
         vocabolario = carica_organolettico()
         for ambito in ("colore", "odore", "sapore"):
-            if not (testo := f.disciplinare.get(ambito)):
-                continue
-            if (reso := vocabolario.rendi(testo, ambito, lingua=lingua)):
-                frasi.append(d(f"disciplinare_{ambito}", valore=reso.testo))
+            if (testo := f.disciplinare.get(ambito)):
+                if (reso := vocabolario.rendi(testo, ambito, lingua=lingua)):
+                    resi[ambito] = reso.testo
+    scelti = [a for a in ("colore", "sapore") if a in resi]
+    if len(scelti) < 2 and "odore" in resi:
+        scelti.append("odore")
+    for ambito in ("colore", "odore", "sapore"):
+        if ambito in scelti:
+            frasi.append(d(f"disciplinare_{ambito}", valore=resi[ambito]))
 
-    corpo = (lex.traduci("corpo", f.corpo, lingua=lingua, forma="narrativa")
-             if f.corpo else None)
-    acidita = (lex.traduci("acidita", f.acidita, lingua=lingua, forma="narrativa")
-               if f.acidita else None)
-    if corpo and acidita:
-        frasi.append(d("tratti_entrambi", corpo=corpo, acidita=acidita))
-    elif corpo:
-        frasi.append(d("tratti_corpo", corpo=corpo))
-    elif acidita:
-        frasi.append(d("tratti_acidita", acidita=acidita))
+    # 3. Corpo e acidita' sono due caselle di un vocabolario: dove parla il
+    #    disciplinare sono il contorno, e il contorno si taglia.
+    if not scelti:
+        corpo = (lex.traduci("corpo", f.corpo, lingua=lingua, forma="narrativa")
+                 if f.corpo else None)
+        acidita = (lex.traduci("acidita", f.acidita, lingua=lingua, forma="narrativa")
+                   if f.acidita else None)
+        if corpo and acidita:
+            frasi.append(d("tratti_entrambi", corpo=corpo, acidita=acidita))
+        elif corpo:
+            frasi.append(d("tratti_corpo", corpo=corpo))
+        elif acidita:
+            frasi.append(d("tratti_acidita", acidita=acidita))
 
-    # Due sorgenti diverse: gli abbinamenti di un vino commerciale sono chiavi
-    # del vocabolario e si traducono; quelli di un vitigno sono prosa scritta a
-    # mano, e per l'inglese esiste gia' la sua versione. Passare la prosa
-    # italiana per il vocabolario non la tradurrebbe: la lascerebbe li'.
+    # 4. A tavola: temperatura e piatti in una frase sola. Due sorgenti
+    #    diverse per i piatti: gli abbinamenti di un vino commerciale sono
+    #    chiavi del vocabolario e si traducono; quelli di un vitigno sono
+    #    prosa scritta a mano, gia' nella lingua giusta.
+    piatti = ""
     if (abbinamenti := f.abbinamenti_in(lingua)):
-        piatti = lex.traduci_molti("abbinamento", abbinamenti[:3], lingua=lingua)
-        frasi.append(d("abbinamenti", piatti=elenca_in_lingua(piatti, lingua)))
-
+        piatti = elenca_in_lingua(
+            lex.traduci_molti("abbinamento", abbinamenti[:3], lingua=lingua), lingua)
+    da = a = gradi = ""
     if f.temperatura_c:
         # "16-18" letto ad alta voce diventa "sedici trattino diciotto": va
         # sciolto, perche' questo testo lo pronuncia una voce sintetica.
         t = f.temperatura_c.replace("\u2013", "-")
         if "-" in t:
-            da, _, a = t.partition("-")
-            frasi.append(d("temperatura_intervallo", da=da.strip(), a=a.strip()))
+            da, _, a = (x.strip() for x in t.partition("-"))
         else:
-            frasi.append(d("temperatura_puntuale", gradi=t.strip()))
+            gradi = t.strip()
+    if piatti and da:
+        frasi.append(d("servizio_intervallo", da=da, a=a, piatti=piatti))
+    elif piatti and gradi:
+        frasi.append(d("servizio_puntuale", gradi=gradi, piatti=piatti))
+    elif piatti:
+        frasi.append(d("abbinamenti", piatti=piatti))
+    elif da:
+        frasi.append(d("temperatura_intervallo", da=da, a=a))
+    elif gradi:
+        frasi.append(d("temperatura_puntuale", gradi=gradi))
 
     # E alla fine, quando non c'e' nient'altro da dire, si dice PERCHE'. Non e'
     # un'esitazione - quelle si sono tolte, e riguardavano il leggere - e' un
@@ -580,18 +642,24 @@ def corpo_neutro(f: Fatti, lex: Lessico | None = None, lingua: str = "it") -> st
     sarebbe sbagliato per una bottiglia riconosciuta con certezza.
     """
     lex = lex or carica()
-    return " ".join(_corpo(f, lex, lingua)).strip()
+    return " ".join(_corpo(f, lex, lingua, seme_di(f))).strip()
 
 
 def template(f: Fatti, lex: Lessico | None = None, lingua: str = "it") -> str:
-    """Il racconto senza modello: la rete di sicurezza.
+    """Il racconto composto dai fatti: quello che si puo' garantire.
 
-    Non è bello come un testo generato, ma è **vero per costruzione**: ogni
-    frase nasce da un campo del database. È quello che il dispositivo dice se
-    tutto il resto fallisce.
+    Ogni frase nasce da un campo dell'archivio o da una citazione del
+    disciplinare, dentro una forma del lessico che il seme sceglie fra
+    equivalenti. Non c'e' nessun passaggio in cui una parola possa nascere da
+    un'altra parte: e' il modo «archivio», ed e' l'unico di cui si possa dire
+    che non inventa - misurato, il modello sul dispositivo sbagliava un fatto
+    in cinque testi su dodici, e la verifica a posteriori non li prendeva
+    tutti.
     """
     lex = lex or carica()
-    return " ".join([_apertura(f, lex, lingua)] + _corpo(f, lex, lingua)).strip()
+    seme = seme_di(f)
+    return " ".join([_apertura(f, lex, lingua, seme)]
+                    + _corpo(f, lex, lingua, seme)).strip()
 
 
 # ---------------------------------------------------------------- il prompt
@@ -766,24 +834,18 @@ class Narratore:
         # livello non ci sono affermazioni da fare.
         genera_qui = (consenti_modello and self.genera is not None
                       and f.livello is not Livello.GENERICO)
-        if preferisci_modello and genera_qui:
-            if (vivo := self._dal_modello(f)) is not None:
+        # Il modo «generativa» e' l'unico in cui un testo scritto da un
+        # modello - dal vivo o dalla cache, che e' lo stesso modello un giorno
+        # prima - arriva in bocca al dispositivo. Nel modo «archivio» non ci
+        # arriva mai: il racconto e' composto dai fatti, e basta. Prima la
+        # cache si usava anche li', e un Franciacorta in modo «archivio»
+        # diceva «Borgognone, ovunque nel mondo». La garanzia vale solo se
+        # non ha eccezioni.
+        if preferisci_modello:
+            if genera_qui and (vivo := self._dal_modello(f)) is not None:
                 return vivo
-
-        if (pronto := self._dalla_cache(f, solo_esatto=True)) is not None:
-            return pronto
-
-        if (corpo := corpo_neutro(f, self.lex, self.lingua)):
-            apertura = _apertura(f, self.lex, self.lingua)
-            return Racconto(testo=f"{apertura} {corpo}".strip(),
-                            origine="template", livello=f.livello)
-
-        if (pronto := self._dalla_cache(f)) is not None:
-            return pronto
-
-        if genera_qui:
-            if (vivo := self._dal_modello(f)) is not None:
-                return vivo
+            if (pronto := self._dalla_cache(f)) is not None:
+                return pronto
 
         return Racconto(testo=template(f, self.lex, self.lingua),
                         origine="template", livello=f.livello)

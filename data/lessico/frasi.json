@@ -90,6 +90,14 @@
       "it": "Si accompagna bene a {piatti}.",
       "en": "It goes well with {piatti}."
     },
+    "servizio_intervallo": {
+      "it": "Si serve fra {da} e {a} gradi, con {piatti}.",
+      "en": "Best served between {da} and {a} degrees, with {piatti}."
+    },
+    "servizio_puntuale": {
+      "it": "Si serve a {gradi} gradi, con {piatti}.",
+      "en": "Best served at {gradi} degrees, with {piatti}."
+    },
     "temperatura_intervallo": {
       "it": "Si serve fra {da} e {a} gradi.",
       "en": "Best served between {da} and {a} degrees."
