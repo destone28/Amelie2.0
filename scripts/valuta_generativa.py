@@ -86,6 +86,25 @@ generosi robusto robusta strutturato strutturata equilibrato equilibrata
 ricco ricca ampio ampia chiaro chiara scarico scarica carico carica
 """.split())
 
+# E l'impalcatura inglese: le parole con cui le frasi del lessico tengono
+# insieme i fatti in inglese. Senza, il conto delle «parole fuori dai fatti»
+# in inglese contava l'impalcatura e dava 7 per testo contro l'1 italiano -
+# un difetto della misura, non del modello.
+_GENERICHE |= set("""
+this that these those bottle wine wines grape grapes variety varieties
+comes come made from with without between under over about into
+served serving serve pours poured pouring table glass mouth nose palate
+production rules specification appellation designation protected origin
+typical characteristic notes note aroma aromas flavour flavor taste tastes
+body bodied acidity tannin tannins structure balance balanced fresh fine
+elegant full light medium dry sweet soft harmonious pleasant persistent
+degrees ideally best goes pairs paired alongside matches match good great
+bright lively intense deep hills region area vineyard cellar producer
+ripens renders soul planted grown drying after harvest which where when
+while also still there their they them its it is are has have was were
+and the for but not more most than very well both each other others
+""".split())
+
 # I numeri detti in lettere: la voce sintetica li vuole cosi', il corpus li
 # scrive cosi', e i fatti li hanno in cifre. Si riportano a cifre e si
 # confrontano con quelle, invece di contarli come parole inventate.

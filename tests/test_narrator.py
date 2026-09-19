@@ -1435,3 +1435,34 @@ class TestInPurezza:
 
     def test_e_il_vitigno_vero_passa(self):
         assert verifica("Nerello Mascalese in purezza, siciliano.", self._fatti())[0]
+
+
+class TestUnLuogoNonEUnUva:
+    """«It comes from Ripa Teatina»: un paese messo dove vanno le uve.
+    Passava perche' quel nome sta nei fatti - e' la denominazione."""
+
+    def _fatti(self, **kw):
+        base = dict(livello=Livello.VINO, nome="Arenile Pecorino",
+                    denominazione="Ripa Teatina", colore="Bianco",
+                    vitigni=["Pecorino"], sicurezza=95.0,
+                    disciplinare={"colore": "giallo paglierino"})
+        base.update(kw)
+        return Fatti(**base)
+
+    def test_la_denominazione_non_sta_fra_le_uve(self):
+        ok, inv = verifica("It comes from Ripa Teatina: from Abruzzo.",
+                           self._fatti(regione="Abruzzo"), "en")
+        assert not ok and any("uve" in x for x in inv)
+
+    def test_ma_il_vitigno_vero_si(self):
+        assert verifica("It comes from Pecorino: recovered after nearly disappearing.",
+                        self._fatti(note_vitigno="recovered after nearly disappearing"),
+                        "en")[0]
+
+    def test_e_un_nome_che_contiene_il_vitigno_resta_lecito(self):
+        """«Brachetto d'Acqui» contiene il Brachetto: e' un modo legittimo."""
+        f = Fatti(livello=Livello.TIPOLOGIA, tipologia="Brachetto d'Acqui",
+                  denominazione="Brachetto d'Acqui", colore="Rosso",
+                  vitigni=["Brachetto"], sicurezza=95.0,
+                  disciplinare={"colore": "rosso rubino"})
+        assert verifica("Nasce dal Brachetto d'Acqui, vitigno di casa.", f)[0]

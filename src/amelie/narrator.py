@@ -306,7 +306,13 @@ _CONTESTO_VITIGNI = re.compile(
     # detta male, e' un profumo detto bene.
     r"(?:nasce\s+(?:dall'|dalla\s+|dalle\s+|dal\s+|dai\s+)\s*(?:solo\s+|incontro\s+di\s+)?"
     r"|vitign[oi]\s+(?=(?-i:[A-ZÀ-Ý]))|uv[ae]\s+(?:di\s+)?(?=(?-i:[A-ZÀ-Ý]))"
-    r"|grapes?\s+(?=(?-i:[A-Z]))|from\s+the\s+)"
+    # «It comes from Ripa Teatina», «It is made from Nebbiolo»: sono le frasi
+    # inglesi del lessico, e quel che segue sono uve. Mancavano, e un luogo
+    # detto al posto di un vitigno passava - letto sul dispositivo.
+    # Non «from the»: e' troppo generico, e dentro la scheda di un vitigno
+    # - «Arneis: Piedmontese, from the Roero» - diceva che il Roero e' un'uva.
+    r"|grapes?\s+(?=(?-i:[A-Z]))"
+    r"|(?:comes?|made|is\s+made)\s+from\s+(?=(?-i:[A-Z])))"
     r"((?:[^.;:!?,]|,(?=\s+(?-i:[A-ZÀ-Ý])))*)", re.I)
 _UN_VITIGNO = re.compile(r"\b(un|a)\s+(?:grande\s+)?(vitigno|grape)\b", re.I)
 # «Nebbiolo in purezza» e' l'apertura che il corpus insegna, e quel che sta
@@ -339,6 +345,21 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
                 continue
             if any(n in x for x in note):
                 fuori.append(f"{nome} detto vitigno, ma e' una nota olfattiva")
+    # Il nome del vino, o della sua denominazione, messo dove vanno le uve:
+    # «It comes from Ripa Teatina», che e' un paese. Passava perche' quel
+    # nome STA nei fatti - e' la denominazione - e nessuna regola guardava in
+    # che posto fosse finito. Si flagga solo se nell'elenco non compare
+    # nessuna delle uve vere: «Brachetto d'Acqui» contiene il Brachetto, ed e'
+    # un modo legittimo di dirlo.
+    for m in _CONTESTO_VITIGNI.finditer(testo):
+        elenco = _senza_accenti(m.group(1)).lower()
+        if any(re.search(r"\b" + re.escape(u) + r"\b", elenco) for u in uve if u):
+            continue
+        for v in vino:
+            if v and len(v) > 4 and v in elenco:
+                fuori.append(f"«{v}» messo fra le uve, ma e' il vino")
+                break
+
     for m in _IN_PUREZZA.finditer(testo):
         nome = _senza_accenti(m.group(1)).strip().lower()
         if nome and not any(nome in u or u in nome for u in uve):
