@@ -853,7 +853,10 @@ class TestAlGenericoIlModelloNonScrive:
         n = self._narratore(chiamate)
         try:
             f = Fatti(livello=Livello.TIPOLOGIA, denominazione="Barolo",
-                      tipologia="Barolo", colore="Rosso", sicurezza=90.0)
+                      tipologia="Barolo", colore="Rosso", sicurezza=90.0,
+                      # Col registro che ha detto la sua: senza citazione il
+                      # modello non scrive comunque, vedi il cancello.
+                      disciplinare={"colore": "rosso granato"})
             n.racconta(f, preferisci_modello=True)
             assert chiamate, "al livello tipologia il modello deve poter scrivere"
         finally:
@@ -1070,13 +1073,14 @@ class TestInArchivioIlModelloNonParlaMai:
         con = sqlite3.connect(db)
         con.execute("CREATE TABLE racconto (ambito TEXT, ambito_id INT, lingua TEXT, testo TEXT)")
         con.execute("INSERT INTO racconto VALUES ('tipologia', 7, 'it', "
-                    "'Nasce dal Nebbiolo. Si serve a 17 gradi.')")
+                    "'Nasce dal Nebbiolo.')")
         con.commit(); con.close()
         chiamate = []
         n = Narratore(percorso_db=db, genera=lambda p: chiamate.append(p) or "x.")
         try:
             f = Fatti(livello=Livello.TIPOLOGIA, tipologia="Barolo", colore="Rosso",
-                      vitigni=["Nebbiolo"], sicurezza=90.0, origine=("tipologia", 7))
+                      vitigni=["Nebbiolo"], sicurezza=90.0, origine=("tipologia", 7),
+                      disciplinare={"colore": "rosso granato"})
             r = n.racconta(f, preferisci_modello=False)
             assert r.origine == "template"
             assert chiamate == []
@@ -1278,7 +1282,8 @@ class TestLaGabbia:
     def _fatti(self):
         return Fatti(livello=Livello.TIPOLOGIA, tipologia="Barolo", denominazione="Barolo",
                      colore="Rosso", vitigni=["Nebbiolo"], note_sensoriali=["catrame", "rosa"],
-                     abbinamenti=["Beef"], temperatura_c="17-19", sicurezza=95.0)
+                     abbinamenti=["Beef"], temperatura_c="17-19", sicurezza=95.0,
+                     disciplinare={"colore": "rosso granato"})
 
     def test_ammette_i_fatti_e_il_raccordo_e_niente_altro(self):
         from amelie.gabbia import gabbia_di, lessico
@@ -1360,3 +1365,53 @@ class TestLoSpezzafrasiELeCitazioni:
         assert not verifica("In bocca è più o meno intenso e più o meno intenso.",
                             Fatti(livello=Livello.VINO, nome="X", colore="Rosso",
                                   sicurezza=95.0))[0]
+
+
+class TestIlCancelloDelModello:
+    """Il modello scrive solo quando il registro ha detto la sua.
+
+    Misurato su 210 bottiglie stratificate: con la citazione del disciplinare
+    passa 84 volte su 85, senza 104 su 125. E i testi senza citazione sono
+    quelli in cui inventa i piatti e mette i cibi al posto dei profumi.
+    """
+
+    def _fatti(self, **kw):
+        base = dict(livello=Livello.TIPOLOGIA, tipologia="Barolo", colore="Rosso",
+                    vitigni=["Nebbiolo"], sicurezza=95.0)
+        base.update(kw)
+        return Fatti(**base)
+
+    def test_senza_citazione_il_modello_non_viene_chiamato(self):
+        from amelie.narrator import Narratore
+        chiamate = []
+        n = Narratore(genera=lambda p, g=None: chiamate.append(p) or "x.")
+        try:
+            r = n.racconta(self._fatti(), preferisci_modello=True)
+            assert chiamate == [] and r.origine == "template"
+        finally:
+            n.chiudi()
+
+    def test_con_la_citazione_si(self):
+        from amelie.narrator import Narratore
+        chiamate = []
+
+        def genera(p, g=None):
+            chiamate.append(p)
+            return "Nasce dal Nebbiolo. Il disciplinare lo vuole rosso granato."
+
+        n = Narratore(genera=genera)
+        try:
+            f = self._fatti(disciplinare={"colore": "rosso granato"})
+            n.racconta(f, preferisci_modello=True)
+            assert chiamate
+        finally:
+            n.chiudi()
+
+    def test_i_cibi_non_sono_profumi(self):
+        """«note sensoriali tipiche di manzo, cacciagione, agnello e pasta»:
+        passava, perche' quelle parole stanno nei fatti."""
+        f = self._fatti(abbinamenti=["Beef", "Game Meat"], note_sensoriali=["amarena"])
+        ok, inv = verifica("È un rosso con note sensoriali tipiche di manzo e "
+                           "cacciagione.", f)
+        assert not ok and any("piatto" in x for x in inv)
+        assert verifica("Al naso amarena. Si accompagna bene a manzo.", f)[0]

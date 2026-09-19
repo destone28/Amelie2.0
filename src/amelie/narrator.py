@@ -205,11 +205,12 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
     # Le note olfattive finivano nei posti delle uve e dei cibi, in
     # minuscolo, dove il controllo sui nomi propri non guarda.
     invenzioni.extend(_note_al_posto_sbagliato(testo, fatti, lingua))
+    invenzioni.extend(_cibi_al_posto_dei_profumi(testo, fatti, lingua))
     # Le ripetizioni che stanno dentro una citazione del registro non sono
     # nostre: il registro enumera le sfumature ammesse - «rosso rubino piu' o
     # meno intenso, rosa piu' o meno intenso» - e noi le riportiamo. Si
     # riprende quel che si e' ripetuto, non chi l'ha scritto.
-    citazioni = _senza_accenti(" ".join((fatti.disciplinare or {}).values())).lower()
+    citazioni = _citazioni_come_si_dicono(fatti, lingua)
     invenzioni.extend(x for x in _parole_ripetute(testo)
                       if x.removeprefix("ripetizione: ") not in citazioni)
 
@@ -355,6 +356,57 @@ _CONTESTO_ABBINAMENTI = re.compile(
     r"|(?:ideale|perfett[oa]|adatt[oa])\s+(?:per|su|a|con)\s+|abbinat[oa]\s+a\s+"
     r"|pairs?\s+(?:well\s+)?with\s+|serve\s+with\s+)([^.;:!?]*)", re.I)
 _TANNINO = re.compile(r"\btannin\w*", re.I)
+
+
+# Dove un testo dice che cosa si sente: quel che segue sono profumi, non cibi.
+_CONTESTO_NOTE = re.compile(
+    r"(?:note\s+(?:sensoriali\s+)?(?:tipiche\s+)?(?:di\s+)?|sentori\s+di\s+"
+    r"|profuma\s+di\s+|al\s+naso\s+|aromi\s+di\s+|notes?\s+of\s+|aromas?\s+of\s+"
+    r"|on\s+the\s+nose\s+)([^.;:!?]*)", re.I)
+
+
+def _citazioni_come_si_dicono(fatti: Fatti, lingua: str) -> str:
+    """Le citazioni del registro nella lingua in cui il racconto le dira'.
+
+    In italiano sono quelle, parola per parola; in inglese sono una resa
+    nostra, e confrontare un testo inglese con la citazione italiana non
+    trova niente: «from pale straw yellow to straw yellow» veniva da «da
+    giallo paglierino scarico a giallo paglierino», e la ripetizione
+    risultava nostra.
+    """
+    pezzi = list((fatti.disciplinare or {}).values())
+    if lingua != "it" and fatti.disciplinare:
+        from .organolettico import carica as carica_organolettico
+
+        vocabolario = carica_organolettico()
+        for ambito, testo in fatti.disciplinare.items():
+            if (reso := vocabolario.rendi(testo, ambito, lingua=lingua)):
+                pezzi.append(reso.testo)
+    return _senza_accenti(" ".join(pezzi)).lower()
+
+
+def _cibi_al_posto_dei_profumi(testo: str, fatti: Fatti, lingua: str) -> list[str]:
+    """Piatti detti come profumi: «note sensoriali tipiche di manzo,
+    cacciagione, agnello e pasta».
+
+    Passava la verifica perche' quelle parole stanno nei fatti - sono gli
+    abbinamenti - ed e' l'errore che questo controllo cerca: un rapporto
+    sbagliato fra parole vere. Lo specchio di `_note_al_posto_sbagliato`.
+    """
+    # Tradotti: in `fatti.abbinamenti` stanno le CHIAVI del vocabolario, che
+    # sono inglesi («Beef»), e il testo dice «manzo».
+    lex = carica()
+    crudi = list(fatti.abbinamenti) + list(fatti.abbinamenti_in(lingua))
+    piatti = {_senza_accenti(x).lower() for x in
+              crudi + lex.traduci_molti("abbinamento", crudi, lingua=lingua)}
+    piatti = {p for p in piatti if len(p) >= 4}
+    fuori = []
+    for m in _CONTESTO_NOTE.finditer(testo):
+        pezzo = _senza_accenti(m.group(1)).lower()
+        for p in piatti:
+            if re.search(r"\b" + re.escape(p) + r"\b", pezzo):
+                fuori.append(f"«{p}» detto come profumo, ma e' un piatto")
+    return fuori
 
 
 def _note_al_posto_sbagliato(testo: str, fatti: Fatti, lingua: str) -> list[str]:
@@ -1027,6 +1079,35 @@ def prompt_addestrato(f: Fatti, lingua: str = "it") -> str:
             f"<|im_start|>assistant\n")
 
 
+def _abbastanza_per_il_modello(f: Fatti) -> bool:
+    """C'e' abbastanza, in questi fatti, perche' un modello piccolo racconti
+    senza riempire i buchi da solo?
+
+    La risposta e' una sola, ed e' misurata: **la citazione del registro**.
+    Su 210 bottiglie stratificate, italiano, modello v6:
+
+        con la citazione     84 su 85 passano la verifica   98,8 %
+        senza la citazione  104 su 125                      83,2 %
+
+    E non e' solo il conteggio. Letti a mano, i testi senza citazione sono
+    quelli in cui il modello inventa i piatti - «si serve bene con pesce,
+    verdure e verdoli», dove «verdoli» non e' nemmeno una parola - e mette i
+    cibi al posto dei profumi: «note sensoriali tipiche di manzo, cacciagione,
+    agnello e pasta». Quelli con la citazione sono buoni:
+    «Aglianico e Montepulciano, i vitigni del grande rosso del Sud, fra
+    Taurasi e Vulture. Il disciplinare lo vuole rosa piu' o meno intenso...»
+
+    La citazione non e' un ingrediente qualunque: e' l'unico pezzo di prosa
+    VERA che i fatti contengono, scritta da un consorzio per quel vino. Con
+    quella davanti il modello ha qualcosa da riformulare; senza, ha un
+    elenco di campi e la tentazione di scrivere un vino qualunque.
+
+    Copre il 45 % dell'archivio - un vino su due che si incontra - e l'altra
+    meta' la racconta la composizione, che non inventa mai.
+    """
+    return bool(f.disciplinare)
+
+
 # ---------------------------------------------------------------- narratore
 
 class Narratore:
@@ -1050,9 +1131,10 @@ class Narratore:
         # `prompt_addestrato`. Sbagliarla costa il doppio del tempo e tutta la
         # qualita' che l'addestramento aveva comprato.
         self.modello_addestrato = modello_addestrato
-        # Con la gabbia il modello riceve, per ogni bottiglia, una grammatica
-        # che ammette solo le parole dei suoi fatti e un lessico di raccordo:
-        # vedi `amelie.gabbia`, con la misura. Chi la vuole deve dare un
+        # La gabbia: vedi `amelie.gabbia`. Sta a FALSE, ed e' una misura che
+        # ha rovesciato la precedente - su trenta bottiglie facili sembrava
+        # guadagnare tre testi, su duecentodieci stratificate ne perde otto e
+        # sui record poveri produce italiano rotto. Chi la vuole deve dare un
         # `genera` che accetti la grammatica come secondo argomento.
         self.gabbia = gabbia
         # Chi sa dare il testo a pezzi. Senza, `racconta_a_frasi` funziona
@@ -1136,7 +1218,8 @@ class Narratore:
         # colore di un vino non e' un nome, e' un'affermazione. A questo
         # livello non ci sono affermazioni da fare.
         genera_qui = (consenti_modello and self.genera is not None
-                      and f.livello is not Livello.GENERICO)
+                      and f.livello is not Livello.GENERICO
+                      and _abbastanza_per_il_modello(f))
         # Il modo «generativa» e' l'unico in cui un testo scritto da un
         # modello - dal vivo o dalla cache, che e' lo stesso modello un giorno
         # prima - arriva in bocca al dispositivo. Nel modo «archivio» non ci

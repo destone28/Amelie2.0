@@ -1839,6 +1839,12 @@ class Matcher:
         # non aveva colore, e il verificatore ha lasciato passare un modello
         # che lo descriveva «di colore rubino». Letto sul dispositivo.
         f.colore = self._colore_di("denominazione", did)
+        # E col colore arriva la citazione del registro, che a questo gradino
+        # non arrivava mai: `_disciplinare` sceglie la tipologia che combacia
+        # per colore e qualificatori, e un colore unanime la identifica. Su
+        # una denominazione che fa rossi e bianchi il colore non e' unanime,
+        # non c'e' colore, e non c'e' citazione: com'e' giusto.
+        self._aggiungi_disciplinare(f, did, r["nome"], f.colore)
         # Un vitigno vale come "principale della denominazione" solo se lo e' per
         # la maggioranza delle sue tipologie: altrimenti si finirebbe per
         # attribuire al Chianti generico i vitigni di una sua versione rara.

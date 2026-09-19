@@ -139,6 +139,54 @@ def campiona(m: Matcher, quanti: int, seme: int):
     return casi
 
 
+def strato_di(ambito: str, f) -> tuple[str, ...]:
+    """Le dimensioni lungo cui un modello piccolo sbaglia in modo diverso.
+
+    Un numero medio nasconde i casi: su un rosso con le citazioni del
+    registro qualunque modello se la cava, su una denominazione con tre
+    fatti in croce comincia a riempire i buchi da solo. Si guarda dove
+    sbaglia, non solo quanto.
+    """
+    colore = (f.colore or "?").lower()[:5]
+    if f.categoria and "Sparkling" in f.categoria:
+        stile = "bolle"
+    elif f.categoria:
+        stile = "dolce"
+    else:
+        stile = "fermo"
+    ricchezza = sum(bool(x) for x in (f.vitigni, f.disciplinare, f.abbinamenti_in("it"),
+                                      f.note_sensoriali, f.note_vitigno, f.corpo,
+                                      f.temperatura_c, f.regione, f.abv))
+    quanti = "poveri" if ricchezza <= 3 else ("medi" if ricchezza <= 6 else "ricchi")
+    return (ambito, colore, stile, quanti,
+            "citato" if f.disciplinare else "senza citazioni")
+
+
+def campiona_a_strati(m: Matcher, quanti: int, seme: int):
+    """Tanti casi per ogni strato, non tanti casi in tutto.
+
+    Gli strati rari - un rosato con le bolle, una denominazione povera -
+    sono quelli su cui il modello non ha visto quasi niente in
+    addestramento, e sono quelli che al tavolo fanno la figuraccia.
+    """
+    rnd = random.Random(seme)
+    per_strato: dict[tuple, list] = {}
+    for ambito in ("vino", "tipologia", "denominazione"):
+        ids = [r[0] for r in m.con.execute(f"SELECT id FROM {ambito}")]
+        rnd.shuffle(ids)
+        for i in ids[:4000]:
+            f = getattr(m, f"_fatti_{ambito}")(i)
+            if f.vuoto:
+                continue
+            f.sicurezza = 95.0
+            strato = strato_di(ambito, f)
+            dentro = per_strato.setdefault(strato, [])
+            if len(dentro) < quanti:
+                dentro.append((ambito, i, f, strato))
+    casi = [c for strato in sorted(per_strato) for c in per_strato[strato]]
+    return casi
+
+
 def genera(url: str, prompt: str, imp: ImpostazioniLLM, temperatura: float,
            top_p: float, ripetizione: float, grammatica: str | None) -> tuple[str, float]:
     corpo = {"prompt": prompt, "n_predict": imp.max_token, "temperature": temperatura,
@@ -214,6 +262,8 @@ def main() -> None:
     ap.add_argument("--vocabolario", default=str(Path.home() / "modello/parole_it.txt"))
     ap.add_argument("--uscita", help="JSONL con ogni testo e il suo giudizio")
     ap.add_argument("--etichetta", default="", help="un nome per questa prova, nei risultati")
+    ap.add_argument("--strati", action="store_true",
+                    help="campiona tanti casi per STRATO invece che in tutto")
     ap.add_argument("--gabbia", metavar="LESSICO.txt",
                     help="vincola la generazione alle parole dei fatti piu' a questo lessico")
     a = ap.parse_args()
@@ -222,14 +272,15 @@ def main() -> None:
     temperature = a.temperatura or [0.7]
     imp = ImpostazioniLLM()
     m = Matcher(a.db)
-    casi = campiona(m, a.quanti, a.seme)
+    casi = (campiona_a_strati(m, a.quanti, a.seme) if a.strati
+            else [(x[0], x[1], x[2], ("tutti",)) for x in campiona(m, a.quanti, a.seme)])
     vocabolario = carica_vocabolario(Path(a.vocabolario))
     print(f"{len(casi)} vini (seme {a.seme}), lingua {a.lingua}, modello su {a.url}")
     uscita = open(a.uscita, "a", encoding="utf-8") if a.uscita else None
 
     for t in temperature:
         esiti = []
-        for ambito, ident, f in casi:
+        for ambito, ident, f, strato in casi:
             grammatica = gabbia(f, a.lingua, lessico) if lessico is not None else None
             grezzo, secondi = genera(a.url, prompt_addestrato(f, a.lingua), imp, t,
                                      a.top_p, a.ripetizione, grammatica)
@@ -237,7 +288,7 @@ def main() -> None:
             g = giudica(testo, f, a.lingua, vocabolario)
             g.update({"ambito": ambito, "id": ident, "cosa": f.nome or f.tipologia or f.denominazione,
                       "secondi": round(secondi, 1), "testo": testo, "temperatura": t,
-                      "etichetta": a.etichetta})
+                      "etichetta": a.etichetta, "strato": list(strato)})
             esiti.append(g)
             if uscita:
                 uscita.write(json.dumps(g, ensure_ascii=False) + "\n"); uscita.flush()
@@ -250,6 +301,18 @@ def main() -> None:
         print(f"\n=== temperatura {t}  {a.etichetta}")
         print(f"verifica: {ok}/{n} passano   parole fuori dai fatti: {fuori / n:.1f} per testo"
               f"   refusi: {refusi}   tronchi: {tronchi}   {sec:.1f} s/testo")
+        if a.strati:
+            import collections as _c
+            per = _c.defaultdict(list)
+            for e in esiti:
+                per[tuple(e["strato"])].append(e)
+            print("  --- per strato (bocciati / totale, parole fuori a testo):")
+            for strato in sorted(per, key=lambda k: -sum(not x["verifica_ok"] for x in per[k])):
+                es = per[strato]
+                ko = sum(not x["verifica_ok"] for x in es)
+                fuori_s = sum(len(x["fuori_dai_fatti"]) for x in es) / len(es)
+                if ko or fuori_s > 1.5:
+                    print(f"    {ko}/{len(es)}  {fuori_s:.1f}  {' · '.join(strato)}")
         for e in esiti:
             segni = []
             if not e["verifica_ok"]:

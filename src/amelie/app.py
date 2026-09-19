@@ -254,11 +254,11 @@ class Amelie:
         self.narratore = Narratore(modello_addestrato=cfg.modello_addestrato,
                                    genera=self._genera if not cfg.senza_modello else None,
                                    lingua=cfg.lingua,
-                                   # La gabbia e' parte del modo «generativa»:
-                                   # tre testi su trenta in piu' che passano
-                                   # la verifica, misurati, per un terzo di
-                                   # tempo in piu'. Vedi `amelie.gabbia`.
-                                   gabbia=True)
+                                   # La gabbia e' spenta: su duecentodieci
+                                   # bottiglie stratificate perde otto testi
+                                   # e sui record poveri scrive italiano
+                                   # rotto. Vedi `amelie.gabbia`.
+                                   gabbia=False)
         self.lex = self.narratore.lex
         self.lingua = cfg.lingua
 
@@ -1433,10 +1433,12 @@ class Amelie:
         bello, ma la decisione va presa PRIMA della chiamata che dura secondi,
         e chiederla al narratore vorrebbe dire aver gia' aspettato.
         """
+        from .narrator import _abbastanza_per_il_modello
         return (self.genera_racconti
                 and self.narratore.genera is not None
                 and not self._fatti.vuoto
-                and self._fatti.livello is not Livello.GENERICO)
+                and self._fatti.livello is not Livello.GENERICO
+                and _abbastanza_per_il_modello(self._fatti))
 
     def _la_carta_parla_ora(self) -> bool:
         """La carta ha questa bottiglia E sa dirla in questa lingua?
