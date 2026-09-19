@@ -576,27 +576,27 @@ svg { display: block; }
 }
 #spia.rotto { background: var(--errore-luce); opacity: .95; }
 
-/* La batteria: quattro tacche in basso a destra, senza numero. E' una stima
-   - il power bank non dice niente di se' - e un numero le darebbe una
-   precisione che non ha. Discreta come la spia: sta sotto il gesto dei tre
-   secondi e non lo intercetta. */
+/* La batteria: quattro tacche, grandi, nella riga delle impostazioni che la
+   riguarda - e solo li'. Stava in basso a destra sulla scena, otto pixel, e
+   non si vedeva: un'icona che non si vede e' una bugia per omissione. Qui e'
+   larga un dito, e toccare la riga la riporta a piena, che e' anche il
+   ritorno visivo del tocco. Senza numero: e' una stima, e un numero le
+   darebbe una precisione che non ha. */
 #batteria {
-  position: absolute; right: 26px; bottom: 7px; height: 10px;
-  display: flex; gap: 2px; align-items: flex-end;
-  padding: 1px 2px; border: 1px solid var(--oro-scuro); border-radius: 2px;
-  opacity: .45; pointer-events: none; z-index: 6;
+  flex: none; position: relative; height: 34px; margin-right: 8px;
+  display: flex; gap: 5px; align-items: center;
+  padding: 4px 6px; border: 2px solid var(--oro-scuro); border-radius: 6px;
 }
 #batteria::after {  /* il polo */
-  content: ""; position: absolute; right: -4px; top: 2px;
-  width: 2px; height: 4px; background: var(--oro-scuro); border-radius: 1px;
+  content: ""; position: absolute; right: -8px; top: 9px;
+  width: 5px; height: 12px; background: var(--oro-scuro); border-radius: 0 2px 2px 0;
 }
-#batteria i { display: block; width: 4px; height: 6px; background: var(--oro-scuro); opacity: .25; }
+#batteria i { display: block; width: 12px; height: 22px; border-radius: 2px;
+              background: var(--oro-scuro); opacity: .18; }
 #batteria.t1 i:nth-child(-n+1), #batteria.t2 i:nth-child(-n+2),
-#batteria.t3 i:nth-child(-n+3), #batteria.t4 i:nth-child(-n+4) { opacity: 1; }
-/* Con una tacca sola si fa vedere di piu'; con nessuna, si fa notare. */
-#batteria.t1 { opacity: .85; border-color: var(--oro); }
-#batteria.t1 i:first-child { background: var(--oro); }
-#batteria.t0 { opacity: .95; border-color: var(--errore-luce); animation: respiro 1.6s ease-in-out infinite; }
+#batteria.t3 i:nth-child(-n+3), #batteria.t4 i:nth-child(-n+4) { opacity: 1; background: var(--oro); }
+#batteria.t1 i:first-child, #batteria.t1 { border-color: var(--oro); }
+#batteria.t0 { border-color: var(--errore-luce); animation: respiro 1.6s ease-in-out infinite; }
 
 /* Lo stato tecnico si APRE SOPRA la scena, non ci si naviga. Prima era un
    `location.href`: su un chiosco senza barra degli indirizzi, senza tasto
@@ -611,17 +611,28 @@ svg { display: block; }
    Lo stato tecnico e' diventato una riga qui dentro. */
 #impostazioni {
   position: absolute; inset: 0; z-index: 9; background: var(--carbone);
-  display: flex; flex-direction: column; align-items: center;
-  /* Dal centro all'alto, e con lo scorrimento. Era centrato, e andava bene
-     finche' le righe erano tre; col selettore dei tre modi sono diventate sei,
-     il contenuto e' cresciuto oltre i 480 px di vetro e il primo pezzo a
-     uscire dal basso e' stato proprio il tasto per chiudere. */
-  justify-content: flex-start; gap: var(--passo);
-  overflow-y: auto; overscroll-behavior: contain;
-  padding: calc(var(--passo) * 2) calc(var(--passo) * 3);
-  /* Spazio in fondo perche' il tasto appiccicato non copra l'ultima riga. */
-  padding-bottom: calc(var(--tocco) + var(--passo) * 2);
 }
+/* L'elenco scorre; la X per chiudere sta fuori dall'elenco, ferma in basso a
+   sinistra, dov'e' quella che interrompe un racconto: e' lo stesso gesto e
+   deve stare nello stesso posto. Era una scritta «chiudi» in fondo alla
+   colonna: col selettore dei tre modi le righe sono diventate sei, il
+   contenuto ha superato i 480 px di vetro e la scritta e' finita sotto il
+   bordo - e appiccicata in fondo copriva l'ultima riga. */
+#i-elenco {
+  position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: flex-start; gap: var(--passo);
+  padding: calc(var(--passo) * 2) calc(var(--passo) * 3);
+  /* In fondo lo spazio della X, che sta sopra l'elenco: l'ultima riga deve
+     poter salire fin sopra di lei. */
+  padding-bottom: calc(var(--tocco) + var(--passo) * 4);
+}
+#i-chiudi {
+  position: absolute; left: calc(var(--passo) * 2); z-index: 8;
+  bottom: calc(var(--passo) * 2.8 + (var(--tocco-grande) - var(--tocco)) / 2);
+  border-color: rgba(138, 107, 48, .45); color: var(--avorio-tenue);
+}
+#i-chiudi.premuto { background: rgba(200, 134, 13, .16); border-color: var(--oro-chiaro); }
 #impostazioni[hidden] { display: none; }
 #i-titolo {
   font-size: var(--t-titolo, 46px); color: var(--oro); margin-bottom: var(--passo);
@@ -669,7 +680,6 @@ svg { display: block; }
   font-size: var(--t-scelta); color: var(--oro); visibility: hidden;
 }
 .i-scelta.acceso .i-segno { visibility: visible; }
-#i-batteria-segno.acceso { visibility: visible; }
 .i-scelta.acceso { border-color: var(--oro); }
 
 /* Il mirino. Occupa tutto il vetro perche' quello che si sta guardando e'
@@ -757,22 +767,13 @@ svg { display: block; }
   .scrivendo { animation: none; opacity: .8; }
 }
 
-#d-chiudi, #i-chiudi {
+#d-chiudi {
   min-width: calc(var(--tocco) * 2.5); height: var(--tocco);
   display: flex; align-items: center; justify-content: center;
   font-size: var(--t-scelta); color: var(--avorio);
   border: 2px solid var(--oro); border-radius: var(--raggio);
 }
-#d-chiudi.premuto, #i-chiudi.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
-/* Il tasto per chiudere le impostazioni resta in fondo allo schermo comunque
-   si scorra, e si vede: sul fondo carbone un bordo sottile spariva, e dentro
-   un pannello che adesso scorre spariva del tutto. */
-#i-chiudi {
-  position: sticky; bottom: 0; margin-top: auto;
-  background: var(--carbone); color: var(--oro-chiaro);
-  border-width: 3px; min-width: calc(var(--tocco) * 3.5);
-  box-shadow: 0 0 0 calc(var(--passo) / 2) var(--carbone);
-}
+#d-chiudi.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
 </style>
 </head>
 <body>
@@ -896,10 +897,10 @@ svg { display: block; }
   </button>
   <div id="muto"></div>
   <div id="spia"></div>
-  <div id="batteria" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div id="angolo"></div>
 
   <section id="impostazioni" hidden>
+   <div id="i-elenco">
     <div id="i-titolo">Impostazioni</div>
     <div class="i-titoletto" id="i-modo-titolo">Come racconta</div>
     <button class="i-riga i-scelta" id="i-modo-archivio" data-modo="archivio">
@@ -926,12 +927,15 @@ svg { display: block; }
         <div class="i-nome" id="i-batteria-nome">Batteria ricaricata</div>
         <div class="i-spiega" id="i-batteria-spiega"></div>
       </div>
-      <div class="i-segno" id="i-batteria-segno">&#10003;</div>
+      <div id="batteria" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     </button>
     <button class="i-riga" id="i-stato">
       <div class="i-nome" id="i-stato-nome">Stato tecnico</div>
     </button>
-    <div id="i-chiudi">chiudi</div>
+   </div>
+   <button class="cmd" id="i-chiudi" aria-label="Chiudi">
+     <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+   </button>
   </section>
 
   <section id="mirino" hidden>
@@ -1350,7 +1354,7 @@ eventi.onmessage = (e) => {
         $("i-stato-nome").textContent = m.impostazioni.stato_tecnico;
         $("i-batteria-nome").textContent = m.impostazioni.batteria_ricaricata;
         $("i-batteria-spiega").textContent = m.impostazioni.batteria_spiega;
-        $("i-chiudi").textContent = m.impostazioni.chiudi;
+        $("i-chiudi").setAttribute("aria-label", m.impostazioni.chiudi);
         $("d-chiudi").textContent = m.impostazioni.chiudi;
       }
       break;
@@ -1366,6 +1370,7 @@ eventi.onmessage = (e) => {
 
     case "impostazioni":
       disegnaImpostazioni(m);
+      if (m.batteria) segnaBatteria(m.batteria.tacche);
       break;
 
     case "mirino":
@@ -1453,10 +1458,8 @@ function disegnaImpostazioni(m) {
     fetch("/batteria/ricaricata", { method: "POST" })
       .then(r => r.json())
       .then(d => {
+        // Il ritorno del tocco e' l'icona stessa che torna a quattro tacche.
         if (typeof d.tacche === "number") segnaBatteria(d.tacche);
-        const segno = $("i-batteria-segno");
-        segno.classList.add("acceso");
-        setTimeout(() => segno.classList.remove("acceso"), 1400);
       })
       .catch(() => {});
   });
