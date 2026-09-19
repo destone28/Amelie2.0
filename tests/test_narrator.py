@@ -1415,3 +1415,23 @@ class TestIlCancelloDelModello:
                            "cacciagione.", f)
         assert not ok and any("piatto" in x for x in inv)
         assert verifica("Al naso amarena. Si accompagna bene a manzo.", f)[0]
+
+
+class TestInPurezza:
+    """«Etna in purezza, il vitigno siciliano di Sicilia»: l'Etna e' la
+    denominazione, e la frase passava perche' «Etna» sta nei fatti."""
+
+    def _fatti(self, **kw):
+        base = dict(livello=Livello.VINO, nome="Etna Rosso Contrada Arcuria",
+                    denominazione="Etna", regione="Sicilia", colore="Rosso",
+                    vitigni=["Nerello Mascalese"], sicurezza=95.0,
+                    disciplinare={"colore": "rosso rubino"})
+        base.update(kw)
+        return Fatti(**base)
+
+    def test_quel_che_sta_in_purezza_dev_essere_un_uva(self):
+        ok, inv = verifica("Etna in purezza, il vitigno siciliano di Sicilia.", self._fatti())
+        assert not ok and any("purezza" in x for x in inv)
+
+    def test_e_il_vitigno_vero_passa(self):
+        assert verifica("Nerello Mascalese in purezza, siciliano.", self._fatti())[0]

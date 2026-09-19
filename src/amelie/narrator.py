@@ -309,6 +309,12 @@ _CONTESTO_VITIGNI = re.compile(
     r"|grapes?\s+(?=(?-i:[A-Z]))|from\s+the\s+)"
     r"((?:[^.;:!?,]|,(?=\s+(?-i:[A-ZÀ-Ý])))*)", re.I)
 _UN_VITIGNO = re.compile(r"\b(un|a)\s+(?:grande\s+)?(vitigno|grape)\b", re.I)
+# «Nebbiolo in purezza» e' l'apertura che il corpus insegna, e quel che sta
+# davanti DEVE essere un'uva. Letto sul dispositivo: «Etna in purezza, il
+# vitigno siciliano di Sicilia» - l'Etna e' la denominazione, e la frase
+# passava perche' «Etna» sta nei fatti.
+_IN_PUREZZA = re.compile(
+    r"([A-ZÀ-Ý][\w'’ -]{2,40}?)\s+in\s+(?:purezza|pura\s+essenza)\b")
 
 
 def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]:
@@ -333,6 +339,10 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
                 continue
             if any(n in x for x in note):
                 fuori.append(f"{nome} detto vitigno, ma e' una nota olfattiva")
+    for m in _IN_PUREZZA.finditer(testo):
+        nome = _senza_accenti(m.group(1)).strip().lower()
+        if nome and not any(nome in u or u in nome for u in uve):
+            fuori.append(f"«{m.group(1).strip()}» detto in purezza, ma non e' un vitigno")
     # «Amarone della Valpolicella, un vitigno compagno...»: il vino stesso
     # presentato come uva. Il nome deve stare ATTACCATO a «un vitigno»: la
     # prima versione guardava i sessanta caratteri prima, e bocciava la scheda
