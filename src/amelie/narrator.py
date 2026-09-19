@@ -382,6 +382,28 @@ _RIPETUTA = re.compile(r"\b(\w{4,})[,\s]+\1(?=\s*(?:[,.;!?]|$))", re.I)
 _RIPETUTA_ATTACCATA = re.compile(r"\b(\w{4,})\s+\1\b(?!-)", re.I)
 
 
+# La stessa coppia di parole due volte nella stessa frase: «con bella acidità
+# e bella acidità». Le coppie sono piu' rare delle parole, e una coppia che
+# torna non e' un elenco - «Schiava Gentile e Schiava Grigia» ha coppie
+# diverse.
+_COPPIA = re.compile(r"\b([a-zà-ÿ]{4,} [a-zà-ÿ]{4,})\b")
+
+
+def _coppie_ripetute(testo: str) -> list[str]:
+    fuori = []
+    for frase in spezza_in_frasi(testo):
+        piano = _senza_accenti(frase).lower()
+        viste: set[str] = set()
+        parole = re.findall(r"[a-z]{4,}", piano)
+        for a, b in zip(parole, parole[1:]):
+            coppia = f"{a} {b}"
+            if coppia in viste:
+                fuori.append(f"ripetizione: {coppia}")
+                break
+            viste.add(coppia)
+    return fuori
+
+
 def _parole_ripetute(testo: str) -> list[str]:
     """Il modello che gira a vuoto: «delicato, delicato, fruttato», «delicato
     delicato e fruttato». Non prende «delicato, delicate» - due parole
@@ -394,6 +416,7 @@ def _parole_ripetute(testo: str) -> list[str]:
     trovate = []
     for rx in (_RIPETUTA, _RIPETUTA_ATTACCATA):
         trovate.extend(f"ripetizione: {m.group(0)}" for m in rx.finditer(testo))
+    trovate.extend(_coppie_ripetute(testo))
     return trovate
 
 
@@ -419,6 +442,11 @@ def _categoria_sbagliata(testo: str, fatti: Fatti, ammesso: str) -> str | None:
 
 
 _ROSSO = re.compile(r"\b(rosso|rossa|rubino|granato|tannico|tannicit[àa]|tannin)", re.I)
+# Per il rosato il tannino non conta: un rosato puo' averne. Contano i colori.
+_ROSSO_PURO = re.compile(r"\b(rosso|rossa|rubino|granato)\b", re.I)
+_COLORE_CHE_NON_LO_E = re.compile(
+    r"\bcolou?re?\s+(?:è\s+|is\s+|da\s+|of\s+)?(spumante|frizzante|dessert|passito|"
+    r"liquoroso|sparkling|fortified)\b", re.I)
 _BIANCO = re.compile(r"\b(bianco|bianca|paglierino|dorat[oa]|verdolino)", re.I)
 
 
@@ -439,6 +467,7 @@ def _colore_sbagliato(testo: str, fatti: Fatti, ammesso: str = "") -> str | None
         return None
     e_bianco = ("white" in dichiarato or "bianc" in dichiarato)
     e_rosso = ("red" in dichiarato or "ner" in dichiarato or "ross" in dichiarato)
+    e_rosato = ("rosat" in dichiarato or "rose" in dichiarato or "pink" in dichiarato)
 
     def fuori_dai_fatti(trovato):
         return trovato and _senza_accenti(trovato.group(1)) not in ammesso
@@ -447,6 +476,17 @@ def _colore_sbagliato(testo: str, fatti: Fatti, ammesso: str = "") -> str | None
         return f"colore contraddetto ({t.group(1)}, ma è bianco)"
     if e_rosso and not e_bianco and fuori_dai_fatti(t := _BIANCO.search(testo)):
         return f"colore contraddetto ({t.group(1)}, ma è rosso)"
+    # Un rosato non e' ne' rosso ne' bianco. «Il vino è rosato, di colore
+    # rosso», su un rosé: passava, perche' il rosato non era un colore che
+    # la regola conoscesse.
+    if e_rosato and not (e_rosso or e_bianco):
+        for rx in (_ROSSO_PURO, _BIANCO):
+            if fuori_dai_fatti(t := rx.search(testo)):
+                return f"colore contraddetto ({t.group(1)}, ma è rosato)"
+    # E un colore non e' una categoria: «di colore spumante», «colore da
+    # dessert». Il modello incolla due caselle dei fatti.
+    if (t := _COLORE_CHE_NON_LO_E.search(testo)):
+        return f"colore che non è un colore ({t.group(0)})"
     return None
 
 

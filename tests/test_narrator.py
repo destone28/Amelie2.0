@@ -1243,3 +1243,26 @@ class TestInFlussoValeLaStessaRegola:
             assert chiamate == [] and frasi
         finally:
             n.chiudi()
+
+
+class TestCioCheLaVerificaLasciavaPassare:
+    """Letti sui trenta testi della misura di riferimento: passavano tutti."""
+
+    def test_un_rosato_non_e_rosso(self):
+        f = Fatti(livello=Livello.VINO, nome="Infinito Rosé", colore="Rosato",
+                  vitigni=["Corvina"], sicurezza=95.0)
+        assert not verifica("Il vino è rosato, di colore rosso, con note di ciliegia.", f)[0]
+        assert verifica("Il vino è rosato, con note di ciliegia.", f)[0]
+
+    def test_un_colore_non_e_una_categoria(self):
+        f = Fatti(livello=Livello.TIPOLOGIA, tipologia="Asti", colore="Bianco",
+                  categoria="Sparkling Wine", sicurezza=95.0)
+        assert not verifica("Il vino è di colore spumante, con note di pesca.", f)[0]
+
+    def test_la_stessa_coppia_due_volte(self):
+        f = Fatti(livello=Livello.VINO, nome="Cannubi", colore="Rosso", sicurezza=95.0)
+        assert not verifica("È di corpo medio, con bella acidità e bella acidità.", f)[0]
+        assert verifica("Nasce da Schiava, Schiava Gentile e Schiava Grigia.",
+                        Fatti(livello=Livello.VINO, nome="Santa Maddalena", colore="Rosso",
+                              vitigni=["Schiava", "Schiava Gentile", "Schiava Grigia"],
+                              sicurezza=95.0))[0]
