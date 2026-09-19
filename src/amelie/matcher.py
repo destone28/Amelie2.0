@@ -382,6 +382,11 @@ class Fatti:
             self.nome, self.cantina, self.denominazione, self.tipologia,
             ", ".join(self.vitigni) or None,
             t("tipo", self.colore) or t("colore", self.colore),
+            # La categoria c'e' anche qui, e non e' un di piu': da quando il
+            # colore e' un colore, «spumante» e «passito» non stanno piu' nel
+            # suo posto, e senza questa riga lo studente non saprebbe piu' che
+            # quel vino ha le bolle.
+            t("categoria_ue", self.categoria),
             f"{self.abv}%" if self.abv else None,
             f"{self.temperatura_c}\u00b0" if self.temperatura_c else None,
             # Come fa il narratore: prima la versione nella lingua chiesta -
@@ -471,6 +476,35 @@ def sotto_lucchetto(f):
 # non di che colore, e per un vino cosi' il vincolo non si puo' applicare.
 COLORE_UE = {"Red": "Rosso", "White": "Bianco", "Rosé": "Rosato",
              "Rosso": "Rosso", "Bianco": "Bianco", "Rosato": "Rosato"}
+
+# La colonna `tipo` di X-Wines mescola due cose: il colore e lo stile. «Red»,
+# «White», «Rosé» sono colori; «Sparkling» e «Dessert» no, e per 2.948 vini su
+# 19.602 - il quindici per cento - finivano stampati nei fatti come «Colore:
+# spumante». Il modello lo ripeteva fedelmente, e usciva «di colore spumante».
+#
+# Peggio: `_disciplinare` accetta solo un colore vero, e quei vini non hanno
+# MAI ricevuto una citazione del registro. Misurato: zero su centocinquanta
+# spumanti e zero su centocinquanta dessert, contro il sessantuno per cento
+# dei rossi. Erano i fatti migliori che abbiamo, e a un vino su sette non
+# arrivavano.
+#
+# Quindi il tipo dice la FAMIGLIA, e il registro dice quale membro della
+# famiglia: si accetta la categoria della tipologia solo se concorda. La
+# tipologia di un vino si sceglie per somiglianza di nome, e su uno spumante
+# capita che peschi la versione ferma della stessa denominazione: crederle
+# vorrebbe dire dichiarare fermo un vino con le bolle.
+FAMIGLIA_DAL_TIPO = {
+    "Sparkling": ("Sparkling Wine", "Quality Sparkling Wine",
+                  "Quality Aromatic Sparkling Wine", "Semi-Sparkling Wine"),
+    "Spumante": ("Sparkling Wine", "Quality Sparkling Wine",
+                 "Quality Aromatic Sparkling Wine", "Semi-Sparkling Wine"),
+    "Dessert": ("Wine From Raisined Grapes", "Wine Of Overripe Grapes",
+                "Liqueur Wine"),
+    "Dessert/Port": ("Liqueur Wine", "Wine From Raisined Grapes",
+                     "Wine Of Overripe Grapes"),
+    "Dolce": ("Wine From Raisined Grapes", "Wine Of Overripe Grapes",
+              "Liqueur Wine"),
+}
 
 # Le parole con cui un'etichetta dichiara il proprio colore, nelle lingue in
 # cui le etichette italiane lo scrivono. Quando una di queste si legge, non e'
@@ -1693,17 +1727,46 @@ class Matcher:
             livello=Livello.VINO,
             nome=r["nome"], cantina=r["cantina"], regione=r["regione"],
             denominazione=r["den_nome"], tipo_denominazione=r["den_tipo"],
-            colore=r["tipo"], corpo=r["corpo"], acidita=r["acidita"],
+            # Il colore vero, non la colonna `tipo`: vedi `FAMIGLIA_DAL_TIPO`.
+            # `_colore_di` prende quello della tipologia, che viene dal
+            # registro UE, e ripiega sul tipo solo quando quello e' un colore.
+            colore=self._colore_di("vino", vid),
+            corpo=r["corpo"], acidita=r["acidita"],
             elaborazione=r["elaborazione"], abv=r["abv"],
         )
+        f.categoria = self._categoria_del_vino(r)
         f.vitigni = [x[0] for x in self.con.execute(
             "SELECT vi.nome FROM vino_vitigno vv JOIN vitigno vi ON vi.id = vv.vitigno_id"
             " WHERE vv.vino_id = ? ORDER BY vi.nome", (vid,))]
         f.abbinamenti = [x[0] for x in self.con.execute(
             "SELECT abbinamento FROM vino_abbinamento WHERE vino_id = ? LIMIT 6", (vid,))]
-        self._aggiungi_disciplinare(f, r["denominazione_id"], r["nome"], r["tipo"])
+        # Col colore vero e la categoria, il registro puo' finalmente dire la
+        # sua anche sugli spumanti e sui dessert.
+        self._aggiungi_disciplinare(f, r["denominazione_id"], r["nome"],
+                                    f.colore, f.categoria)
         self._aggiungi_nota_vitigno(f)
+        f.temperatura_c = f.temperatura_c or TEMPERATURA_PER_CATEGORIA.get(
+            f.categoria or "")
         return f
+
+    def _categoria_del_vino(self, r) -> str | None:
+        """La categoria UE di un vino: la famiglia la dice X-Wines, il membro
+        della famiglia lo dice il registro, e solo se i due concordano."""
+        famiglia = FAMIGLIA_DAL_TIPO.get(r["tipo"] or "")
+        if not famiglia:
+            return None
+        if r["denominazione_id"]:
+            tid = self._tipologia_del_vino(r["denominazione_id"], r["nome_norm"])
+            if tid is not None:
+                riga = self.con.execute(
+                    "SELECT categoria FROM tipologia WHERE id = ?", (tid,)).fetchone()
+                if riga and riga["categoria"] in famiglia:
+                    return riga["categoria"]
+        # Il registro non concorda o non sa: resta la famiglia, nella sua
+        # forma piu' generica, che e' vera per costruzione. Per i dessert non
+        # c'e' una forma generica onesta - passito, stramaturo e liquoroso
+        # sono tre cose diverse - e allora si tace.
+        return famiglia[0] if famiglia[0].endswith("Sparkling Wine") else None
 
     @sotto_lucchetto
     def _fatti_tipologia(self, tid: int) -> Fatti:

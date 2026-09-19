@@ -898,3 +898,48 @@ class TestLeCitazioniEntranoPulite:
         assert c["odore"] == "leggermente erbaceo, secco"
         assert c["sapore"] == "asciutto e armonico"
         assert c["colore"] == "rosso rubino"
+
+
+class TestIlColoreDiUnVinoEUnColore:
+    """La colonna `tipo` di X-Wines mescola colore e stile: «Sparkling» e
+    «Dessert» non sono colori, e per 2.948 vini su 19.602 finivano stampati
+    nei fatti come «Colore: spumante». Il modello lo ripeteva."""
+
+    def test_uno_spumante_ha_un_colore_e_una_categoria(self, m):
+        i = m.con.execute(
+            "SELECT id FROM vino WHERE tipo='Sparkling' AND denominazione_id IS NOT NULL"
+            " LIMIT 1").fetchone()[0]
+        f = m._fatti_vino(i)
+        assert f.colore in (None, "Rosso", "Bianco", "Rosato"), f.colore
+        assert f.categoria is None or "Sparkling" in f.categoria
+        assert "Colore: spumante" not in f.blocco_fatti()
+
+    def test_e_la_categoria_arriva_al_modello(self, m):
+        """Da quando il colore e' un colore, «spumante» non sta piu' nel suo
+        posto: senza la categoria nella riga compatta lo studente non saprebbe
+        piu' che quel vino ha le bolle."""
+        i = m.con.execute(
+            "SELECT id FROM vino WHERE tipo='Sparkling' AND denominazione_id IS NOT NULL"
+            " LIMIT 1").fetchone()[0]
+        f = m._fatti_vino(i)
+        if f.categoria:
+            assert "spumante" in f.blocco_compatto().lower()
+
+    def test_gli_spumanti_ricevono_le_citazioni_del_registro(self, m):
+        """Zero su centocinquanta, prima: `_disciplinare` accetta solo un
+        colore vero, e il loro non lo era."""
+        ids = [r[0] for r in m.con.execute(
+            "SELECT id FROM vino WHERE tipo='Sparkling' AND denominazione_id IS NOT NULL"
+            " LIMIT 120")]
+        con = sum(1 for i in ids if m._fatti_vino(i).disciplinare)
+        assert con > 0, "nessuno spumante ha una citazione"
+
+    def test_la_categoria_non_smentisce_il_tipo(self, m):
+        """La tipologia si sceglie per somiglianza di nome, e su uno spumante
+        capita che peschi la versione ferma: crederle vorrebbe dire dichiarare
+        fermo un vino con le bolle."""
+        ids = [r[0] for r in m.con.execute(
+            "SELECT id FROM vino WHERE tipo='Sparkling' LIMIT 150")]
+        for i in ids:
+            cat = m._fatti_vino(i).categoria
+            assert cat is None or "Sparkling" in cat, cat
