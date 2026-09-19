@@ -1307,3 +1307,56 @@ class TestLaGabbia:
                 n.chiudi()
         assert ricevute[0] and "Nebbiolo" in ricevute[0]
         assert ricevute[1] is None
+
+
+class TestGliElenchiCheSiRipetono:
+    """Trovati su testi COMPOSTI, dove ogni difetto e' un difetto vero: il
+    registro elenca le sfumature ammesse e X-Wines gli abbinamenti, e a voce
+    diventano «straw yellow, deep straw yellow and light straw yellow»."""
+
+    def test_le_sfumature_del_registro_si_dicono_una_volta(self):
+        from amelie.narrator import _senza_doppioni_di_elenco
+        assert _senza_doppioni_di_elenco(
+            ["giallo paglierino", "giallo paglierino carico",
+             "giallo paglierino scarico"]) == ["giallo paglierino"]
+
+    def test_ma_un_seguito_vero_resta(self):
+        from amelie.narrator import _senza_doppioni_di_elenco
+        assert _senza_doppioni_di_elenco(
+            ["rosso rubino", "tendente al granato con l'invecchiamento"]) == \
+            ["rosso rubino", "tendente al granato con l'invecchiamento"]
+
+    def test_e_gli_abbinamenti_non_si_annidano(self):
+        from amelie.matcher import Fatti, Livello
+        f = Fatti(livello=Livello.DENOMINAZIONE, denominazione="Asti", colore="Bianco",
+                  vitigni=["Moscato Bianco"], temperatura_c="6-8", sicurezza=95.0)
+        f.abbinamenti = ["Dessert", "Fruit Dessert", "Fruit"]
+        t = template(f, lingua="en")
+        assert "desserts, fruit desserts" not in t.lower()
+        ok, inv = verifica(t, f, "en")
+        assert ok, inv
+
+
+class TestLoSpezzafrasiELeCitazioni:
+    def test_un_iniziale_puntata_non_chiude_una_frase(self):
+        """«di M. Marengo»: la voce faceva una pausa in mezzo al nome della
+        cantina, e a schermo si illuminava la frase sbagliata."""
+        from amelie.narrator import spezza_in_frasi
+
+        assert spezza_in_frasi("Questo è il Barolo di M. Marengo. Nasce dal Nebbiolo.") == \
+            ["Questo è il Barolo di M. Marengo.", "Nasce dal Nebbiolo."]
+        assert len(spezza_in_frasi("Il vino di Abbazia di S. Gaudenzio è fresco.")) == 1
+
+    def test_una_ripetizione_dentro_una_citazione_non_e_nostra(self):
+        """Il registro enumera le sfumature ammesse: «rosso rubino più o meno
+        intenso, rosa più o meno intenso». Noi le riportiamo."""
+        f = Fatti(livello=Livello.VINO, nome="Cannonau", colore="Rosato",
+                  vitigni=["Cannonau"], sicurezza=95.0,
+                  disciplinare={"colore": "rosso rubino più o meno intenso, "
+                                          "rosa più o meno intenso"})
+        assert verifica("Il disciplinare lo vuole rosso rubino più o meno intenso, "
+                        "rosa più o meno intenso.", f)[0]
+        # Ma fuori dalla citazione resta un difetto.
+        assert not verifica("In bocca è più o meno intenso e più o meno intenso.",
+                            Fatti(livello=Livello.VINO, nome="X", colore="Rosso",
+                                  sicurezza=95.0))[0]

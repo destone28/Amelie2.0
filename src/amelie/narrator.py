@@ -69,7 +69,12 @@ class Racconto:
 # maiuscola, virgoletta o parentesi. Altrimenti «Un Barolo D.O.C.G. del 2016»
 # si spaccava dentro la sigla e ne usciva un frammento che comincia in
 # minuscolo - una pausa sbagliata nella voce, e una didascalia a meta'.
-_FINE_FRASE = re.compile(r"""(?<=[.!?…])\s+(?=[A-ZÀ-Ý«"“'(])""")
+# E non dopo un'iniziale puntata: «di M. Marengo», «Abbazia di S. Gaudenzio»,
+# «F.lli Vincenzi» sono nomi di cantina, e la voce ci faceva una pausa in
+# mezzo - «...di emme.» «Marengo.» - mentre a schermo si illuminava la frase
+# sbagliata. Sul dispositivo si sente, e sono centinaia di cantine.
+_FINE_FRASE = re.compile(
+    r"""(?<=[.!?…])(?<!\b[A-ZÀ-Ý].)\s+(?=[A-ZÀ-Ý«"“'(])""")
 
 
 def spezza_in_frasi(testo: str) -> list[str]:
@@ -200,7 +205,13 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
     # Le note olfattive finivano nei posti delle uve e dei cibi, in
     # minuscolo, dove il controllo sui nomi propri non guarda.
     invenzioni.extend(_note_al_posto_sbagliato(testo, fatti, lingua))
-    invenzioni.extend(_parole_ripetute(testo))
+    # Le ripetizioni che stanno dentro una citazione del registro non sono
+    # nostre: il registro enumera le sfumature ammesse - «rosso rubino piu' o
+    # meno intenso, rosa piu' o meno intenso» - e noi le riportiamo. Si
+    # riprende quel che si e' ripetuto, non chi l'ha scritto.
+    citazioni = _senza_accenti(" ".join((fatti.disciplinare or {}).values())).lower()
+    invenzioni.extend(x for x in _parole_ripetute(testo)
+                      if x.removeprefix("ripetizione: ") not in citazioni)
 
     return (not invenzioni), invenzioni
 
@@ -687,6 +698,15 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
         else:
             frasi.append(d("scheda_vitigno", vitigno=vitigno, nota=prima))
 
+    #    E dove si produce, ma solo quando c'e' poco altro da dire. Su 1.932
+    #    denominazioni e tipologie provate, 227 non avevano ne' vitigni ne'
+    #    citazioni ne' abbinamenti: il racconto era una frase sola, il nome e
+    #    basta. La regione sta in archivio per 375 denominazioni su 532, e
+    #    nessuno la leggeva.
+    if len(frasi) < 2 and f.regione and not (
+            f.denominazione and f.regione in f.denominazione):
+        frasi.append(d("dove_si_produce", regione=f.regione))
+
     # 2. Il disciplinare: la descrizione sensoriale VERA di questo vino. In
     #    italiano e' la citazione parola per parola; in inglese e' una resa
     #    nostra (vedi `amelie.organolettico`), e per questo la frase dice cosa
@@ -709,13 +729,15 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
         scelti.append("odore")
     # Con la scheda del vitigno gia' detta, del disciplinare resta una frase:
     # il sapore, che e' quello che si sente, o quel che c'e'. Cinque frasi in
-    # tutto, apertura compresa, e' il tetto.
-    if nota and len(scelti) > 1:
+    # tutto, apertura compresa, e' il tetto - e ci si arriva anche quando
+    # l'elenco delle uve e la scheda sono due frasi distinte.
+    if len(frasi) > 1 and len(scelti) > 1:
         scelti = ["sapore"] if "sapore" in scelti else scelti[:1]
     for ambito in ("colore", "odore", "sapore"):
         if ambito in scelti:
-            frasi.append(_frase_di_citazione(
-                lex, lingua, seme, ambito, _senza_coda_tronca(resi[ambito])))
+            citazione = ", ".join(_senza_doppioni_di_elenco(
+                [x.strip() for x in _senza_coda_tronca(resi[ambito]).split(",")]))
+            frasi.append(_frase_di_citazione(lex, lingua, seme, ambito, citazione))
 
     # 3. Corpo e acidita' sono due caselle di un vocabolario: dove parla il
     #    disciplinare sono il contorno, e il contorno si taglia.
@@ -740,8 +762,8 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
         # Senza doppioni DOPO la traduzione: «Dessert» e «Sweet» sono due
         # chiavi e una parola sola, «dolci», e il racconto diceva «dolci,
         # dolci e antipasti».
-        tradotti = list(dict.fromkeys(
-            lex.traduci_molti("abbinamento", abbinamenti, lingua=lingua)))
+        tradotti = _senza_doppioni_di_elenco(list(dict.fromkeys(
+            lex.traduci_molti("abbinamento", abbinamenti, lingua=lingua))))
         piatti = elenca_in_lingua(tradotti[:3], lingua)
     da = a = gradi = ""
     if f.temperatura_c:
@@ -858,6 +880,32 @@ _CODA_TRONCA = frozenset(
     "dei delle di da con e ed o al alla allo ai alle a in nel nella per piu "
     "tendente talvolta anche all dall dell nell sull d quell coll "
     "the a an of with and or to from more".split())
+
+
+def _senza_doppioni_di_elenco(voci: list[str]) -> list[str]:
+    """Da un elenco toglie le voci che ne ripetono un'altra con un'aggiunta.
+
+    Il registro elenca le sfumature ammesse - «giallo paglierino, giallo
+    paglierino carico, giallo paglierino scarico» - e X-Wines gli abbinamenti
+    - «dolci, dolci alla frutta, frutta». Detti a voce diventano «straw
+    yellow, deep straw yellow and light straw yellow»: vero, e insopportabile.
+
+    Si tiene la prima e si scartano quelle che la contengono tutta: dire
+    «giallo paglierino» non afferma niente che il registro non dica, dire
+    tre volte «giallo paglierino» non aggiunge niente a chi ascolta.
+    """
+    tenute: list[str] = []
+    parole_tenute: list[set[str]] = []
+    for voce in voci:
+        parole = {w for w in re.findall(r"[a-zà-ÿ]{3,}", _senza_accenti(voce).lower())}
+        if not parole:
+            tenute.append(voce)
+            continue
+        if any(p <= parole or parole <= p for p in parole_tenute):
+            continue
+        tenute.append(voce)
+        parole_tenute.append(parole)
+    return tenute
 
 
 def _senza_coda_tronca(testo: str) -> str:

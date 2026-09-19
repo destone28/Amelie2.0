@@ -136,6 +136,16 @@
         "It comes from {vitigni}."
       ]
     },
+    "dove_si_produce": {
+      "it": [
+        "Si produce in {regione}.",
+        "Nasce in {regione}."
+      ],
+      "en": [
+        "It is produced in {regione}.",
+        "It comes from {regione}."
+      ]
+    },
     "scheda_vitigno": {
       "it": "{vitigno}: {nota}",
       "en": "{vitigno}: {nota}"

@@ -378,8 +378,17 @@ class Fatti:
         def t(vocabolario, valore):
             return lessico.traduci(vocabolario, valore, lingua=lingua) if valore else None
 
+        regione = self.regione
+        if regione and self.denominazione and (
+            regione in self.denominazione or self.denominazione in regione
+                or (self.tipologia and regione in self.tipologia)):
+            regione = None
+
         pezzi = [
             self.nome, self.cantina, self.denominazione, self.tipologia,
+            # La regione: e' il fatto che il modello inventa quando non ce
+            # l'ha - «un grande abruzzese del Piemonte» - e la si conosce.
+            regione,
             ", ".join(self.vitigni) or None,
             t("tipo", self.colore) or t("colore", self.colore),
             # La categoria c'e' anche qui, e non e' un di piu': da quando il
@@ -1742,6 +1751,10 @@ class Matcher:
             "SELECT abbinamento FROM vino_abbinamento WHERE vino_id = ? LIMIT 6", (vid,))]
         # Col colore vero e la categoria, il registro puo' finalmente dire la
         # sua anche sugli spumanti e sui dessert.
+        if not f.regione and r["denominazione_id"]:
+            d = self.con.execute("SELECT regione FROM denominazione WHERE id = ?",
+                                 (r["denominazione_id"],)).fetchone()
+            f.regione = d["regione"] if d else None
         self._aggiungi_disciplinare(f, r["denominazione_id"], r["nome"],
                                     f.colore, f.categoria)
         self._aggiungi_nota_vitigno(f)
@@ -1771,7 +1784,7 @@ class Matcher:
     @sotto_lucchetto
     def _fatti_tipologia(self, tid: int) -> Fatti:
         r = self.con.execute(
-            "SELECT t.*, d.nome AS den_nome, d.tipo AS den_tipo"
+            "SELECT t.*, d.nome AS den_nome, d.tipo AS den_tipo, d.regione AS den_regione"
             " FROM tipologia t JOIN denominazione d ON d.id = t.denominazione_id"
             " WHERE t.id = ?", (tid,)
         ).fetchone()
@@ -1780,7 +1793,7 @@ class Matcher:
         f = Fatti(
             livello=Livello.TIPOLOGIA,
             tipologia=r["nome"], denominazione=r["den_nome"],
-            tipo_denominazione=r["den_tipo"],
+            tipo_denominazione=r["den_tipo"], regione=r["den_regione"],
             colore=r["colore"], categoria=r["categoria"],
         )
         # Solo i principali finiscono nei fatti raccontabili. Gli ammessi si
@@ -1799,12 +1812,16 @@ class Matcher:
     @sotto_lucchetto
     def _fatti_denominazione(self, did: int) -> Fatti:
         r = self.con.execute(
-            "SELECT nome, tipo FROM denominazione WHERE id = ?", (did,)).fetchone()
+            "SELECT nome, tipo, regione FROM denominazione WHERE id = ?", (did,)).fetchone()
         if not r:
             return Fatti()
         f = Fatti(
             livello=Livello.DENOMINAZIONE,
             denominazione=r["nome"], tipo_denominazione=r["tipo"],
+            # La regione sta in tabella per 375 denominazioni su 532 e non la
+            # leggeva nessuno. E' il fatto che manca proprio dove il modello
+            # inventa: «Catarratto, un grande abruzzese del Piemonte».
+            regione=r["regione"],
         )
         # La categoria si prende dalle tipologie, ma SOLO se sono unanimi: un
         # Marsala e' liquoroso in tutte e quindici le sue, e dirlo non e'
