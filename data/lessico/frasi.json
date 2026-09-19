@@ -3,14 +3,33 @@
   "_registro": "Due registri, e non è una svista. Quando il dispositivo si rivolge all'ospite gli dà del lei: è un oggetto da sala, e un tavolo di ristorante non si tratta con confidenza. Quando invece descrive il vino non si rivolge a nessuno: forma impersonale. Vale la regola già scritta nelle istruzioni al modello - si parla DEL VINO, non a chi legge - e in italiano l'impersonale la rispetta meglio di qualunque persona verbale. Da qui «Si serve fra 16 e 18 gradi», non «Servilo» e nemmeno «Lo serva».",
   "_segnaposto": "Fra graffe. Chi aggiunge una lingua deve usare gli stessi segnaposto della voce italiana: il test di copertura fallisce se ne manca uno o se ne compare uno inventato.",
   "_articolo": "Le frasi che presentano una tipologia o un vitigno ricevono il nome GIA' con l'articolo: in inglese «a» diventa «an» davanti a vocale, e «a Etna Rosso» si sente subito. L'articolo lo mette il narratore, che conosce il nome; il modello di frase non puo' saperlo.",
+  "_varianti": "Una voce puo' avere un ELENCO di frasi equivalenti per lingua. La prima e' quella di riferimento; le altre dicono la stessa cosa in un altro modo, senza aggiungere niente, con gli stessi segnaposto. Le sceglie il narratore con un seme stabile per vino: stesso vino, stesse parole; vini diversi, parole diverse.",
   "apertura": {
     "vino_certo": {
-      "it": "Questo è il {cosa}.",
-      "en": "This is the {cosa}."
+      "it": [
+        "Questo è il {cosa}.",
+        "Si tratta del {cosa}.",
+        "Questa bottiglia è il {cosa}."
+      ],
+      "en": [
+        "This is the {cosa}.",
+        "This bottle is the {cosa}.",
+        "This one is the {cosa}."
+      ]
     },
     "vino_dubbio": {
-      "it": "Direi il {cosa}.",
-      "en": "I'd say the {cosa}."
+      "it": [
+        "Direi il {cosa}.",
+        "Dovrebbe essere il {cosa}.",
+        "Mi sembra il {cosa}.",
+        "Sembra essere il {cosa}."
+      ],
+      "en": [
+        "I'd say the {cosa}.",
+        "It should be the {cosa}.",
+        "This looks like the {cosa}.",
+        "It seems to be the {cosa}."
+      ]
     },
     "vino_incerto": {
       "it": "Direi il {cosa}.",
@@ -29,28 +48,78 @@
       "en": "{annata} vintage"
     },
     "tipologia_nota": {
-      "it": "Questo è {cosa}.",
-      "en": "This is {cosa}."
+      "it": [
+        "Questo è {cosa}.",
+        "Si tratta di {cosa}.",
+        "Questa bottiglia è {cosa}."
+      ],
+      "en": [
+        "This is {cosa}.",
+        "This bottle is {cosa}."
+      ]
     },
     "tipologia_incerta": {
-      "it": "Direi {cosa}.",
-      "en": "I'd say {cosa}."
+      "it": [
+        "Direi {cosa}.",
+        "Dovrebbe essere {cosa}.",
+        "Mi sembra {cosa}.",
+        "Sembra essere {cosa}."
+      ],
+      "en": [
+        "I'd say {cosa}.",
+        "It should be {cosa}.",
+        "This looks like {cosa}.",
+        "It seems to be {cosa}."
+      ]
     },
     "denominazione": {
-      "it": "Questo è un {denominazione}, {sigla}.",
-      "en": "This is a {denominazione}, {sigla}."
+      "it": [
+        "Questo è un {denominazione}, {sigla}.",
+        "Si tratta di un {denominazione}, {sigla}."
+      ],
+      "en": [
+        "This is {denominazione}, {sigla}.",
+        "This bottle comes under {denominazione}, {sigla}."
+      ]
     },
     "vitigno_noto": {
-      "it": "Questo è un vino di {vitigno}.",
-      "en": "This is a {vitigno} wine."
+      "it": [
+        "Questo è un vino di {vitigno}.",
+        "Si tratta di un vino di {vitigno}.",
+        "Il vitigno è {vitigno}."
+      ],
+      "en": [
+        "This is a {vitigno} wine.",
+        "The grape here is {vitigno}.",
+        "This wine is a {vitigno}.",
+        "The grape variety is {vitigno}."
+      ]
     },
     "generico": {
-      "it": "Questo è {cosa}.",
-      "en": "This is {cosa}."
+      "it": [
+        "Questo è {cosa}.",
+        "Si tratta di {cosa}.",
+        "Questo vino è {cosa}."
+      ],
+      "en": [
+        "This is {cosa}.",
+        "This one is {cosa}.",
+        "This bottle is {cosa}."
+      ]
     },
     "vitigno_incerto": {
-      "it": "Direi {cosa}.",
-      "en": "I'd say {cosa}."
+      "it": [
+        "Direi {cosa}.",
+        "Probabilmente {cosa}.",
+        "Dovrebbe essere {cosa}.",
+        "Sembra {cosa}."
+      ],
+      "en": [
+        "I'd say {cosa}.",
+        "Probably {cosa}.",
+        "My guess would be {cosa}.",
+        "It seems to be {cosa}."
+      ]
     },
     "illeggibile": {
       "it": "Provi a girare l'etichetta verso di me.",
@@ -59,52 +128,160 @@
   },
   "corpo": {
     "nasce_da": {
-      "it": "Nasce da {vitigni}.",
-      "en": "It is made from {vitigni}."
+      "it": [
+        "Nasce da {vitigni}.",
+        "Si ottiene da {vitigni}."
+      ],
+      "en": [
+        "It is made from {vitigni}.",
+        "It comes from {vitigni}."
+      ]
     },
     "disciplinare_colore": {
-      "it": "Il disciplinare lo vuole {valore}.",
-      "en": "The specification calls for it to be {valore}."
+      "it": [
+        "Il disciplinare lo vuole {valore}.",
+        "Il disciplinare prevede che sia {valore}.",
+        "Secondo il disciplinare, deve presentarsi {valore}.",
+        "Il disciplinare lo descrive come {valore}."
+      ],
+      "en": [
+        "The specification calls for it to be {valore}.",
+        "The appellation rules describe it as {valore}.",
+        "Under the production rules, it should be {valore}.",
+        "The appellation rules expect it to be {valore}."
+      ]
     },
     "disciplinare_odore": {
-      "it": "Al naso, {valore}.",
-      "en": "On the nose, {valore}."
+      "it": [
+        "Al naso, {valore}.",
+        "All'olfatto, {valore}.",
+        "Il profumo si presenta {valore}."
+      ],
+      "en": [
+        "On the nose, {valore}.",
+        "Its aroma is {valore}.",
+        "The nose is {valore}.",
+        "The production rules describe the aroma as {valore}."
+      ]
     },
     "disciplinare_sapore": {
-      "it": "In bocca, {valore}.",
-      "en": "On the palate, {valore}."
+      "it": [
+        "In bocca, {valore}.",
+        "Al palato, {valore}.",
+        "Il sapore è {valore}.",
+        "Secondo il disciplinare, il gusto è {valore}."
+      ],
+      "en": [
+        "On the palate, {valore}.",
+        "In the mouth, it is {valore}.",
+        "The taste is {valore}.",
+        "The production rules describe the flavour as {valore}."
+      ]
     },
     "tratti_entrambi": {
-      "it": "È un vino {corpo}, con {acidita}.",
-      "en": "It is {corpo}, with {acidita}."
+      "it": [
+        "È un vino {corpo}, con {acidita}.",
+        "Un vino {corpo}, accompagnato da {acidita}.",
+        "Al palato è {corpo}, e mostra {acidita}."
+      ],
+      "en": [
+        "It is {corpo}, with {acidita}.",
+        "This is a {corpo} wine with {acidita}.",
+        "In the glass it is {corpo}, showing {acidita}.",
+        "The wine is {corpo} and has {acidita}."
+      ]
     },
     "tratti_corpo": {
-      "it": "È un vino {corpo}.",
-      "en": "It is {corpo}."
+      "it": [
+        "È un vino {corpo}.",
+        "Si tratta di un vino {corpo}."
+      ],
+      "en": [
+        "It is {corpo}.",
+        "This is a {corpo} wine.",
+        "The wine is {corpo}.",
+        "In the glass, it comes across as {corpo}."
+      ]
     },
     "tratti_acidita": {
-      "it": "È un vino con {acidita}.",
-      "en": "It is a wine with {acidita}."
+      "it": [
+        "È un vino con {acidita}.",
+        "Si presenta con {acidita}.",
+        "In bocca mostra {acidita}.",
+        "Si tratta di un vino con {acidita}."
+      ],
+      "en": [
+        "It is a wine with {acidita}.",
+        "The wine has {acidita}.",
+        "In the mouth, it shows {acidita}."
+      ]
     },
     "abbinamenti": {
-      "it": "Si accompagna bene a {piatti}.",
-      "en": "It goes well with {piatti}."
+      "it": [
+        "Si accompagna bene a {piatti}.",
+        "Si abbina bene a {piatti}.",
+        "In tavola si sposa con {piatti}.",
+        "Sta bene insieme a {piatti}."
+      ],
+      "en": [
+        "It goes well with {piatti}.",
+        "It pairs well with {piatti}.",
+        "It makes a good match for {piatti}."
+      ]
     },
     "servizio_intervallo": {
-      "it": "Si serve fra {da} e {a} gradi, con {piatti}.",
-      "en": "Best served between {da} and {a} degrees, with {piatti}."
+      "it": [
+        "Si serve fra {da} e {a} gradi, con {piatti}.",
+        "Va servito fra {da} e {a} gradi, insieme a {piatti}.",
+        "In tavola arriva fra {da} e {a} gradi, accanto a {piatti}.",
+        "Si porta in tavola fra {da} e {a} gradi, abbinato a {piatti}."
+      ],
+      "en": [
+        "Best served between {da} and {a} degrees, with {piatti}.",
+        "It is served between {da} and {a} degrees, alongside {piatti}.",
+        "It comes to the table between {da} and {a} degrees, paired with {piatti}.",
+        "Ideally poured between {da} and {a} degrees, it goes with {piatti}."
+      ]
     },
     "servizio_puntuale": {
-      "it": "Si serve a {gradi} gradi, con {piatti}.",
-      "en": "Best served at {gradi} degrees, with {piatti}."
+      "it": [
+        "Si serve a {gradi} gradi, con {piatti}.",
+        "Va servito a {gradi} gradi, insieme a {piatti}.",
+        "In tavola arriva a {gradi} gradi, accanto a {piatti}.",
+        "Si porta in tavola a {gradi} gradi, abbinato a {piatti}."
+      ],
+      "en": [
+        "Best served at {gradi} degrees, with {piatti}.",
+        "It is served at {gradi} degrees, alongside {piatti}.",
+        "It comes to the table at {gradi} degrees, paired with {piatti}.",
+        "Ideally poured at {gradi} degrees, it goes with {piatti}."
+      ]
     },
     "temperatura_intervallo": {
-      "it": "Si serve fra {da} e {a} gradi.",
-      "en": "Best served between {da} and {a} degrees."
+      "it": [
+        "Si serve fra {da} e {a} gradi.",
+        "Va servito fra {da} e {a} gradi.",
+        "In tavola arriva fra {da} e {a} gradi.",
+        "La temperatura di servizio è fra {da} e {a} gradi."
+      ],
+      "en": [
+        "Best served between {da} and {a} degrees.",
+        "It is served between {da} and {a} degrees.",
+        "It comes to the table between {da} and {a} degrees."
+      ]
     },
     "temperatura_puntuale": {
-      "it": "Si serve a {gradi} gradi.",
-      "en": "Best served at {gradi} degrees."
+      "it": [
+        "Si serve a {gradi} gradi.",
+        "Va servito a {gradi} gradi.",
+        "In tavola arriva a {gradi} gradi.",
+        "La temperatura di servizio è di {gradi} gradi."
+      ],
+      "en": [
+        "Best served at {gradi} degrees.",
+        "It is served at {gradi} degrees.",
+        "It comes to the table at {gradi} degrees."
+      ]
     },
     "generico_limite": {
       "it": "Questa bottiglia non è nel mio archivio: quello che le ho detto è scritto sull'etichetta.",
@@ -263,12 +440,12 @@
   },
   "sigle": {
     "DOP": {
-      "it": "DOCG o DOC",
-      "en": "DOCG or DOC"
+      "it": "a denominazione di origine protetta",
+      "en": "a protected designation of origin"
     },
     "IGP": {
-      "it": "IGT",
-      "en": "IGT"
+      "it": "a indicazione geografica protetta",
+      "en": "a protected geographical indication"
     }
   },
   "generico": {

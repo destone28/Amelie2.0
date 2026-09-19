@@ -503,6 +503,8 @@ def per_la_voce(testo: str, lingua: str = "it") -> str:
     >>> per_la_voce("A Barolo DOCG at 14%.", "en")
     'A Barolo controlled and guaranteed designation of origin at 14 percent.'
     """
+    # Le virgolette del nome - «Cannubi» a schermo - non si pronunciano.
+    testo = re.sub(r"[«»“”\"]", "", testo)
     for pattern, sostituto in _COMPILATE.get(lingua, _COMPILATE["it"]):
         testo = pattern.sub(sostituto, testo)
     # Il trattino fra numeri si legge "meno": va sciolto.

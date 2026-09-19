@@ -114,18 +114,34 @@ class TestColoreContraddetto:
         assert verifica("Un vino rosso intenso.", f)[0]
 
 
+def inizia_con(testo: str, chiave: str) -> bool:
+    """Il testo apre con UNA delle forme di quella frase d'apertura?
+
+    Le forme sono piu' d'una e le sceglie il seme: il test non puo' pretendere
+    una parola precisa, ma puo' pretendere che sia la frase GIUSTA - quella
+    affermativa o quella che dichiara il dubbio - in una qualunque delle sue
+    forme.
+    """
+    from amelie.lessico import carica
+    for forma in carica().varianti("apertura", chiave):
+        prefisso = forma.split("{")[0]
+        if prefisso and testo.startswith(prefisso):
+            return True
+    return False
+
+
 class TestTemplate:
     def test_il_livello_vino_e_affermativo(self, barolo):
         t = template(barolo)
-        assert "Questo è il" in t
+        assert inizia_con(t, "vino_certo"), t
         assert "Cannubi" in t and "Marchesi di Barolo" in t
 
     def test_il_livello_tipologia_dichiara_l_incertezza(self):
         f = Fatti(livello=Livello.TIPOLOGIA, tipologia="Barolo Riserva",
                   denominazione="Barolo", sicurezza=80.0)
         t = template(f)
-        assert t.startswith("Questo è un Barolo Riserva")
-        assert "Barolo Riserva" in t
+        assert inizia_con(t, "tipologia_nota"), t
+        assert "un Barolo Riserva" in t
 
     def test_il_livello_vitigno_non_attribuisce_al_produttore(self):
         f = Fatti(livello=Livello.VITIGNO, vitigni=["Nebbiolo"], sicurezza=80.0)
@@ -135,15 +151,15 @@ class TestTemplate:
     def test_un_vino_certo_si_annuncia_come_certo(self):
         f = Fatti(livello=Livello.VINO, nome="Barolo Cannubi",
                   cantina="Marchesi di Barolo", annata=2016, sicurezza=95.0)
-        assert template(f).startswith("Questo è il")
+        assert inizia_con(template(f), "vino_certo"), template(f)
 
     def test_un_vino_dubbio_non_si_annuncia_come_certo(self):
         """Sicurezza 80: il record e' completo, la somiglianza no."""
         f = Fatti(livello=Livello.VINO, nome="Barolo Cannubi",
                   cantina="Marchesi di Barolo", annata=2016, sicurezza=80.0)
         t = template(f)
-        assert not t.startswith("Questo è il")
-        assert t.startswith("Direi il")
+        assert not inizia_con(t, "vino_certo"), t
+        assert inizia_con(t, "vino_dubbio"), t
         assert "Barolo Cannubi" in t
 
     def test_una_somiglianza_bassa_si_dichiara_tale(self):
@@ -159,12 +175,12 @@ class TestTemplate:
         f = Fatti(livello=Livello.VINO, nome="Barolo Cannubi",
                   cantina="Marchesi di Barolo", sicurezza=60.0)
         t = template(f)
-        assert t.startswith("Direi il")
+        assert inizia_con(t, "vino_dubbio") or inizia_con(t, "vino_incerto"), t
         assert "non è nitida" not in t
 
     def test_anche_i_livelli_deboli_si_smorzano_sotto_la_soglia(self):
         f = Fatti(livello=Livello.VITIGNO, vitigni=["Nebbiolo"], sicurezza=50.0)
-        assert template(f).startswith("Direi")
+        assert inizia_con(template(f), "vitigno_incerto"), template(f)
 
     def test_il_template_supera_sempre_la_verifica(self, barolo):
         """La rete di sicurezza non puo' essere quella che inventa."""

@@ -537,6 +537,9 @@ def _chiave(s: str) -> str:
 def _elenca(pezzi: list[str]) -> str:
     """L'inglese vuole «and» prima dell'ultimo - ma non se l'ultimo ce l'ha
     gia' dentro, altrimenti esce «intense and persistent and harmonious»."""
+    # Senza doppioni: «erbaceo» e «erbacea» sono due frammenti e una resa
+    # sola, e usciva «herbaceous, herbaceous». Visto su 360 racconti composti.
+    pezzi = list(dict.fromkeys(pezzi))
     if len(pezzi) == 1:
         return pezzi[0]
     ultimo = pezzi[-1]

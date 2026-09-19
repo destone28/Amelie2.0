@@ -300,12 +300,17 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
             if any(n in x for x in note):
                 fuori.append(f"{nome} detto vitigno, ma e' una nota olfattiva")
     # «Amarone della Valpolicella, un vitigno compagno...»: il vino stesso
-    # presentato come uva.
-    for m in _UN_VITIGNO.finditer(testo):
-        prima = _senza_accenti(testo[max(0, m.start() - 60):m.start()]).lower()
-        for v in vino:
-            if v and v in prima and not any(v in u for u in uve):
-                fuori.append(f"«{v}» detto vitigno, ma e' il vino")
+    # presentato come uva. Il nome deve stare ATTACCATO a «un vitigno»: la
+    # prima versione guardava i sessanta caratteri prima, e bocciava la scheda
+    # del vitigno che dice «Non un vitigno ma una famiglia numerosa» subito
+    # dopo il nome del vino. Su 360 racconti composti, 7 falsi allarmi cosi'.
+    piano = _senza_accenti(testo).lower()
+    for v in vino:
+        if not v or any(v in u for u in uve):
+            continue
+        if re.search(re.escape(v) + r"\s*(?:,|\be\b|\bis\b)?\s*(?:un|a)\s+(?:grande\s+)?(?:vitigno|grape)\b",
+                     piano):
+            fuori.append(f"«{v}» detto vitigno, ma e' il vino")
     return fuori
 
 
@@ -341,7 +346,13 @@ def _note_al_posto_sbagliato(testo: str, fatti: Fatti, lingua: str) -> list[str]
     return fuori
 
 
-_RIPETUTA = re.compile(r"\b(\w{4,})\W+\1\b", re.I)
+# Solo spazio o virgola fra le due, e la seconda deve CHIUDERE - virgola,
+# punto o fine: «delicato, delicato, fruttato» e' il modello che gira a vuoto,
+# ma «Schiava, Schiava Gentile e Schiava Grigia» e' un elenco di uve,
+# «Pantelleria Pantelleria-Bianco» e «Carso/Carso-Kras» sono nomi del
+# registro, e «dolci, dolci secchi» e' una lista di piatti. Visti tutti su
+# 360 racconti composti dai fatti, dove non c'e' niente da bocciare.
+_RIPETUTA = re.compile(r"\b(\w{4,})[,\s]+\1(?=\s*(?:[,.;!?]|$))", re.I)
 
 
 def _parole_ripetute(testo: str) -> list[str]:
@@ -545,12 +556,21 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
                                        seme=_seme_per(seme, chiave), **kw)
     frasi = []
 
-    # 1. Da dove viene. La scheda del vitigno e' prosa scritta da una persona
-    #    e vale piu' di una formula; se non c'e', i vitigni.
-    if (nota := f.nota_in(lingua)):
-        frasi.append(nota)
-    elif f.vitigni:
+    # 1. Da dove viene. Prima i vitigni per nome - a meno che il nome del vino
+    #    non li contenga gia', «Cabernet Sauvignon» di tal cantina - poi la
+    #    scheda del vitigno, che e' prosa scritta da una persona e vale piu' di
+    #    una formula, ma nella sua prima frase sola: e' quella che lo
+    #    presenta, le altre approfondiscono, e qui si deve essere brevi.
+    #
+    #    La scheda senza il nome davanti era un difetto visto su 360 racconti
+    #    composti: «Questo e' un Valdinievole. Il vitigno piu' coltivato
+    #    d'Italia e l'anima della Toscana...» - e quale? Non lo diceva mai.
+    nel_nome = " ".join(x for x in (f.nome, f.tipologia, f.denominazione) if x).lower()
+    if f.vitigni and not all(v.lower() in nel_nome for v in f.vitigni[:3]):
         frasi.append(d("nasce_da", vitigni=elenca_in_lingua(f.vitigni[:3], lingua)))
+    nota = f.nota_in(lingua)
+    if nota:
+        frasi.append(spezza_in_frasi(nota)[0])
 
     # 2. Il disciplinare: la descrizione sensoriale VERA di questo vino. In
     #    italiano e' la citazione parola per parola; in inglese e' una resa
@@ -572,9 +592,14 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
     scelti = [a for a in ("colore", "sapore") if a in resi]
     if len(scelti) < 2 and "odore" in resi:
         scelti.append("odore")
+    # Con la scheda del vitigno gia' detta, del disciplinare resta una frase:
+    # il sapore, che e' quello che si sente, o quel che c'e'. Cinque frasi in
+    # tutto, apertura compresa, e' il tetto.
+    if nota and len(scelti) > 1:
+        scelti = ["sapore"] if "sapore" in scelti else scelti[:1]
     for ambito in ("colore", "odore", "sapore"):
         if ambito in scelti:
-            frasi.append(d(f"disciplinare_{ambito}", valore=resi[ambito]))
+            frasi.append(d(f"disciplinare_{ambito}", valore=_senza_coda_tronca(resi[ambito])))
 
     # 3. Corpo e acidita' sono due caselle di un vocabolario: dove parla il
     #    disciplinare sono il contorno, e il contorno si taglia.
@@ -596,8 +621,12 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
     #    prosa scritta a mano, gia' nella lingua giusta.
     piatti = ""
     if (abbinamenti := f.abbinamenti_in(lingua)):
-        piatti = elenca_in_lingua(
-            lex.traduci_molti("abbinamento", abbinamenti[:3], lingua=lingua), lingua)
+        # Senza doppioni DOPO la traduzione: «Dessert» e «Sweet» sono due
+        # chiavi e una parola sola, «dolci», e il racconto diceva «dolci,
+        # dolci e antipasti».
+        tradotti = list(dict.fromkeys(
+            lex.traduci_molti("abbinamento", abbinamenti, lingua=lingua)))
+        piatti = elenca_in_lingua(tradotti[:3], lingua)
     da = a = gradi = ""
     if f.temperatura_c:
         # "16-18" letto ad alta voce diventa "sedici trattino diciotto": va
@@ -631,6 +660,32 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
         frasi.append(d("generico_limite"))
 
     return [x for x in frasi if x]
+
+
+# Le parole con cui una citazione NON puo' finire. Il campo del disciplinare in
+# archivio e' stato tagliato a un numero di caratteri quando lo si e' estratto,
+# e a volte finisce a meta' inciso: «rosso rubino intenso, scuro, un» -
+# «brillante, dal». Letto ad alta voce e' un inciampo. Si toglie l'ultimo
+# inciso quando finisce con una di queste.
+_CODA_TRONCA = frozenset(
+    "un una uno il lo la i gli le l dal dalla dallo dai dalle del della dello "
+    "dei delle di da con e ed o al alla allo ai alle a in nel nella per piu "
+    "tendente talvolta anche the a an of with and or to from more".split())
+
+
+def _senza_coda_tronca(testo: str) -> str:
+    pezzi = [x.strip() for x in testo.split(",")]
+    while len(pezzi) > 1:
+        ultima = _senza_accenti(pezzi[-1]).lower().rstrip(".").split()
+        if ultima and ultima[-1] in _CODA_TRONCA:
+            pezzi.pop()
+            continue
+        break
+    testo = ", ".join(pezzi)
+    parole = testo.split()
+    if len(parole) > 1 and _senza_accenti(parole[-1]).lower().rstrip(".") in _CODA_TRONCA:
+        testo = " ".join(parole[:-1])
+    return testo.rstrip(" ,")
 
 
 def corpo_neutro(f: Fatti, lex: Lessico | None = None, lingua: str = "it") -> str:
