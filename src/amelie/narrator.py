@@ -440,9 +440,10 @@ def _note_al_posto_sbagliato(testo: str, fatti: Fatti, lingua: str) -> list[str]
 # registro, e «dolci, dolci secchi» e' una lista di piatti. Visti tutti su
 # 360 racconti composti dai fatti, dove non c'e' niente da bocciare.
 _RIPETUTA = re.compile(r"\b(\w{4,})[,\s]+\1(?=\s*(?:[,.;!?]|$))", re.I)
-# La stessa parola due volte con solo uno spazio in mezzo, e senza un trattino
-# dopo: «delicato delicato e fruttato» si', «Pantelleria Pantelleria-Bianco» no.
-_RIPETUTA_ATTACCATA = re.compile(r"\b(\w{4,})\s+\1\b(?!-)", re.I)
+# La stessa parola due volte con solo uno spazio in mezzo, e in minuscolo:
+# «delicato delicato e fruttato» si'; «Pantelleria Pantelleria-Bianco» e «Il
+# Sangiovese Sangiovese Predappio» no, sono nomi che stanno in archivio cosi'.
+_RIPETUTA_ATTACCATA = re.compile(r"\b([a-zà-ÿ]{4,})\s+\1\b(?!-)")
 
 
 # La stessa coppia di parole due volte nella stessa frase: «con bella acidità

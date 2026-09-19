@@ -423,8 +423,9 @@ class Fatti:
             # La categoria c'e' anche qui, e non e' un di piu': da quando il
             # colore e' un colore, «spumante» e «passito» non stanno piu' nel
             # suo posto, e senza questa riga lo studente non saprebbe piu' che
-            # quel vino ha le bolle.
-            t("categoria_ue", self.categoria),
+            # quel vino ha le bolle. Ma non quando e' la categoria generica -
+            # «Wine», cioe' «vino» - che di quel vino non dice niente.
+            t("categoria_ue", self.categoria) if self.categoria != "Wine" else None,
             f"{self.abv}%" if self.abv else None,
             f"{self.temperatura_c}\u00b0" if self.temperatura_c else None,
             # Come fa il narratore: prima la versione nella lingua chiesta -
