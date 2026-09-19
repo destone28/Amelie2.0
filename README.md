@@ -54,8 +54,8 @@ Tutto ciò che segue è stato misurato sull'hardware reale, non stimato.
 | Coerenza del riconoscimento | **96,4 %** su 139 etichette italiane reali |
 | Tempo OCR sulla board | **3,75 s** per etichetta (Cortex-A53, quattro thread) |
 | Ricerca nel database | ~5 ms |
-| Racconto pre-generato | istantaneo |
-| Racconto generato dal vivo | 65-90 s — **per questo si pre-genera** |
+| Racconto composto dai fatti (modo «archivio») | istantaneo |
+| Racconto scritto dal modello (modo «generativa», sperimentale) | 15-50 s |
 | Modello linguistico | 8 token/s in lettura, 4,2 in scrittura |
 
 ---

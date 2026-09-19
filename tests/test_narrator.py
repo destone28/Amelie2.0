@@ -325,7 +325,9 @@ class TestChiusura:
             try:
                 for _ in range(40):
                     f = m.cerca(["Barolo", "Marchesi di Barolo", "Cannubi"])
-                    n.racconta(f)
+                    # In «generativa» e senza modello: cosi' si passa da
+                    # `_dalla_cache`, che e' dove il lucchetto serve.
+                    n.racconta(f, preferisci_modello=True)
             except Exception as e:                      # noqa: BLE001
                 errori.append(e)
             finally:
@@ -708,7 +710,7 @@ class TestRaccontoAFrasi:
         parlare: è tutto il punto."""
         n = self._narratore(["Nasce dal Nebbiolo. "])
         try:
-            frasi = n.racconta_a_frasi(self._fatti())
+            frasi = n.racconta_a_frasi(self._fatti(), preferisci_modello=True)
             prima = next(frasi)
             assert prima and "Nebbiolo" not in prima      # è l'apertura, non il modello
         finally:
@@ -717,7 +719,7 @@ class TestRaccontoAFrasi:
     def test_le_frasi_del_modello_seguono(self):
         n = self._narratore(["Nasce dal Nebbiolo. ", "Da servire fra i sedici e i diciotto gradi. "])
         try:
-            frasi = list(n.racconta_a_frasi(self._fatti()))
+            frasi = list(n.racconta_a_frasi(self._fatti(), preferisci_modello=True))
             assert any("Nebbiolo" in f for f in frasi)
             assert any("sedici" in f for f in frasi)
         finally:
@@ -729,7 +731,7 @@ class TestRaccontoAFrasi:
                              "Ha vinto tre stelle al Gambero Rosso nel 1998. ",
                              "Da servire fra i sedici e i diciotto gradi. "])
         try:
-            frasi = list(n.racconta_a_frasi(self._fatti()))
+            frasi = list(n.racconta_a_frasi(self._fatti(), preferisci_modello=True))
             assert not any("Gambero" in f for f in frasi)
             assert any("Nebbiolo" in f for f in frasi)
             assert any("sedici" in f for f in frasi)
@@ -740,7 +742,7 @@ class TestRaccontoAFrasi:
         """Chi ascolta non deve accorgersi che qualcosa non ha funzionato."""
         n = self._narratore(["Ha vinto tre stelle nel 1998. "])
         try:
-            frasi = list(n.racconta_a_frasi(self._fatti()))
+            frasi = list(n.racconta_a_frasi(self._fatti(), preferisci_modello=True))
             assert not any("1998" in f for f in frasi)
             assert len(frasi) > 1                  # l'apertura più il template
             assert any("piemontese" in f for f in frasi)
@@ -750,7 +752,7 @@ class TestRaccontoAFrasi:
     def test_senza_modello_si_racconta_lo_stesso(self):
         n = Narratore()
         try:
-            frasi = list(n.racconta_a_frasi(self._fatti()))
+            frasi = list(n.racconta_a_frasi(self._fatti(), preferisci_modello=True))
             assert any("piemontese" in f for f in frasi)
         finally:
             n.chiudi()
@@ -760,7 +762,7 @@ class TestRaccontoAFrasi:
         mai."""
         n = Narratore(genera=lambda p: "Nasce dal Nebbiolo. Da servire fra i sedici e i diciotto gradi.")
         try:
-            frasi = list(n.racconta_a_frasi(self._fatti()))
+            frasi = list(n.racconta_a_frasi(self._fatti(), preferisci_modello=True))
             assert any("Nebbiolo" in f for f in frasi)
         finally:
             n.chiudi()
@@ -946,7 +948,9 @@ class TestAncheLaCacheSiVerifica:
         try:
             f = Fatti(livello=Livello.TIPOLOGIA, tipologia="Franciacorta",
                       colore="Bianco", sicurezza=90.0, origine=("tipologia", 7))
-            r = n.racconta(f)
+            # In «generativa», senza modello: la cache e' la prima cosa che
+            # si legge, e dev'essere lei a venire scartata.
+            r = n.racconta(f, preferisci_modello=True)
             assert r.origine != "cache"
             assert "Borgognone" not in r.testo
         finally:
@@ -1020,7 +1024,7 @@ class TestIlRaccontoCompostoDaiFatti:
         from amelie.narrator import seme_di
         # `crc32` di una stringa nota: se cambia, cambia il racconto di ogni
         # vino a ogni riavvio, e nessuno se ne accorgerebbe dai test.
-        assert seme_di(self._barolo()) == seme_di(self._barolo())
+        assert seme_di(self._barolo()) == 331640975
         assert seme_di(self._barolo()) != seme_di(self._barolo(nome="Brunate"))
 
     def test_e_breve(self):
@@ -1079,5 +1083,163 @@ class TestInArchivioIlModelloNonParlaMai:
             # E in «generativa» invece la cache si usa, se regge la verifica.
             r = n.racconta(f, preferisci_modello=True)
             assert r.origine in ("cache", "modello")
+        finally:
+            n.chiudi()
+
+
+class TestLaRevisioneDelRaccontoComposto:
+    """Trentatre' segnalazioni di una revisione a piu' lenti sul racconto
+    composto, riprodotte sull'archivio vero. Quelle vere stanno qui, perche'
+    non tornino."""
+
+    def _fatti(self, **kw):
+        base = dict(livello=Livello.TIPOLOGIA, tipologia="Franciacorta",
+                    colore="Bianco", sicurezza=90.0, vitigni=["Chardonnay", "Erbamat"],
+                    note_vitigno="Borgognone, ovunque nel mondo. In Italia va ovunque.")
+        base.update(kw)
+        return Fatti(**base)
+
+    def test_la_scheda_del_vitigno_porta_il_suo_nome_davanti(self):
+        """«Questa bottiglia e' un Franciacorta. Borgognone, ovunque nel
+        mondo.»: parole vere dell'archivio, soggetto sbagliato."""
+        t = template(self._fatti())
+        assert "Chardonnay: Borgognone, ovunque nel mondo." in t
+
+    def test_con_un_uva_sola_la_scheda_si_aggancia_alle_uve(self):
+        t = template(self._fatti(vitigni=["Chardonnay"]))
+        assert "Chardonnay: Borgognone, ovunque nel mondo." in t
+        assert "Chardonnay. Chardonnay" not in t
+
+    def test_ma_non_se_la_scheda_lo_nomina_gia(self):
+        t = template(self._fatti(note_vitigno="Lo Chardonnay e' ovunque. Anche qui."))
+        assert "Chardonnay: Lo Chardonnay" not in t
+        assert "Lo Chardonnay e' ovunque." in t
+
+    def test_quattro_uve_si_dicono_tutte(self):
+        """Il Bardolino ne ha quattro a pari merito, e con tre si perdeva la
+        Corvina."""
+        t = template(self._fatti(vitigni=["Molinara", "Rondinella", "Corvinone", "Corvina"],
+                                 note_vitigno=None))
+        assert "Corvina" in t
+
+    def test_una_citazione_col_verbo_non_finisce_dopo_una_copula(self):
+        """«Il sapore e' sono asciutti armonici», letto sul dispositivo."""
+        f = self._fatti(note_vitigno=None,
+                        disciplinare={"sapore": "sono asciutti armonici con retrogusto amarognolo"})
+        t = template(f)
+        assert "è sono" not in t and "sono asciutti armonici" in t
+
+    def test_una_citazione_relativa_vuole_un_nome_davanti(self):
+        """«Il disciplinare lo vuole che va dal giallo paglierino»."""
+        f = self._fatti(note_vitigno=None,
+                        disciplinare={"colore": "che va dal giallo paglierino a verdognolo"})
+        t = template(f)
+        assert "vuole che" not in t and "lo descrive come che" not in t
+        assert "colore che va dal giallo paglierino" in t
+
+    def test_la_forma_non_ripete_una_parola_della_citazione(self):
+        """«il gusto e' ... con lieve gusto di mandorla»: su tutti i semi."""
+        from amelie.narrator import _frase_di_citazione
+        from amelie.lessico import carica
+        for seme in range(40):
+            t = _frase_di_citazione(carica(), "it", seme, "sapore",
+                                    "asciutto, con lieve gusto di mandorla")
+            assert "gusto è" not in t, t
+
+    def test_in_inglese_un_participio_sta_solo_dopo_la_virgola(self):
+        from amelie.narrator import _frase_di_citazione
+        from amelie.lessico import carica
+        for seme in range(40):
+            t = _frase_di_citazione(carica(), "en", seme, "sapore", "ranging from dry to sweet")
+            assert "is ranging" not in t and "be ranging" not in t and "as ranging" not in t, t
+
+    def test_in_inglese_may_be_ha_il_suo_soggetto(self):
+        from amelie.narrator import _frase_di_citazione
+        from amelie.lessico import carica
+        t = _frase_di_citazione(carica(), "en", 3, "sapore", "may be pleasantly fruity")
+        assert "it may be pleasantly fruity" in t
+
+    def test_davanti_a_una_a_l_italiano_vuole_ad(self):
+        t = template(self._fatti(note_vitigno=None, abbinamenti=["Appetizer", "Lamb"],
+                                 temperatura_c="6-8"))
+        assert "a antipasti" not in t and "a aperitivo" not in t
+
+    def test_la_coda_tronca_con_l_articolo_eliso(self):
+        from amelie.narrator import _senza_coda_tronca
+        assert _senza_coda_tronca("giallo ambrato, all'") == "giallo ambrato"
+        assert _senza_coda_tronca("rosso rubino con riflessi violacei e dall’") == \
+            "rosso rubino con riflessi violacei"
+
+    def test_il_seme_per_frase_mescola_anche_su_liste_pari(self):
+        """Con lo XOR uscivano quattro combinazioni su ventimila semi."""
+        from amelie.narrator import _seme_per
+        chiavi = ["disciplinare_colore", "disciplinare_sapore", "servizio_intervallo",
+                  "abbinamenti", "vino_dubbio", "temperatura_intervallo"]
+        combinazioni = {tuple(_seme_per(s, k) % 4 for k in chiavi) for s in range(0, 4_000_000, 997)}
+        assert len(combinazioni) > 500
+
+
+class TestLaVerificaDopoLaRevisione:
+    def _fatti(self, **kw):
+        base = dict(livello=Livello.VINO, nome="Chianti", vitigni=["Sangiovese", "Canaiolo"],
+                    note_sensoriali=["amarena", "prugna", "acidità viva"], colore="Rosso",
+                    sicurezza=95.0)
+        base.update(kw)
+        return Fatti(**base)
+
+    def test_l_elenco_delle_uve_si_guarda_tutto(self):
+        """«Nasce dal Sangiovese, Amarena e Canaiolo» passava: la prima
+        versione si fermava alla virgola."""
+        assert not verifica("Nasce dal Sangiovese, Amarena e Canaiolo.", self._fatti())[0]
+
+    def test_ma_un_inciso_dopo_la_virgola_no(self):
+        assert verifica("Nasce dal Sangiovese, con note di amarena.", self._fatti())[0]
+        assert verifica("Nasce dal Sangiovese, il vitigno della zona.", self._fatti())[0]
+
+    def test_un_uva_nominata_dentro_una_scheda_non_trascina_i_profumi(self):
+        """«Nome popolare dell'uva Isabella, ibrido americano dal profumo di
+        fragola»: l'elenco finisce a Isabella."""
+        f = self._fatti(vitigni=["Isabella"], note_sensoriali=["fragola"])
+        assert verifica("Nome popolare dell'uva Isabella, ibrido americano dal "
+                        "profumo di fragola.", f)[0]
+
+    def test_vitigno_con_l_aggettivo_non_e_un_elenco(self):
+        """La scheda della Molinara: «Vitigno veronese dal colore tenue e
+        dall'acidita' viva» - e la nota «acidita' viva» finiva letta come uva."""
+        f = self._fatti(vitigni=["Molinara"])
+        assert verifica("Molinara: Vitigno veronese dal colore tenue e dall'acidità viva.", f)[0]
+
+    def test_l_apostrofo_tipografico_vale_come_quello_dritto(self):
+        assert not verifica("Nasce dall’incontro di Sangiovese e Amarena.", self._fatti())[0]
+
+    def test_il_vino_detto_vitigno_anche_con_che_e(self):
+        f = self._fatti(livello=Livello.DENOMINAZIONE, nome=None,
+                        denominazione="Amarone della Valpolicella", vitigni=["Corvina"])
+        assert not verifica("Amarone della Valpolicella, che è un vitigno del Veneto.", f)[0]
+        assert not verifica("Amarone della Valpolicella e' un vitigno.", f)[0]
+
+    def test_le_ripetizioni_che_si_prendono_e_quelle_che_no(self):
+        from amelie.narrator import _parole_ripetute
+        assert _parole_ripetute("In bocca è delicato delicato e fruttato.")
+        assert not _parole_ripetute("con bella acidità e buona acidità.")
+        assert not _parole_ripetute("It goes well with cheese and matured cheese.")
+        assert not _parole_ripetute("Nasce da Schiava, Schiava Gentile e Schiava Grigia.")
+        assert not _parole_ripetute("Direi un Pantelleria Pantelleria-Bianco.")
+        assert not _parole_ripetute("con antipasti, dolci, dolci secchi e frutta.")
+
+
+class TestInFlussoValeLaStessaRegola:
+    def test_senza_preferire_il_modello_le_frasi_sono_composte(self):
+        from amelie.narrator import Narratore
+        chiamate = []
+
+        def genera(p):
+            chiamate.append(p); yield "Ha vinto tre stelle. "
+
+        n = Narratore(genera=lambda p: "Ha vinto tre stelle.", genera_a_flusso=genera)
+        try:
+            f = Fatti(livello=Livello.VITIGNO, vitigni=["Nebbiolo"], sicurezza=90.0)
+            frasi = list(n.racconta_a_frasi(f))
+            assert chiamate == [] and frasi
         finally:
             n.chiudi()

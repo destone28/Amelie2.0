@@ -17,15 +17,15 @@ la voce cominci.
 Il momento in cui l'ospite appoggia la bottiglia è l'unica cosa che il
 dispositivo non controlla. Da lì:
 
-    assestamento    0,6 s   la bottiglia smette di oscillare
-    scatto          0,3 s   luce, scarto dei fotogrammi vecchi, raffica
-    OCR             3,8 s   il vero costo
-    riconoscimento  ~0 s    SQLite
-    racconto        ~0 s    se è in cache; 65 s se va generato dal vivo
+    innesco         0,15 s  il sensore di distanza, tre letture d'accordo
+    scatto          ~0 s    il fotogramma si prende dal flusso gia' in moto
+    OCR             0,5-1,5 s  il vero costo
+    riconoscimento  ~0,05 s SQLite
+    racconto        ~0 s    composto dai fatti; decine di secondi dal modello
 
-Perciò il testo pre-generato non è un'ottimizzazione: è ciò che rende il
-dispositivo utilizzabile. E l'anello di luce copre i quattro secondi di lavoro
-con qualcosa da guardare.
+I numeri sono misurati sul dispositivo, e sono cambiati: lo scatto costava
+0,7 s e l'OCR 3,8, e il racconto veniva da un testo pre-generato perche' il
+modello era l'unica alternativa. Oggi il racconto si compone dai fatti.
 """
 
 from __future__ import annotations
@@ -99,15 +99,16 @@ TETTO_RACCONTO_S = 900.0
 # del progetto che l'unita' systemd lascia scrivibile.
 PERCORSO_VOLUME = RADICE / "var" / "volume"
 # Le «descrizioni generate»: acceso, il modello scrive il racconto per QUESTA
-# bottiglia; spento, si legge il testo gia' pronto in archivio. Sta accanto al
-# volume e si ricorda allo stesso modo, perche' e' la stessa cosa - una scelta
-# di chi apre il locale, non un parametro di collaudo.
+# bottiglia; spento, il racconto si compone dai fatti. Sta accanto al volume e
+# si ricorda allo stesso modo, perche' e' la stessa cosa - una scelta di chi
+# apre il locale, non un parametro di collaudo.
 PERCORSO_GENERATI = RADICE / "var" / "racconti_generati"
 # Come il dispositivo racconta. Tre modi, e la differenza fra loro non e' di
 # stile: e' DA DOVE VIENE quello che dice.
 #
-#   archivio    i testi gia' pronti, composti dai dati del registro UE.
-#               Istantanei, e veri per costruzione.
+#   archivio    il racconto composto dai dati del registro UE e dal
+#               disciplinare, senza modello. Istantaneo, e vero per
+#               costruzione: e' il modo predefinito.
 #   generativa  gli stessi dati, ma il testo lo scrive il modello sul momento
 #               per QUELLA bottiglia. Costa l'attesa della generazione, e passa
 #               dalla stessa verifica di sempre.
@@ -173,9 +174,10 @@ class Configurazione:
     # Nebbiolo inverte i fatti - il template dice «colore scarico» e lui scrive
     # «colore scuro». Provati anche Qwen 2.5 1.5B (peggiore e piu' lento) e la
     # riscrittura del template (butta via meta' dei fatti).
-    # Il testo pre-generato in cache resta la prima scelta; sotto c'e' il
-    # template, che e' vero per costruzione. Con --con-modello si riaccende la
-    # generazione dal vivo per l'ignoto.
+    # Il racconto composto dai fatti e' la scelta predefinita, ed e' vero per
+    # costruzione. Con --con-modello il modo «generativa» diventa scegliibile
+    # dalle impostazioni: il modello scrive per primo, verificato, e ripiega
+    # sul testo pronto per quel record e poi sulla composizione.
     senza_modello: bool = True
     # Il modello caricato e' quello affinato su questo progetto? Cambia la
     # FORMA del prompt, non solo il contenuto: il modello addestrato vuole i
@@ -1434,9 +1436,14 @@ class Amelie:
         from .narrator import Racconto, _con_articolo
         from .matcher import Livello
 
+        import zlib
+
         v = self._voce
         titolo = v.titolo_in(self.lingua)
+        # Col seme del titolo, come fa il narratore col vino: stessa voce,
+        # stesse parole, e voci diverse non aprono tutte allo stesso modo.
         apre = self.lex.frase("apertura", "tipologia_nota", lingua=self.lingua,
+                              seme=zlib.crc32(titolo.encode("utf-8")),
                               cosa=_con_articolo(titolo, self.lingua))
         return Racconto(testo=f"{apre} {v.testo_in(self.lingua)}",
                         origine="carta", livello=Livello.TIPOLOGIA)
@@ -2279,8 +2286,9 @@ def main() -> None:
                     help="il modello caricato e' quello affinato su questo "
                          "progetto: vuole il prompt compatto")
     ap.add_argument("--con-modello", action="store_true",
-                    help="genera dal vivo per cio' che non e' in cache "
-                         "(lento e di qualita' incerta: vedi docs/04-QUALITA.md)")
+                    help="rende scegliibile il modo «generativa», in cui il modello "
+                         "scrive il racconto (lento e di qualita' incerta: vedi "
+                         "docs/04-QUALITA.md)")
     ap.add_argument("--carta", metavar="FILE.csv",
                     help="una carta dei vini al posto dell'archivio: un CSV "
                          "con le colonne «titolo» e «descrizione». E' una "

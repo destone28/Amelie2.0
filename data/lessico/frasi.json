@@ -89,9 +89,8 @@
         "Il vitigno è {vitigno}."
       ],
       "en": [
-        "This is a {vitigno} wine.",
+        "The grape is {vitigno}.",
         "The grape here is {vitigno}.",
-        "This wine is a {vitigno}.",
         "The grape variety is {vitigno}."
       ]
     },
@@ -137,18 +136,24 @@
         "It comes from {vitigni}."
       ]
     },
+    "scheda_vitigno": {
+      "it": "{vitigno}: {nota}",
+      "en": "{vitigno}: {nota}"
+    },
     "disciplinare_colore": {
       "it": [
         "Il disciplinare lo vuole {valore}.",
         "Il disciplinare prevede che sia {valore}.",
         "Secondo il disciplinare, deve presentarsi {valore}.",
-        "Il disciplinare lo descrive come {valore}."
+        "Il disciplinare lo descrive come {valore}.",
+        "Nel colore, {valore}."
       ],
       "en": [
         "The specification calls for it to be {valore}.",
         "The appellation rules describe it as {valore}.",
         "Under the production rules, it should be {valore}.",
-        "The appellation rules expect it to be {valore}."
+        "The appellation rules expect it to be {valore}.",
+        "In colour, {valore}."
       ]
     },
     "disciplinare_odore": {
@@ -178,6 +183,46 @@
         "The production rules describe the flavour as {valore}."
       ]
     },
+    "disciplinare_colore_relativa": {
+      "it": [
+        "Il disciplinare lo vuole di un colore {valore}.",
+        "Secondo il disciplinare, ha un colore {valore}."
+      ],
+      "en": [
+        "The specification calls for a colour {valore}.",
+        "Under the appellation rules, it has a colour {valore}."
+      ]
+    },
+    "disciplinare_odore_relativa": {
+      "it": [
+        "Il disciplinare lo vuole di un profumo {valore}.",
+        "Secondo il disciplinare, ha un profumo {valore}."
+      ],
+      "en": [
+        "The specification calls for a nose {valore}.",
+        "Under the appellation rules, it has a nose {valore}."
+      ]
+    },
+    "disciplinare_sapore_relativa": {
+      "it": [
+        "Il disciplinare lo vuole di un sapore {valore}.",
+        "Secondo il disciplinare, ha un sapore {valore}."
+      ],
+      "en": [
+        "The specification calls for a palate {valore}.",
+        "Under the appellation rules, it has a palate {valore}."
+      ]
+    },
+    "disciplinare_verbo": {
+      "it": [
+        "Secondo il disciplinare, {valore}.",
+        "Il disciplinare dice che {valore}."
+      ],
+      "en": [
+        "According to the rules, it {valore}.",
+        "Under the appellation rules, it {valore}."
+      ]
+    },
     "tratti_entrambi": {
       "it": [
         "È un vino {corpo}, con {acidita}.",
@@ -186,8 +231,6 @@
       ],
       "en": [
         "It is {corpo}, with {acidita}.",
-        "This is a {corpo} wine with {acidita}.",
-        "In the glass it is {corpo}, showing {acidita}.",
         "The wine is {corpo} and has {acidita}."
       ]
     },
@@ -198,9 +241,7 @@
       ],
       "en": [
         "It is {corpo}.",
-        "This is a {corpo} wine.",
-        "The wine is {corpo}.",
-        "In the glass, it comes across as {corpo}."
+        "The wine is {corpo}."
       ]
     },
     "tratti_acidita": {
@@ -370,16 +411,16 @@
       "en": "From the archive"
     },
     "modo_archivio_spiega": {
-      "it": "I testi già pronti, composti dai dati del disciplinare. Istantanei.",
-      "en": "Ready-written texts, composed from the appellation data. Instant."
+      "it": "Composto dai dati e dal disciplinare, senza modello: non inventa. Istantaneo.",
+      "en": "Composed from the data and the appellation rules, no model: it never invents. Instant."
     },
     "modo_generativa": {
       "it": "Scritto sul momento",
       "en": "Written on the spot"
     },
     "modo_generativa_spiega": {
-      "it": "Gli stessi dati, ma il testo lo scrive il modello per questa bottiglia. Richiede qualche secondo in più.",
-      "en": "The same data, but the text is written by the model for this bottle. It takes a few seconds longer."
+      "it": "Gli stessi dati, ma il testo lo scrive il modello per questa bottiglia. Sperimentale: può sbagliare, e richiede qualche decina di secondi.",
+      "en": "The same data, but the model writes the text for this bottle. Experimental: it can get things wrong, and takes tens of seconds."
     },
     "modo_carta": {
       "it": "Carta dei vini",

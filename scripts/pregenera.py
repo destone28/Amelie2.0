@@ -5,10 +5,12 @@
     python3 scripts/pregenera.py --solo vitigno
     python3 scripts/pregenera.py --limite 20    per provare
 
-Perché in anticipo: sulla board una generazione costa 65-90 secondi. Davanti a
-un ospite non è un'attesa, è un guasto. Precalcolando, il dispositivo risponde
-in millisecondi e resta vero che «un LLM locale genera la narrazione»: è lo
-stesso modello, sulla stessa macchina, solo prima.
+Perché in anticipo: sulla board una generazione costa decine di secondi.
+Precalcolando, nel modo «generativa» il dispositivo ha un testo del modello
+pronto per il record esatto quando il modello dal vivo fallisce o inventa: è
+lo stesso modello, sulla stessa macchina, solo prima. Nel modo «archivio»,
+quello predefinito, questi testi non si usano: lì il racconto si compone dai
+fatti, senza modello.
 
 Si genera per **denominazione** e **vitigno**, non per i 19.358 vini
 commerciali: quelli sarebbero settimane di calcolo, e la cascata del matcher
@@ -154,7 +156,7 @@ def main() -> None:
             # Il corpo da template e' vero per costruzione: meglio una frase
             # asciutta che una bella frase falsa. Si salva SENZA apertura,
             # perche' quella la compone il narratore al momento.
-            testo, origine = corpo_neutro(f), "template"
+            testo, origine = corpo_neutro(f, lingua=args.lingua), "template"
             n_template += 1
         else:
             n_ok += 1

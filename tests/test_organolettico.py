@@ -104,9 +104,15 @@ class TestComposizione:
 
 class TestAmbiti:
     def test_vivace_cambia_senso_col_campo(self, voc):
-        """Alla vista è un colore vivido, in bocca è una leggera effervescenza."""
+        """Alla vista è un colore vivido; in bocca è vivacità di gusto.
+
+        Era «lightly sparkling», e su un Menfi bianco fermo il racconto
+        inglese dichiarava un'effervescenza che né il disciplinare né i fatti
+        affermano: 110 citazioni del registro hanno «vivace» nel sapore, quasi
+        tutte su tipologie ferme. «Lively» è vero per tutte e due.
+        """
         assert voc.rendi("vivace", "colore").testo == "vivid"
-        assert voc.rendi("vivace", "sapore").testo == "lightly sparkling"
+        assert voc.rendi("vivace", "sapore").testo == "lively"
 
     def test_rosa_colore_e_rosa_fiore(self, voc):
         assert voc.rendi("rosa", "colore").testo == "pink"
