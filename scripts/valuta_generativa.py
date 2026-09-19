@@ -154,40 +154,16 @@ def genera(url: str, prompt: str, imp: ImpostazioniLLM, temperatura: float,
     return d.get("content", ""), time.perf_counter() - inizio
 
 
-def gabbia(f, lingua: str, lessico: set[str]) -> str:
-    """Una grammatica GBNF che lascia al modello SOLO le parole ammesse.
-
-    Le parole dei fatti di questa bottiglia, piu' un lessico chiuso di parole
-    di raccordo - quelle che i testi verificati usano oltre ai fatti - piu'
-    cifre e punteggiatura. Il modello sceglie e combina, non puo' nominare
-    niente che non stia qui dentro: e' la gabbia, e la garanzia e' strutturale.
-    Non protegge dai RAPPORTI sbagliati fra parole vere («Sangiovese e
-    Amarena»): a quelli pensa `verifica`, dopo.
-    """
-    parole = set()
-    for w in re.findall(r"[A-Za-zÀ-ÿ']+", fatti_come_testo(f, lingua)):
-        w = w.strip("'")
-        if w:
-            parole.update((w, w.lower(), w.capitalize()))
-    for w in lessico:
-        parole.update((w, w.capitalize()))
-    parole.update(("d'", "l'", "un'", "dell'", "all'", "nell'", "dall'", "sull'", "è", "È"))
-    alternative = " | ".join(json.dumps(w, ensure_ascii=False)
-                             for w in sorted(parole, key=lambda x: (-len(x), x)))
-    numero = '[0-9]+ ("." [0-9]+)?'
-    return "\n".join([
-        'root ::= frase (" " frase){1,5}',
-        'frase ::= pezzo (" " pezzo){2,40} "."',
-        'pezzo ::= parola ("," | ";" | ":")?',
-        f'parola ::= numero | {alternative}',
-        f'numero ::= {numero}',
-    ])
+def gabbia(f, lingua: str, lessico: set[str]) -> str | None:
+    """La stessa gabbia del dispositivo: `amelie.gabbia.gabbia_di`. `lessico`
+    resta per compatibilita' e non si usa: il lessico e' quello in
+    `data/lessico`, cosi' si misura cio' che si spedisce."""
+    from amelie.gabbia import gabbia_di
+    return gabbia_di(f, lingua)
 
 
 def carica_lessico(percorso: Path | None) -> set[str]:
-    if not percorso or not percorso.exists():
-        return set()
-    return {r.strip() for r in percorso.read_text(encoding="utf-8").splitlines() if r.strip()}
+    return set()
 
 
 def fatti_come_testo(f, lingua: str) -> str:

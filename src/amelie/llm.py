@@ -112,10 +112,15 @@ class Modello:
         d.update(extra)
         return json.dumps(d).encode()
 
-    def genera(self, prompt: str) -> str:
-        """Genera tutto e restituisce il testo. Blocca fino alla fine."""
+    def genera(self, prompt: str, grammatica: str | None = None) -> str:
+        """Genera tutto e restituisce il testo. Blocca fino alla fine.
+
+        Con `grammatica` il server accetta solo le parole che lei ammette:
+        vedi `amelie.gabbia`.
+        """
+        extra = {"grammar": grammatica} if grammatica else {}
         req = urllib.request.Request(
-            f"{self.imp.url}/completion", data=self._corpo(prompt),
+            f"{self.imp.url}/completion", data=self._corpo(prompt, **extra),
             headers={"Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=self.imp.timeout_s) as r:

@@ -1270,3 +1270,40 @@ class TestCioCheLaVerificaLasciavaPassare:
                         Fatti(livello=Livello.VINO, nome="Santa Maddalena", colore="Rosso",
                               vitigni=["Schiava", "Schiava Gentile", "Schiava Grigia"],
                               sicurezza=95.0))[0]
+
+
+class TestLaGabbia:
+    """Il modello sceglie e combina, ma solo fra parole ammesse."""
+
+    def _fatti(self):
+        return Fatti(livello=Livello.TIPOLOGIA, tipologia="Barolo", denominazione="Barolo",
+                     colore="Rosso", vitigni=["Nebbiolo"], note_sensoriali=["catrame", "rosa"],
+                     abbinamenti=["Beef"], temperatura_c="17-19", sicurezza=95.0)
+
+    def test_ammette_i_fatti_e_il_raccordo_e_niente_altro(self):
+        from amelie.gabbia import gabbia_di, lessico
+        g = gabbia_di(self._fatti(), "it")
+        assert g and '"Nebbiolo"' in g and '"catrame"' in g
+        assert "nasce" in lessico("it") and '"nasce"' in g
+        assert '"Amarena"' not in g and '"borgognone"' not in g
+
+    def test_in_inglese_non_c_e_e_si_dice(self):
+        from amelie.gabbia import gabbia_di
+        assert gabbia_di(self._fatti(), "en") is None
+
+    def test_il_narratore_la_passa_al_modello_solo_se_accesa(self):
+        from amelie.narrator import Narratore
+        ricevute = []
+
+        def genera(p, grammatica=None):
+            ricevute.append(grammatica)
+            return "Nasce dal Nebbiolo. Si serve fra 17 e 19 gradi."
+
+        for accesa in (True, False):
+            n = Narratore(genera=genera, gabbia=accesa)
+            try:
+                n.racconta(self._fatti(), preferisci_modello=True)
+            finally:
+                n.chiudi()
+        assert ricevute[0] and "Nebbiolo" in ricevute[0]
+        assert ricevute[1] is None

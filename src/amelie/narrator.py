@@ -991,6 +991,7 @@ class Narratore:
         lingua: str = "it",
         modello_addestrato: bool = False,
         genera_a_flusso: Callable[[str], Iterator[str]] | None = None,
+        gabbia: bool = False,
     ) -> None:
         from .matcher import PERCORSO_DB
 
@@ -1001,6 +1002,11 @@ class Narratore:
         # `prompt_addestrato`. Sbagliarla costa il doppio del tempo e tutta la
         # qualita' che l'addestramento aveva comprato.
         self.modello_addestrato = modello_addestrato
+        # Con la gabbia il modello riceve, per ogni bottiglia, una grammatica
+        # che ammette solo le parole dei suoi fatti e un lessico di raccordo:
+        # vedi `amelie.gabbia`, con la misura. Chi la vuole deve dare un
+        # `genera` che accetti la grammatica come secondo argomento.
+        self.gabbia = gabbia
         # Chi sa dare il testo a pezzi. Senza, `racconta_a_frasi` funziona
         # lo stesso ma aspetta la fine: e' il modo in cui degrada, non un caso
         # da evitare.
@@ -1221,11 +1227,17 @@ class Narratore:
         Rigenerare all'infinito su un modello che continua a inventare
         significherebbe far aspettare l'ospite per nulla: meglio il template.
         """
+        grammatica = None
+        if self.gabbia:
+            from .gabbia import gabbia_di
+            grammatica = gabbia_di(f, self.lingua)
         for tentativo in (1, 2):
             try:
                 domanda = (prompt_addestrato(f, self.lingua) if self.modello_addestrato
                            else prompt(f, lingua=self.lingua))
-                testo = (self.genera(domanda) or "").strip()
+                testo = (self.genera(domanda, grammatica) if grammatica
+                         else self.genera(domanda)) or ""
+                testo = testo.strip()
             except Exception as e:                       # noqa: BLE001
                 log.warning("generazione fallita: %s", e)
                 return None

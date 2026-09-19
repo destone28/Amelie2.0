@@ -235,6 +235,11 @@ class Amelie:
         self.distanza = PresenzaDistanza()
         # Quando la bottiglia e' comparsa: lo scatto deve essere di DOPO.
         self._apparsa = 0.0
+        # C'e' una bottiglia adesso, secondo il sensore.
+        self._presente = False
+        # Il sensore ha visto andare via o arrivare qualcosa mentre si
+        # raccontava: finito il racconto, si legge di nuovo.
+        self._cambiata_durante_il_racconto = False
         self.camera = None if cfg.senza_camera else Camera()
         self.lettore = None if cfg.senza_camera else Lettore()
         self.giornale = Giornale(CARTELLA_GIORNALE)
@@ -248,7 +253,12 @@ class Amelie:
             ImpostazioniVoce(device_alsa=cfg.device_audio))
         self.narratore = Narratore(modello_addestrato=cfg.modello_addestrato,
                                    genera=self._genera if not cfg.senza_modello else None,
-                                   lingua=cfg.lingua)
+                                   lingua=cfg.lingua,
+                                   # La gabbia e' parte del modo «generativa»:
+                                   # tre testi su trenta in piu' che passano
+                                   # la verifica, misurati, per un terzo di
+                                   # tempo in piu'. Vedi `amelie.gabbia`.
+                                   gabbia=True)
         self.lex = self.narratore.lex
         self.lingua = cfg.lingua
 
@@ -299,11 +309,6 @@ class Amelie:
         # Quello che si sa della scansione in corso, da annotare quando
         # finisce. Vedi `_annota`.
         self._scansione: dict[str, Any] = {}
-        # Vero finche' non si e' capito che cosa c'e' sul piatto. Succede solo
-        # al primo avvio di una installazione, quando nessuno sfondo e' stato
-        # ancora imparato: l'unico modo di saperlo e' guardare per bene una
-        # volta, cioe' accendere la luce e leggere.
-        self._da_capire = False
         # Questa bottiglia e' gia' stata raccontata. Serve da quando la
         # schermata conclusa torna da sola all'invito: in attesa, con la
         # bottiglia ancora sul piatto, il rilancio qui sotto farebbe ripartire
@@ -374,7 +379,11 @@ class Amelie:
             # `_un_battito`, che senza questa bandiera rilancerebbe al primo
             # battito, cioe' un decimo di secondo dopo il tocco.
             if t.a is Stato.CONCLUSO or t.evento is Evento.ANNULLA:
-                self._bottiglia_chiusa = True
+                # A meno che il sensore non abbia visto la bottiglia andare
+                # via o arrivarne una mentre si raccontava: allora quella sul
+                # piatto puo' essere un'altra, e in attesa la si rilegge.
+                self._bottiglia_chiusa = not self._cambiata_durante_il_racconto
+                self._cambiata_durante_il_racconto = False
             # Nessuno ha scelto, e i dodici secondi sono finiti: si prende il
             # PRIMO CANDIDATO, cioe' la prima riga che l'ospite aveva davanti.
             #
@@ -810,8 +819,6 @@ class Amelie:
         #
         # E' anche cio' che chi ha appena spostato la camera vuole: la prova
         # che l'aggiustamento ha funzionato, senza doverla chiedere.
-        if self.camera is not None:
-            self._da_capire = True
         self._mostra(self.macchina.stato)
 
     def _stato_mirino(self) -> dict[str, Any]:
@@ -1296,14 +1303,13 @@ class Amelie:
             "posa": self.camera.imp.esposizione,
             "tentativo": self._tentativi + 1,
         }
-        if self._righe:
-            self._tentativi = 0
-            # Un'etichetta letta e' la prova che sul piatto c'e' qualcosa, e
-            # vale piu' di qualunque sbirciata: se il dispositivo si e' acceso
-            # con la bottiglia gia' posata, e' l'unica cosa che glielo dice.
-            self.presenza.c_e_qualcosa()
+        if lettura.utile:
             self.macchina.invia(Evento.LETTURA_RIUSCITA)
             return
+        # Righe senza parole - cifre, frammenti - non sono una lettura: si
+        # conta il tentativo, come se non si fosse letto niente. Contare le
+        # righe azzerava il contatore e il dispositivo scandiva un calendario
+        # ogni sei secondi per sempre.
         self._tentativi += 1
         self._annota("niente da leggere")
         self.macchina.invia(Evento.LETTURA_FALLITA)
@@ -1363,9 +1369,24 @@ class Amelie:
             self.macchina.invia(Evento.MATCH_DUBBIO)
         elif self._fatti.vuoto:
             self._annota("letto ma non riconosciuto")
-            self.macchina.invia(Evento.LETTURA_FALLITA)
+            self._tentativo_fallito()
         else:
             self.macchina.invia(Evento.MATCH_ASSENTE)
+
+    def _tentativo_fallito(self) -> None:
+        """Letto, ma senza trovare un vino: si chiede di girare l'etichetta,
+        e dopo tre volte si tace finche' la bottiglia non viene tolta.
+
+        Prima ogni lettura, anche senza riscontro, azzerava il contatore, e
+        un'etichetta che non si trova in carta veniva rifotografata ogni sei
+        secondi finche' qualcuno non la toglieva: anello e schermo che
+        lampeggiano davanti al tavolo, e la CPU a tre di carico.
+        """
+        self._tentativi += 1
+        self.macchina.invia(Evento.LETTURA_FALLITA)
+        if self._tentativi >= TENTATIVI_MAX:
+            log.info("rinuncio dopo %d tentativi senza riscontro", self._tentativi)
+            self.macchina.invia(Evento.RINUNCIA)
 
     def _riconosci_dalla_carta(self) -> None:
         """Il riconoscimento quando al posto dell'archivio c'e' un file di testo.
@@ -1382,7 +1403,7 @@ class Amelie:
             self._scansione["vicine"] = self.carta.vicine(righe)
             log.info("carta: nessun titolo per %s", righe)
             self._annota("non in carta")
-            self.macchina.invia(Evento.LETTURA_FALLITA)
+            self._tentativo_fallito()
             return
         self._scansione.update({
             "livello": "carta",
@@ -1747,11 +1768,11 @@ class Amelie:
         self._fatti.annata = annata         # l'annata viene dall'etichetta
         return True
 
-    def _genera(self, prompt: str) -> str:
+    def _genera(self, prompt: str, grammatica: str | None = None) -> str:
         from .llm import Modello
         if not hasattr(self, "_modello"):
             self._modello = Modello()
-        return self._modello.genera(prompt)
+        return self._modello.genera(prompt, grammatica)
 
     # ------------------------------------------------------------ ciclo
 
@@ -1770,23 +1791,9 @@ class Amelie:
             if sfondo is not None:
                 self.presenza.ricorda(sfondo)
                 self._sfondo_scritto = sfondo
-            # E SEMPRE si guarda una volta, anche con uno sfondo in mano.
-            #
-            # Lo sfondo ricordato dice com'era il piatto l'ultima volta che il
-            # dispositivo ha creduto fosse vuoto, e quella convinzione puo'
-            # essere sbagliata: basta che la bottiglia sia arrivata mentre lo
-            # imparava. Succede, e visto sul dispositivo: lo sfondo salvato
-            # conteneva una bottiglia, quindi il piatto sembrava vuoto con la
-            # bottiglia sopra, quindi nessuna scansione partiva - e senza
-            # scansione non partiva nemmeno la via di scampo, che sta in fondo
-            # alla scansione. Cieco fino a che qualcuno non toglieva la
-            # bottiglia.
-            #
-            # Costa un'accensione dell'anello e una lettura per avvio. In
-            # cambio, all'accensione il dispositivo sa sempre cosa ha davanti,
-            # qualunque cosa dica il file. Ed e' anche l'unico collaudo
-            # automatico che questo dispositivo fa di se stesso.
-            self._da_capire = True
+            # Con la bottiglia gia' posata all'accensione non serve guardare
+            # apposta: il sensore la vede al primo battito, e la scansione
+            # parte da li'.
 
         while True:
             try:
@@ -1804,19 +1811,31 @@ class Amelie:
             # e' sua, e far scadere un timer qui vorrebbe dire far partire una
             # scansione contro uno stream che qualcun altro sta leggendo.
             return
-        c_era = self.presenza.presente
+        c_era = self._presente
         ora = await self._chi_c_e()
         if ora != c_era:
+            self._presente = ora
             if ora:
                 self._tentativi = 0     # bottiglia nuova, si riparte da capo
                 # Lo scatto dovra' essere di DOPO questo istante: un fotogramma
                 # di prima mostra il piatto vuoto, o una mano che scende.
                 self._apparsa = time.monotonic()
+                if self.macchina.stato in (Stato.RACCONTO, Stato.CONCLUSO):
+                    # Arrivata mentre si raccontava: quando il racconto e'
+                    # finito si legge, perche' puo' essere un altro vino.
+                    self._cambiata_durante_il_racconto = True
+                self.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
+            elif self.macchina.stato is Stato.RACCONTO:
+                # Tolta mentre si racconta: il racconto CONTINUA. L'ospite
+                # che alza la bottiglia per versare non ha chiesto silenzio,
+                # e un racconto che muore a meta' frase si nota molto piu' di
+                # uno che finisce. Se ne arriva un'altra, la si legge dopo.
+                self._bottiglia_chiusa = False
+                self._cambiata_durante_il_racconto = True
             else:
                 # Tolta la bottiglia, la prossima e' un'altra storia.
                 self._bottiglia_chiusa = False
-            self.macchina.invia(
-                Evento.BOTTIGLIA_PRESENTE if ora else Evento.BOTTIGLIA_ASSENTE)
+                self.macchina.invia(Evento.BOTTIGLIA_ASSENTE)
         elif (ora and self.macchina.stato is Stato.ATTESA
                 and not self._bottiglia_chiusa
                 and self._tentativi < TENTATIVI_MAX):
@@ -1839,57 +1858,44 @@ class Amelie:
             self.macchina.invia(Evento.SCADENZA)
 
     async def _chi_c_e(self) -> bool:
-        """Dice se c'e' una bottiglia, e intanto guarda dov'e'.
+        """C'e' una bottiglia? Lo dice il sensore di distanza, e nessun altro.
 
-        Chi decide e' il sensore di distanza, a ogni battito: sei millesimi, e
-        tre letture d'accordo bastano. La camera continua a guardare al suo
-        passo — mezzo secondo — ma non per decidere: per sapere DOVE sta
-        l'etichetta e per restare pronta a decidere lei, se il sensore tace.
+        Era una decisione a due voci, sensore e camera, con la camera a
+        decidere quando il sensore taceva. E' finita cosi': un oggetto
+        coperto a lungo sul sensore, poi tolto, e la camera che continuava a
+        vedere «qualcosa» per sempre - il suo sfondo era stato imparato con
+        l'oggetto davanti - mentre il sensore diceva, giustamente, che non
+        c'era niente. Il dispositivo scandiva un piatto vuoto ogni sei
+        secondi, senza fine.
+
+        Ora la regola e' una sola. Il sensore vede qualcosa: si legge e si
+        racconta. Non vede niente: non si cerca niente, e la camera serve
+        solo a sapere DOVE sta l'etichetta e a imparare com'e' fatto il piatto
+        vuoto - quando il sensore dice che e' vuoto, non quando lo crede lei.
+
+        Il prezzo, misurato: il sensore non vede il vetro chiaro - l'infrarosso
+        attraversa il fondo di un Cerasuolo e non torna - e quelle bottiglie
+        non partono. E' una scelta di progetto, e la strada per
+        rimediare passa dal firmware (la soglia del segnale del VL53L4CD), non
+        da qui.
         """
         if self._bottiglia_finta is not None:
-            return self.presenza.aggiorna_a_mano(self._bottiglia_finta)
-        deciso = self._lo_dice_il_sensore()
-        await self._guarda_il_piatto(deciso)
-        return deciso if deciso is not None else self.presenza.presente
+            ora = bool(self._bottiglia_finta)
+        else:
+            try:
+                mm = self.ponte.distanza_mm()
+            except (PonteNonDisponibile, ErroreMCU):
+                mm = None
+            ora = self.distanza.aggiorna(mm)
+        await self._guarda_il_piatto(ora)
+        return ora
 
-    def _lo_dice_il_sensore(self) -> bool | None:
-        """La presenza secondo il Modulino Distance, quando lui puo' saperla.
-
-        Il sensore e' autorevole su cio' che ha VISTO ARRIVARE, e su niente
-        altro. Misurato sul dispositivo: un Brunello, fondo scuro e opaco, si
-        legge a 20 mm; un Cerasuolo, vetro chiaro e vino rosato, da' la stessa
-        firma del piatto vuoto - `distanza 0, stato 5` - perche' l'infrarosso
-        attraversa il fondo trasparente e non torna. Per il sensore quella
-        bottiglia non esiste, e non esiste nemmeno la sua assenza.
-
-        Quindi tre risposte, non due. `True`: vede qualcosa, e vale come
-        innesco, che e' il motivo per cui e' tornato. `False`: aveva visto
-        qualcosa e non lo vede piu', cioe' una bottiglia opaca e' stata tolta -
-        e questo interrompe il racconto anche se la camera non se n'e' ancora
-        accorta. `None`: non ha mai visto niente, e allora **non sa**: decide
-        la camera, che il vetro chiaro lo vede benissimo.
-
-        Un Modulino scollegato o un firmware vecchio danno `None` per sempre,
-        e costano una scansione piu' lenta, non un dispositivo cieco.
-        """
-        try:
-            mm = self.ponte.distanza_mm()
-        except (PonteNonDisponibile, ErroreMCU):
-            mm = None
-        vedeva = self.distanza.presente
-        vede = self.distanza.aggiorna(mm)
-        if vede:
-            return True
-        if vedeva:
-            # L'ha vista andare via: e' l'unica assenza che puo' dichiarare.
-            return False
-        return None
-
-    async def _guarda_il_piatto(self, secondo_il_sensore: bool | None = None) -> None:
-        """La sbirciata: non decide piu' niente, ma serve ancora a due cose.
+    async def _guarda_il_piatto(self, c_e_secondo_il_sensore: bool) -> None:
+        """La sbirciata: non decide niente, ma serve ancora a due cose.
 
         Il riquadro dell'etichetta, che dipende dalla forma della bottiglia, e
-        lo sfondo del piatto vuoto, che e' il ripiego quando il sensore tace.
+        lo sfondo del piatto vuoto, imparato quando il sensore dice che e'
+        vuoto.
         """
         if self.camera is None:
             return
@@ -1909,15 +1915,7 @@ class Amelie:
             # La camera sta scattando, o non ha dato il fotogramma. Una
             # sbirciata saltata non e' un'informazione: non si decide niente.
             return
-        if self._da_capire:
-            self._da_capire = False
-            # Si dichiara che qualcosa c'e', anche se non si sa cosa: senza,
-            # la sbirciata successiva - mezzo secondo dopo, a scansione gia'
-            # avviata - imparerebbe come «piatto vuoto» proprio la bottiglia
-            # che si sta per fotografare, e la salverebbe pure.
-            self.presenza.c_e_qualcosa()
-            return
-        if secondo_il_sensore is False and self.macchina.stato is Stato.ATTESA:
+        if not c_e_secondo_il_sensore and self.macchina.stato is Stato.ATTESA:
             # Il sensore dice che sul piatto non c'e' niente, e lo dice meglio
             # di quanto possa dirlo la camera: quello che si vede ORA e' il
             # piatto vuoto, per definizione. Non c'e' niente da dedurre.
@@ -1939,16 +1937,11 @@ class Amelie:
             self.camera.riquadro = None
             self._ricorda_sfondo()
             return
-        c_e = self.presenza.aggiorna(fascia)
-        # Dove sta la bottiglia, per darlo all'OCR al posto di un riquadro
+        # Il rivelatore ottico non decide piu' se c'e' una bottiglia: serve a
+        # dire DOVE sta, per dare all'OCR il suo riquadro al posto di uno
         # fisso. `None` vuol dire «non si sa», e allora si torna al fisso.
+        self.presenza.aggiorna(fascia)
         self.camera.riquadro = self.presenza.riquadro()
-        if not c_e and self.macchina.stato is Stato.ATTESA:
-            # Lo sfondo si impara solo da fermi. Durante una scansione il
-            # rivelatore vede una scena che il dispositivo sta gia' guardando
-            # per conto suo, e prenderla per sfondo vuol dire dimenticare la
-            # bottiglia che ha davanti.
-            self._ricorda_sfondo()
 
     def _va_sorvegliata(self) -> bool:
         """Lo stream si tiene in moto solo quando serve a qualcosa.
@@ -2257,7 +2250,7 @@ def crea_app(amelie: Amelie):
             # saltare oltre la soglia). Senza questi, l'unico modo di sapere
             # perche' il dispositivo non parte e' leggere il giornale di bordo
             # da un'altra macchina.
-            "bottiglia": amelie.presenza.presente,
+            "bottiglia": amelie._presente,
             "differenza": round(amelie.presenza.differenza * 100, 1),
             "soglia": round(amelie.presenza.soglia_arrivo * 100, 1),
             "posa": amelie.camera.imp.esposizione if amelie.camera else None,
