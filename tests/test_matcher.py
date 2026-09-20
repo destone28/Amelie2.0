@@ -1050,3 +1050,42 @@ class TestLaBollaNelNome:
         """Il Prosecco tranquillo esiste: «prosecco» da solo non dichiara niente."""
         assert m._DICE_LA_BOLLA.search("prosecco treviso") is None
         assert m._DICE_LA_BOLLA.search("prosecco treviso brut") is not None
+
+
+class TestLaCitazioneSiRipulisce:
+    """Il registro non e' scritto per essere letto a voce.
+
+    Trentanove citazioni cominciano col verbo - «é fresco, piacevole» - e chi
+    le riporta ce ne mette un altro davanti: «il gusto è é fresco». Altre
+    centoventisei sono troncate, con l'ultima parola appesa: «giallo
+    paglierino più o meno intenso, il». Sentite tutte e due sul dispositivo.
+    """
+
+    def _riga(self, **kw):
+        base = {"desc_colore": None, "desc_odore": None, "desc_sapore": None}
+        base.update(kw)
+        return base
+
+    def test_il_verbo_davanti_si_toglie(self):
+        from amelie.matcher import _citazioni_utili
+
+        c = _citazioni_utili(self._riga(desc_sapore="é fresco, piacevole e armonico"))
+        assert c["sapore"] == "fresco, piacevole e armonico"
+        c = _citazioni_utili(self._riga(desc_sapore="sono caldi ed intensi"))
+        assert c["sapore"] == "caldi ed intensi"
+
+    def test_la_coda_appesa_si_toglie(self):
+        from amelie.matcher import _citazioni_utili
+
+        c = _citazioni_utili(self._riga(desc_colore="giallo paglierino più o meno intenso, il"))
+        assert c["colore"] == "giallo paglierino più o meno intenso"
+        c = _citazioni_utili(self._riga(desc_colore="rosso rubino tendente al granato, ha un"))
+        assert c["colore"] == "rosso rubino tendente al granato"
+        c = _citazioni_utili(self._riga(desc_odore="vinoso, fresco e"))
+        assert c["odore"] == "vinoso, fresco"
+
+    def test_quel_che_e_intero_non_si_tocca(self):
+        from amelie.matcher import _citazioni_utili
+
+        intera = "rosso rubino con riflessi granato con l'invecchiamento"
+        assert _citazioni_utili(self._riga(desc_colore=intera))["colore"] == intera

@@ -747,11 +747,32 @@ _CITAZIONE_MASSIMA = 120
 _PAROLA_DOPPIA = re.compile(r"\b(\w{4,})\b([,\s]+)\1\b", re.I)
 
 
+# Trentanove citazioni del registro cominciano col verbo - «é fresco,
+# piacevole e armonico» - e chi le riporta ce ne mette un altro davanti: «il
+# gusto è é fresco». Il verbo lo mette la frase che cita, non la citazione.
+_INIZIA_COL_VERBO = re.compile(r"^(?:é|è|e'|ed|e|sono|ha|hanno)\s+", re.I)
+
+# E centoventisei sono troncate a meta', con l'ultima parola che resta
+# appesa: «giallo paglierino più o meno intenso, il». Il taglio viene dal
+# documento di origine, non da noi, e una frase che finisce su un articolo la
+# si sente subito. Si toglie la coda finche' ce n'e'.
+_CODA_APPESA = re.compile(
+    r"[,;]?\s+(?:un|uno|una|un'|il|lo|la|i|gli|le|di|del|dello|della|dei|degli"
+    r"|delle|da|dal|dalla|dai|con|per|a|al|alla|ai|e|ed|o|od|che|più|piu'|ha"
+    r"|hanno|sono|the|of|and|with|to)\s*$", re.I)
+
+
 def _citazioni_utili(r) -> dict[str, str]:
     fuori = {}
     for ambito in ("colore", "odore", "sapore"):
         v = (r[f"desc_{ambito}"] or "").strip().rstrip(".")
         v = _PAROLA_DOPPIA.sub(r"\1", v)
+        v = _INIZIA_COL_VERBO.sub("", v).strip()
+        for _ in range(4):
+            tagliato = _CODA_APPESA.sub("", v).rstrip(" ,;")
+            if tagliato == v:
+                break
+            v = tagliato
         if v and len(v) <= _CITAZIONE_MASSIMA and not _PARAMETRI_DI_LEGGE.search(v):
             fuori[ambito] = v
     return fuori
