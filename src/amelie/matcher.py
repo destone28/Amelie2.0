@@ -1722,13 +1722,23 @@ class Matcher:
         trovate = {self._COLORE_NEL_NOME[x] for x in self._PAROLA_DI_COLORE.findall(resto)}
         return trovate.pop() if len(trovate) == 1 else None
 
+    # Le parole con cui un nome dichiara di avere le bolle. «Prosecco» non
+    # c'e': e' il nome della denominazione, e il Prosecco tranquillo esiste.
+    _DICE_LA_BOLLA = re.compile(
+        r"\b(?:spumante|frizzante|brut|extra dry|metodo classico|millesimato|"
+        r"pas dose|dosaggio zero|nature|sekt|cremant|saten|perlage|charmat)\b")
+    _CATEGORIE_CON_LE_BOLLE = ("Sparkling Wine", "Quality Sparkling Wine",
+                               "Quality Aromatic Sparkling Wine",
+                               "Semi-Sparkling Wine", "Aerated Semi-Sparkling Wine")
+
     @sotto_lucchetto
     def _cerca_tipologia(self, den_id: int, nome_norm: str) -> int | None:
         from rapidfuzz import fuzz
 
         with self._db:
             righe = self.con.execute(
-                "SELECT id, nome_norm, colore FROM tipologia WHERE denominazione_id = ?",
+                "SELECT id, nome_norm, colore, categoria"
+                " FROM tipologia WHERE denominazione_id = ?",
                 (den_id,)).fetchall()
         if not righe:
             return None
@@ -1744,6 +1754,20 @@ class Matcher:
                      if COLORE_UE.get(r["colore"] or "") in (detto, None)]
             if not righe:
                 return None
+        # E se il nome dice che ha le bolle, fra i fratelli si preferisce chi
+        # le ha. «Prestige Collection Brut Prosecco Treviso» si prendeva
+        # «Prosecco-Wine», che e' il Prosecco FERMO, perche' somiglia di piu' -
+        # e la denominazione ha «Prosecco Spumante» proprio li' accanto. In
+        # archivio: 986 bollicine con la citazione di un vino fermo.
+        #
+        # Si preferisce, non si pretende: molte denominazioni una tipologia
+        # con le bolle non ce l'hanno, e restare senza tipologia costa piu' di
+        # quel che si guadagna (vedi `_del_colore_giusto`).
+        if self._DICE_LA_BOLLA.search(nome_norm):
+            con_bolle = [r for r in righe
+                         if r["categoria"] in self._CATEGORIE_CON_LE_BOLLE
+                         or self._DICE_LA_BOLLA.search(r["nome_norm"] or "")]
+            righe = con_bolle or righe
         if len(righe) == 1:
             return righe[0]["id"]
         migliore = max(righe, key=lambda r: fuzz.token_set_ratio(

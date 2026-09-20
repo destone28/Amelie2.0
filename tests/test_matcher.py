@@ -1024,3 +1024,29 @@ class TestIlColoreScrittoNelNome:
         assert f.colore == "Rosato"
         assert "ros" in (f.disciplinare_di or "").lower(), (
             f"un Franciacorta Rosé descritto come «{f.disciplinare_di}»")
+
+
+class TestLaBollaNelNome:
+    """«Prestige Collection Brut Prosecco Treviso» si prendeva «Prosecco-Wine».
+
+    La tipologia si aggancia per somiglianza, e il Prosecco FERMO somiglia di
+    piu' a un nome che dice solo «Prosecco» - mentre «Prosecco Spumante» sta
+    li' accanto, nella stessa denominazione. Da quella tipologia vengono il
+    colore e la categoria: 1.045 bollicine risultavano vini fermi, 986 con
+    tanto di citazione.
+    """
+
+    def test_il_brut_sceglie_la_tipologia_con_le_bolle(self, m):
+        f = m._fatti_vino(170)
+        assert "Brut" in (f.nome or "")
+        assert "Sparkling" in (f.categoria or ""), (
+            f"una bollicina di categoria «{f.categoria}»")
+
+    def test_ma_solo_se_una_ce_n_e(self, m):
+        """Si preferisce, non si pretende: restare senza tipologia costa di piu'."""
+        assert m._cerca_tipologia(290, "prosecco brut") is not None
+
+    def test_il_nome_della_denominazione_non_e_una_bolla(self, m):
+        """Il Prosecco tranquillo esiste: «prosecco» da solo non dichiara niente."""
+        assert m._DICE_LA_BOLLA.search("prosecco treviso") is None
+        assert m._DICE_LA_BOLLA.search("prosecco treviso brut") is not None
