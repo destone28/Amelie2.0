@@ -1592,3 +1592,62 @@ class TestIlPostoDelleCose:
         ok, _ = verifica("Nero d'Avola: Il rosso siciliano per eccellenza, di grande "
                          "frutto. Il disciplinare lo vuole rosso rubino.", f)
         assert ok
+
+
+class TestOgniVoceDellElencoDeveEssereUnUva:
+    """«Nasce dall'incontro di tre vitigni: Trebbiano, Toscano, Abruzzese e Soave».
+
+    La scheda del Trebbiano dice che non e' un vitigno solo «ma una famiglia
+    numerosa: il Toscano, l'Abruzzese, quello di Soave». Il modello ne ha
+    fatto quattro uve di questo vino. Parole tutte vere, fatto falso - e
+    bastava che la parola stesse da qualche parte nei fatti perche' passasse.
+    """
+
+    def _fatti(self, **kw):
+        base = dict(livello=Livello.VINO, nome="Casasole Orvieto Classico",
+                    denominazione="Orvieto", cantina="Santa Cristina",
+                    colore="Bianco", vitigni=["Trebbiano"], sicurezza=95.0,
+                    note_vitigno="Non un vitigno solo ma una famiglia numerosa: "
+                                 "il Toscano, l'Abruzzese, quello di Soave.",
+                    disciplinare={"colore": "giallo paglierino"})
+        base.update(kw)
+        return Fatti(**base)
+
+    def test_i_pezzi_della_famiglia_non_sono_uve_di_questo_vino(self):
+        ok, inv = verifica("Nasce dall'incontro di tre vitigni: Trebbiano, Toscano, "
+                           "Abruzzese e Soave.", self._fatti())
+        assert not ok
+        assert sum("fra le uve non c'e'" in x for x in inv) == 3
+
+    def test_la_scheda_riportata_non_si_giudica(self):
+        """«Trebbiano: non un vitigno solo ma una famiglia: il Toscano...»
+        e' materiale dei fatti riportato, non un elenco di uve."""
+        ok, _ = verifica("Trebbiano: Non un vitigno solo ma una famiglia numerosa: "
+                         "il Toscano, l'Abruzzese, quello di Soave. Il disciplinare "
+                         "lo vuole giallo paglierino.", self._fatti())
+        assert ok
+
+    def test_il_nome_fra_virgolette_non_e_un_elenco(self):
+        """«Da Uve Garganega Monte Fiorentine»: quell'«Uve» e' l'etichetta."""
+        f = self._fatti(nome="Da Uve Garganega Monte Fiorentine", vitigni=["Garganega"])
+        ok, _ = verifica("Questo è il «Da Uve Garganega Monte Fiorentine» di Santa "
+                         "Cristina. Il disciplinare lo vuole giallo paglierino.", f)
+        assert ok
+
+    def test_nemmeno_una_cantina_che_si_chiama_uva(self):
+        """Esiste «Uva Mia di Luisella», e quell'«Uva» apriva un elenco finto."""
+        f = self._fatti(cantina="Uva Mia di Luisella")
+        ok, _ = verifica("Questo è il «Casasole Orvieto Classico» di Uva Mia di "
+                         "Luisella. Il disciplinare lo vuole giallo paglierino.", f)
+        assert ok
+
+    def test_un_nome_composto_resta_una_voce_sola(self):
+        """«Brachetto d'Acqui» e' un modo legittimo di dire il Brachetto."""
+        f = self._fatti(nome="Brachetto d'Acqui", denominazione="Brachetto d'Acqui",
+                        vitigni=["Brachetto"])
+        assert verifica("Nasce dal Brachetto d'Acqui, vitigno di casa.", f)[0]
+
+    def test_la_regione_in_un_elenco_di_uve_si_perdona(self):
+        f = self._fatti(regione="Umbria")
+        assert verifica("Nasce dal Trebbiano, Umbria. Il disciplinare lo vuole "
+                        "giallo paglierino.", f)[0]

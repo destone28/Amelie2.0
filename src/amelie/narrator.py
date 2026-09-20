@@ -311,7 +311,10 @@ _CONTESTO_VITIGNI = re.compile(
     # Il «da» liscio mancava: c'erano «dal», «dalla», «dall'», «dai», non
     # «nasce da Barbaresco» - letto sul dispositivo, e Barbaresco e' il vino.
     r"(?:nasce\s+(?:dall'|dalla\s+|dalle\s+|dal\s+|dai\s+|da\s+)\s*(?:solo\s+|incontro\s+di\s+)?"
-    r"|vitign[oi]\s+(?=(?-i:[A-ZÀ-Ý]))|uv[ae]\s+(?:di\s+)?(?=(?-i:[A-ZÀ-Ý]))"
+    # «Nasce dall'incontro di tre vitigni: Trebbiano, Toscano, Abruzzese e
+    # Soave»: i due punti chiudevano il pezzo catturato, e l'elenco vero -
+    # quello dopo - non si leggeva affatto.
+    r"|vitign[oi]\s*:?\s*(?=(?-i:[A-ZÀ-Ý]))|uv[ae]\s+(?:di\s+)?(?=(?-i:[A-ZÀ-Ý]))"
     # «It comes from Ripa Teatina», «It is made from Nebbiolo»: sono le frasi
     # inglesi del lessico, e quel che segue sono uve. Mancavano, e un luogo
     # detto al posto di un vitigno passava - letto sul dispositivo.
@@ -324,7 +327,12 @@ _CONTESTO_VITIGNI = re.compile(
     r"|ottenut[oaie]\s+(?:da(?:i|l|lla|lle|gli)?\s*)(?=(?-i:[A-ZÀ-Ý]))"
     r"|grapes?\s+(?=(?-i:[A-Z]))"
     r"|(?:comes?|made|is\s+made)\s+from\s+(?=(?-i:[A-Z])))"
-    r"((?:[^.;:!?,]|,(?=\s+(?-i:[A-ZÀ-Ý])))*)", re.I)
+    # I due punti chiudono il pezzo - «Si ottiene da Zibibbo: Il Moscato
+    # d'Alessandria» ha la scheda dopo, non un'altra uva - tranne quando
+    # davanti c'e' la parola che annuncia l'elenco: «tre vitigni: Trebbiano,
+    # Toscano, Abruzzese e Soave». Li' l'elenco comincia dopo.
+    r"((?:[^.;:!?,]|,(?=\s+(?-i:[A-ZÀ-Ý]))"
+    r"|(?<=vitigni):|(?<=vitigno):|(?<=uve):|(?<=grapes):|(?<=varieties):)*)", re.I)
 _UN_VITIGNO = re.compile(r"\b(un|a)\s+(?:grande\s+)?(vitigno|grape)\b", re.I)
 # «Nebbiolo in purezza» e' l'apertura che il corpus insegna, e quel che sta
 # davanti DEVE essere un'uva. Letto sul dispositivo: «Etna in purezza, il
@@ -352,11 +360,35 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
     vino = {_senza_accenti(x).lower() for x in (fatti.nome, fatti.tipologia,
                                                   fatti.denominazione,
                                                   fatti.cantina) if x}
+    # I luoghi in un elenco di uve capitano per il verso giusto - «Nasce dal
+    # Sangiovese, Toscana» - e non sono un'uva detta male.
+    luoghi = {_senza_accenti(x).lower() for x in (fatti.regione, fatti.denominazione) if x}
+    # Quel che sta fra virgolette e' il nome sull'etichetta, e la scheda del
+    # vitigno e' roba dei fatti riportata: nessuno dei due afferma che quelle
+    # parole siano uve di questo vino. Guardarci dentro dava sedici allarmi
+    # falsi sui racconti composti - «Da Uve Garganega Monte Fiorentine»,
+    # «Fragolino: nome popolare dell'uva Isabella».
+    pulito = re.sub(r"[«“\"][^»”\"]*[»”\"]", " ", testo)
+    for pezzo in (fatti.note_vitigno, fatti.nota_in(lingua)):
+        # La scheda si riporta anche a pezzi - il racconto composto ne prende
+        # la prima frase - quindi si toglie frase per frase.
+        for frase in spezza_in_frasi(pezzo or ""):
+            if len(frase) > 12:
+                pulito = re.sub(re.escape(frase), " ", pulito, flags=re.I)
+
+    # Per l'elenco voce per voce si tolgono anche i NOMI: la cantina «Uva Mia
+    # di Luisella» e la tipologia «San Severo Uva di Troia» aprono un elenco
+    # di uve che non esiste. Sono etichette, non affermazioni. Restano visibili
+    # agli altri due controlli, che cercano proprio i nomi finiti fra le uve.
+    per_voci = pulito
+    for pezzo in (fatti.cantina, fatti.nome, fatti.tipologia, fatti.denominazione):
+        if pezzo and len(pezzo) > 3:
+            per_voci = re.sub(re.escape(pezzo), " ", per_voci, flags=re.I)
     fuori: list[str] = []
-    for m in _CONTESTO_VITIGNI.finditer(testo):
+    for m in _CONTESTO_VITIGNI.finditer(pulito):
         for nome in re.findall(r"\b([A-ZÀ-Ý][a-zà-ÿ']{2,})\b", m.group(1)):
             n = _senza_accenti(nome).lower()
-            if any(n in u for u in uve):
+            if any(n in u or u in n for u in uve):
                 continue
             if any(n in x for x in note):
                 fuori.append(f"{nome} detto vitigno, ma e' una nota olfattiva")
@@ -370,7 +402,26 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
     # inglese la stessa apertura serve alle uve e alla provenienza. Se nel
     # pezzo c'e' la regione dei fatti, si sta parlando di quella.
     regione = _senza_accenti(fatti.regione or "").lower()
-    for m in _CONTESTO_VITIGNI.finditer(testo):
+    # Ogni VOCE dell'elenco deve contenere un'uva vera. «Brachetto d'Acqui»
+    # e' una voce sola e contiene il Brachetto: legittimo. «Trebbiano,
+    # Toscano, Abruzzese e Soave» sono quattro voci, e tre non sono uve - la
+    # scheda del Trebbiano dice che la famiglia comprende «il Toscano,
+    # l'Abruzzese, quello di Soave», e il modello ne ha fatto quattro vitigni
+    # di questo vino. Parole vere, fatto falso.
+    for m in _CONTESTO_VITIGNI.finditer(per_voci):
+        for voce in re.split(r",|\be\b|\bed\b|\band\b", m.group(1)):
+            if not re.search(r"[A-ZÀ-Ý]", voce):
+                continue
+            v = _senza_accenti(voce).lower()
+            if any(u and (u in v or v.strip() in u) for u in uve):
+                continue
+            if any(x and x in v for x in luoghi | note):
+                continue
+            nomi = re.findall(r"\b[A-ZÀ-Ý][a-zà-ÿ']{2,}\b", voce)
+            if nomi:
+                fuori.append(f"«{voce.strip()}» detto vitigno, ma fra le uve non c'e'")
+
+    for m in _CONTESTO_VITIGNI.finditer(pulito):
         elenco = _senza_accenti(m.group(1)).lower()
         if any(re.search(r"\b" + re.escape(u) + r"\b", elenco) for u in uve if u):
             continue
