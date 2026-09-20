@@ -1512,3 +1512,33 @@ class TestChiLoFaNonEDoveSiFa:
         ok, _ = verifica("Si produce in Primitivo di Manduria. Il disciplinare "
                          "lo vuole rosso intenso.", f)
         assert ok
+
+
+class TestIlColoreNonSiBeve:
+    """«In bocca è asciutto, di colore bianco», «On the palate, ruby red».
+
+    Il modello ha tre citazioni - colore, odore, sapore - e ogni tanto mette
+    quella del colore nel giro di frase del gusto. Le parole sono vere, il
+    posto no. Sui racconti salvati dei due modelli succede nel 3-9% dei testi.
+    """
+
+    def _fatti(self, **kw):
+        base = dict(livello=Livello.VINO, nome="Rosso di prova", denominazione="Prova",
+                    colore="Rosso", sicurezza=95.0,
+                    disciplinare={"colore": "rosso rubino", "sapore": "asciutto e armonico"})
+        base.update(kw)
+        return Fatti(**base)
+
+    def test_il_rubino_non_si_sente_in_bocca(self):
+        ok, inv = verifica("In bocca è asciutto e armonico, rosso rubino.", self._fatti())
+        assert not ok and any("il colore" in x for x in inv)
+
+    def test_nemmeno_in_inglese(self):
+        f = self._fatti(disciplinare={"colore": "ruby red", "sapore": "dry and harmonious"})
+        ok, inv = verifica("On the palate, dry and harmonious, ruby red.", f, "en")
+        assert not ok and any("il colore" in x for x in inv)
+
+    def test_il_gusto_al_posto_suo_va_bene(self):
+        ok, _ = verifica("In bocca è asciutto e armonico. Il disciplinare lo vuole "
+                         "rosso rubino.", self._fatti())
+        assert ok

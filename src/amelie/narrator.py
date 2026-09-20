@@ -205,6 +205,7 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
     # Le note olfattive finivano nei posti delle uve e dei cibi, in
     # minuscolo, dove il controllo sui nomi propri non guarda.
     invenzioni.extend(_produttore_al_posto_del_luogo(testo, fatti))
+    invenzioni.extend(_colore_al_posto_del_gusto(testo, fatti))
     invenzioni.extend(_note_al_posto_sbagliato(testo, fatti, lingua))
     invenzioni.extend(_cibi_al_posto_dei_profumi(testo, fatti, lingua))
     # Le ripetizioni che stanno dentro una citazione del registro non sono
@@ -396,6 +397,37 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
         if re.search(re.escape(v) + r"\s*(?:,\s*(?:che\s+)?(?:e'?\s+)?|\s+(?:e'?|is)\s+)?"
                      r"(?:un|a)\s+(?:grande\s+)?(?:vitigno|grape)\b", piano):
             fuori.append(f"«{v}» detto vitigno, ma e' il vino")
+    return fuori
+
+
+# Dove un testo dice che cosa si sente in bocca: li' il colore non c'entra.
+_CONTESTO_GUSTO = re.compile(
+    r"(?:il\s+gusto\s+è|al\s+palato|in\s+bocca\s+è|il\s+sapore\s+è"
+    r"|the\s+taste\s+is|on\s+the\s+palate|in\s+the\s+mouth)([^.!?]*)", re.I)
+# Solo parole che descrivono un colore e nient'altro: «secco» o «pieno» in
+# bocca ci stanno, «rubino» no.
+_PAROLA_DEL_COLORE = re.compile(
+    r"\b(?:di\s+colore\s+\w+|rubino|granato|paglierino|verdognol\w+|violacei"
+    r"|ambrat\w+|dorat\w+|salmone|ramat\w+|buccia\s+di\s+cipolla"
+    r"|ruby|garnet|straw[- ]colou?red|golden[- ]yellow|amber)\b", re.I)
+
+
+def _colore_al_posto_del_gusto(testo: str, fatti: Fatti) -> list[str]:
+    """Il colore detto dove va il gusto.
+
+    «In bocca è asciutto, armonico, di colore bianco e con acidità alta»,
+    «On the palate, bright ruby red». Il modello ha tre citazioni del
+    disciplinare - colore, odore, sapore - e ogni tanto mette quella del
+    colore nel giro di frase del gusto. Le parole sono tutte vere, il posto
+    no, e la verifica non guardava in che posto fossero.
+
+    Misurato sui racconti salvati dei due modelli: succede nel 3-9% dei testi
+    scritti dal modello, in tutte e due le lingue.
+    """
+    fuori = []
+    for m in _CONTESTO_GUSTO.finditer(testo):
+        if (x := _PAROLA_DEL_COLORE.search(m.group(1))):
+            fuori.append(f"«{x.group(0)}» detto del gusto, ma e' il colore")
     return fuori
 
 
