@@ -750,7 +750,24 @@ _PAROLA_DOPPIA = re.compile(r"\b(\w{4,})\b([,\s]+)\1\b", re.I)
 # Trentanove citazioni del registro cominciano col verbo - «é fresco,
 # piacevole e armonico» - e chi le riporta ce ne mette un altro davanti: «il
 # gusto è é fresco». Il verbo lo mette la frase che cita, non la citazione.
-_INIZIA_COL_VERBO = re.compile(r"^(?:é|è|e'|ed|e|sono|ha|hanno)\s+", re.I)
+_INIZIA_COL_VERBO = re.compile(r"^(?:é|è|e'|ed|e|sono|ha|hanno|va)\s+", re.I)
+
+# E dieci cominciano a meta' di una parola o di una frase, perche' il taglio
+# del documento d'origine e' caduto li'. Sentito al tavolo: «il disciplinare
+# lo vuole di odore tico di moscato» - era «aromatico».
+#
+# Si toglie il troncone, ma quel che resta deve reggere da solo: dopo «tico»
+# puo' restare «colore giallo paglierino più o meno intenso, odore
+# caratteristico e fragrante», che va benissimo, oppure «di moscato», che nel
+# giro di frase diventa «di odore di moscato». Sotto una certa lunghezza si
+# lascia perdere la citazione: il narratore ha comunque il resto dei fatti.
+_COMINCIA_A_META = re.compile(r"^(?:tico|tici|stico|stici|matico|matici)\b[,;]?\s*", re.I)
+_RESTO_MINIMO = 16
+
+# «ove prevalgono le note fruttate» e' la coda di una subordinata: quel che
+# segue e' un verbo, e nel giro di frase - «il profumo è ove prevalgono...» -
+# non c'e' taglio che tenga.
+_COMINCIA_CON_SUBORDINATA = re.compile(r"^(?:ove|dove|che|cui|mentre|quando|se)\b", re.I)
 
 # E centoventisei sono troncate a meta', con l'ultima parola che resta
 # appesa: «giallo paglierino più o meno intenso, il». Il taglio viene dal
@@ -767,6 +784,11 @@ def _citazioni_utili(r) -> dict[str, str]:
     for ambito in ("colore", "odore", "sapore"):
         v = (r[f"desc_{ambito}"] or "").strip().rstrip(".")
         v = _PAROLA_DOPPIA.sub(r"\1", v)
+        if _COMINCIA_CON_SUBORDINATA.match(v):
+            continue
+        tagliato = _COMINCIA_A_META.sub("", v).strip()
+        if tagliato != v:
+            v = tagliato if len(tagliato) >= _RESTO_MINIMO else ""
         v = _INIZIA_COL_VERBO.sub("", v).strip()
         for _ in range(4):
             tagliato = _CODA_APPESA.sub("", v).rstrip(" ,;")

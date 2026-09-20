@@ -1084,6 +1084,26 @@ class TestLaCitazioneSiRipulisce:
         c = _citazioni_utili(self._riga(desc_odore="vinoso, fresco e"))
         assert c["odore"] == "vinoso, fresco"
 
+    def test_la_parola_tagliata_in_testa(self):
+        """«tico di moscato» era «aromatico»: il taglio viene dal documento."""
+        from amelie.matcher import _citazioni_utili
+
+        c = _citazioni_utili(self._riga(desc_odore="tici, caratteristici di moscato"))
+        assert c["odore"] == "caratteristici di moscato"
+
+    def test_ma_se_resta_troppo_poco_si_lascia_perdere(self):
+        """«tico di moscato» -> «di moscato» -> «di odore di moscato»."""
+        from amelie.matcher import _citazioni_utili
+
+        assert "odore" not in _citazioni_utili(self._riga(desc_odore="tico di moscato"))
+
+    def test_la_subordinata_non_si_recupera(self):
+        """«ove prevalgono le note fruttate»: dopo c'e' un verbo, non un colore."""
+        from amelie.matcher import _citazioni_utili
+
+        assert "odore" not in _citazioni_utili(
+            self._riga(desc_odore="ove prevalgono le note fruttate ed un"))
+
     def test_quel_che_e_intero_non_si_tocca(self):
         from amelie.matcher import _citazioni_utili
 
