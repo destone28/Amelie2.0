@@ -1542,3 +1542,53 @@ class TestIlColoreNonSiBeve:
         ok, _ = verifica("In bocca è asciutto e armonico. Il disciplinare lo vuole "
                          "rosso rubino.", self._fatti())
         assert ok
+
+
+class TestIlPostoDelleCose:
+    """Due nomi veri messi nel posto di un'altra cosa, letti sul dispositivo.
+
+    «This is the "Barbera del Monferrato" by Grignolino, Freisa, Dolcetto and
+    Barbera»: quelle sono le uve, e quel record una cantina non ce l'ha
+    nemmeno. «Morellino di Scansano: Italy's most planted grape»: quella e' la
+    scheda del Sangiovese.
+    """
+
+    def _fatti(self, **kw):
+        base = dict(livello=Livello.VINO, nome="Morellino di Scansano",
+                    denominazione="Morellino di Scansano", cantina="Bonacchi",
+                    colore="Rosso", vitigni=["Sangiovese"], sicurezza=95.0,
+                    note_vitigno="Il vitigno più coltivato d'Italia e l'anima della Toscana.",
+                    disciplinare={"colore": "rosso rubino"})
+        base.update(kw)
+        return Fatti(**base)
+
+    def test_le_uve_non_sono_il_produttore(self):
+        f = self._fatti(cantina=None, vitigni=["Grignolino", "Freisa", "Dolcetto"])
+        ok, inv = verifica("Questo è il «Morellino di Scansano» di Grignolino, Freisa "
+                           "e Dolcetto. Il disciplinare lo vuole rosso rubino.", f)
+        assert not ok and any("sono le uve" in x for x in inv)
+
+    def test_il_produttore_vero_si(self):
+        ok, _ = verifica("Questo è il «Morellino di Scansano» di Bonacchi. "
+                         "Il disciplinare lo vuole rosso rubino.", self._fatti())
+        assert ok
+
+    def test_la_scheda_del_vitigno_non_va_sul_vino(self):
+        ok, inv = verifica("Morellino di Scansano: Il vitigno più coltivato d'Italia "
+                           "e l'anima della Toscana.", self._fatti())
+        assert not ok and any("scheda del vitigno" in x for x in inv)
+
+    def test_ma_sul_vitigno_si(self):
+        ok, _ = verifica("Sangiovese: Il vitigno più coltivato d'Italia e l'anima "
+                         "della Toscana. Il disciplinare lo vuole rosso rubino.",
+                         self._fatti())
+        assert ok
+
+    def test_un_vino_che_si_chiama_come_la_sua_uva(self):
+        """«Nero d'Avola: il rosso siciliano»: qui il nome e' l'uva, ed e' giusto."""
+        f = self._fatti(nome="Nero d'Avola", denominazione="Sicilia",
+                        vitigni=["Nero d'Avola"],
+                        note_vitigno="Il rosso siciliano per eccellenza, di grande frutto.")
+        ok, _ = verifica("Nero d'Avola: Il rosso siciliano per eccellenza, di grande "
+                         "frutto. Il disciplinare lo vuole rosso rubino.", f)
+        assert ok

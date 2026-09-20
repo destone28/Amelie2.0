@@ -206,6 +206,8 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
     # minuscolo, dove il controllo sui nomi propri non guarda.
     invenzioni.extend(_produttore_al_posto_del_luogo(testo, fatti))
     invenzioni.extend(_colore_al_posto_del_gusto(testo, fatti))
+    invenzioni.extend(_uve_al_posto_del_produttore(testo, fatti))
+    invenzioni.extend(_scheda_attaccata_al_vino(testo, fatti, lingua))
     invenzioni.extend(_note_al_posto_sbagliato(testo, fatti, lingua))
     invenzioni.extend(_cibi_al_posto_dei_profumi(testo, fatti, lingua))
     # Le ripetizioni che stanno dentro una citazione del registro non sono
@@ -428,6 +430,58 @@ def _colore_al_posto_del_gusto(testo: str, fatti: Fatti) -> list[str]:
     for m in _CONTESTO_GUSTO.finditer(testo):
         if (x := _PAROLA_DEL_COLORE.search(m.group(1))):
             fuori.append(f"«{x.group(0)}» detto del gusto, ma e' il colore")
+    return fuori
+
+
+# Dopo il nome fra virgolette, «di» e «by» introducono chi l'ha fatto.
+_CONTESTO_PRODUTTORE = re.compile(r"[»”\"']\s+(?:di|by)\s+([^.;:!?]*)", re.I)
+
+
+def _uve_al_posto_del_produttore(testo: str, fatti: Fatti) -> list[str]:
+    """I vitigni messi dove va la cantina.
+
+    «This is the "Barbera del Monferrato" by Grignolino, Freisa, Dolcetto and
+    Barbera», letto sul dispositivo: quelle sono le uve, e quel record una
+    cantina non ce l'ha nemmeno - e' una denominazione.
+    """
+    uve = [_senza_accenti(v).lower() for v in fatti.vitigni + fatti.vitigni_ammessi
+           if len(v) > 3]
+    if not uve:
+        return []
+    cantina = _senza_accenti(fatti.cantina or "").lower()
+    fuori = []
+    for m in _CONTESTO_PRODUTTORE.finditer(testo):
+        chi = _senza_accenti(m.group(1)).lower()
+        if cantina and cantina in chi:
+            continue
+        if any(re.search(r"\b" + re.escape(u) + r"\b", chi) for u in uve):
+            fuori.append(f"«{m.group(1).strip()}» detto come produttore, ma sono le uve")
+    return fuori
+
+
+def _scheda_attaccata_al_vino(testo: str, fatti: Fatti, lingua: str) -> list[str]:
+    """La scheda del vitigno appesa al nome del vino.
+
+    «Morellino di Scansano: Italy's most planted grape and the soul of
+    Tuscany»: quella e' la scheda del Sangiovese, e il Morellino e' il vino.
+    La forma «{vitigno}: {scheda}» e' giusta e la composizione la usa; qui il
+    nome davanti ai due punti e' quello sbagliato.
+    """
+    scheda = _senza_accenti(fatti.nota_in(lingua) or "").lower().strip()
+    if len(scheda) < 24:
+        return []
+    inizio = re.escape(scheda[:24])
+    fuori = []
+    for nome in (fatti.nome, fatti.tipologia, fatti.denominazione):
+        if not nome or len(nome) <= 4:
+            continue
+        n = _senza_accenti(nome).lower()
+        if any(n in _senza_accenti(v).lower() or _senza_accenti(v).lower() in n
+               for v in fatti.vitigni + fatti.vitigni_ammessi):
+            continue        # un vino che si chiama come la sua uva: e' giusto
+        if re.search(re.escape(n) + r"\s*:\s*" + inizio, _senza_accenti(testo).lower()):
+            fuori.append(f"«{nome}» con la scheda del vitigno, ma e' il vino")
+            break
     return fuori
 
 
