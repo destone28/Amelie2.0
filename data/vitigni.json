@@ -1171,7 +1171,7 @@
     {
       "nome": "Gaglioppo",
       "colore_bacca": "nera",
-      "descrizione": "Calabrese, del Cirò. Colore chiaro e tannino evidente, con una nota di macchia mediterranea che sa di casa.",
+      "descrizione": "Di Calabria, del Cirò. Colore chiaro e tannino evidente, con una nota di macchia mediterranea che sa di casa.",
       "note_sensoriali": [
         "frutta rossa",
         "erbe mediterranee",
@@ -2553,7 +2553,7 @@
     {
       "nome": "Picolit",
       "colore_bacca": "bianca",
-      "descrizione": "Friulano, raro e capriccioso: l'aborto floreale gli fa perdere gran parte degli acini, e quel che resta si concentra. Da qui un passito prezioso.",
+      "descrizione": "Del Friuli, raro e capriccioso: l'aborto floreale gli fa perdere gran parte degli acini, e quel che resta si concentra. Da qui un passito prezioso.",
       "note_sensoriali": [
         "miele",
         "fiori secchi",
@@ -2667,7 +2667,7 @@
     {
       "nome": "Pignolo",
       "colore_bacca": "nera",
-      "descrizione": "Friulano, quasi scomparso e recuperato da pochi filari. Tannino imponente e maturazione lentissima: è vino da lungo affinamento.",
+      "descrizione": "Del Friuli, quasi scomparso e recuperato da pochi filari. Tannino imponente e maturazione lentissima: è vino da lungo affinamento.",
       "note_sensoriali": [
         "frutta scura",
         "spezie",
@@ -2913,7 +2913,7 @@
     {
       "nome": "Refosco",
       "colore_bacca": "nera",
-      "descrizione": "Friulano, nella versione dal peduncolo rosso. Acidità alta e carattere rustico, nel senso buono.",
+      "descrizione": "Del Friuli, nella versione dal peduncolo rosso. Acidità alta e carattere rustico, nel senso buono.",
       "note_sensoriali": [
         "prugna",
         "erbe",
@@ -3220,7 +3220,7 @@
     {
       "nome": "Schioppettino",
       "colore_bacca": "nera",
-      "descrizione": "Friulano, di Prepotto. Pepe nero nel bicchiere e acidità viva: era quasi estinto negli anni settanta.",
+      "descrizione": "Del Friuli, di Prepotto. Pepe nero nel bicchiere e acidità viva: era quasi estinto negli anni settanta.",
       "note_sensoriali": [
         "pepe nero",
         "frutta rossa",
@@ -3542,7 +3542,7 @@
     {
       "nome": "Verdelho",
       "colore_bacca": "bianca",
-      "descrizione": "Portoghese, di Madeira. In Italia è presenza rara, con acidità alta e nota agrumata.",
+      "descrizione": "Di Portogallo, di Madeira. In Italia è presenza rara, con acidità alta e nota agrumata.",
       "note_sensoriali": [
         "agrumi",
         "nota salina",
@@ -3626,7 +3626,7 @@
     {
       "nome": "Verduzzo",
       "colore_bacca": "bianca",
-      "descrizione": "Friulano, nella versione friulana dà il Ramandolo, passito di grande dolcezza sostenuta da un tannino insolito per un bianco.",
+      "descrizione": "Del Friuli, e nella versione friulana dà il Ramandolo, passito di grande dolcezza sostenuta da un tannino insolito per un bianco.",
       "note_sensoriali": [
         "miele",
         "fichi secchi",

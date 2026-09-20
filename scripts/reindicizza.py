@@ -23,11 +23,13 @@ sys.path.insert(0, str(RADICE / "src"))
 from amelie.text import normalizza  # noqa: E402
 
 
-def main() -> None:
-    percorso = Path(sys.argv[1]) if len(sys.argv) > 1 else RADICE / "data" / "amelie.db"
-    if not percorso.exists():
-        sys.exit(f"non trovo {percorso}")
-    con = sqlite3.connect(percorso)
+def reindicizza(con: sqlite3.Connection) -> tuple[int, int]:
+    """Rifa' le forme normalizzate e l'indice. Non chiude la connessione.
+
+    Sta qui e non in `data/build_db.py` perche' serve anche da sola, quando
+    cambia `normalizza` e non si vuole ricostruire tutto. Chi costruisce la
+    chiama come ultimo passo.
+    """
     con.execute("PRAGMA foreign_keys = ON")
 
     cambiati = 0
@@ -64,9 +66,18 @@ def main() -> None:
     con.commit()
     con.execute("INSERT INTO ricerca(ricerca) VALUES('optimize')")
     con.commit()
+    return cambiati, len(righe)
+
+
+def main() -> None:
+    percorso = Path(sys.argv[1]) if len(sys.argv) > 1 else RADICE / "data" / "amelie.db"
+    if not percorso.exists():
+        sys.exit(f"non trovo {percorso}")
+    con = sqlite3.connect(percorso)
+    cambiati, voci = reindicizza(con)
     con.close()
     print(f"  {cambiati} forme normalizzate aggiornate")
-    print(f"  {len(righe)} voci reinserite nell'indice di ricerca")
+    print(f"  {voci} voci reinserite nell'indice di ricerca")
 
 
 if __name__ == "__main__":

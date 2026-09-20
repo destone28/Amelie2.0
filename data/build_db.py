@@ -41,15 +41,20 @@ import re
 import sqlite3
 import sys
 import unicodedata
+import pathlib
 from pathlib import Path
 
 RADICE = Path(__file__).resolve().parent.parent
 SORGENTI = RADICE / "data" / "sources"
 USCITA = RADICE / "data" / "amelie.db"
+IN_CORSO = RADICE / "data" / "amelie.db.in-corso"
 
 FIGSHARE = SORGENTI / "PDO_wine_data_IT_FR.csv"
 XWINES = SORGENTI / "xwines_italia.csv"
 VITIGNI = RADICE / "data" / "vitigni.json"
+
+sys.path.insert(0, str(RADICE / "scripts"))
+from reindicizza import reindicizza                            # noqa: E402
 
 # Suffisso di colore della bacca nei nomi del registro UE: "Corvina N".
 COLORE_BACCA = {
@@ -513,13 +518,15 @@ def solo_vitigni() -> None:
 def main() -> None:
     if "--solo-vitigni" in sys.argv:
         return solo_vitigni()
-    if USCITA.exists():
-        USCITA.unlink()
-    for extra in (".db-wal", ".db-shm"):
-        p = USCITA.with_suffix(extra)
-        p.unlink(missing_ok=True)
+    # Si costruisce a lato e si sostituisce solo a fine riuscita. Prima si
+    # scriveva dritto su `amelie.db`, e una costruzione che si fermava a meta'
+    # lasciava al suo posto un database vuoto - il database non sta in git, e
+    # quello era tutto quel che c'era. Successo, misurato su me stesso.
+    IN_CORSO.unlink(missing_ok=True)
+    for extra in ("-wal", "-shm"):
+        pathlib.Path(str(IN_CORSO) + extra).unlink(missing_ok=True)
 
-    con = sqlite3.connect(USCITA)
+    con = sqlite3.connect(IN_CORSO)
     con.executescript(SCHEMA)
     con.executemany(
         "INSERT INTO fonte(id,nome,url,licenza,licenza_url,attribuzione)"
@@ -533,13 +540,14 @@ def main() -> None:
     print(f"  {nv:>6} vini commerciali")
     ng = c.arricchisci_vitigni()
     print(f"  {ng:>6} vitigni descritti a mano")
-    ni = c.costruisci_indice()
+    _, ni = reindicizza(con)
     print(f"  {ni:>6} voci nell'indice di ricerca")
 
     con.commit()
     con.execute("PRAGMA journal_mode = DELETE")   # un file solo, piu' facile da copiare
     con.execute("VACUUM")
     con.close()
+    IN_CORSO.replace(USCITA)
     print(f"\n  {USCITA}  ({USCITA.stat().st_size / 1e6:.1f} MB)")
 
 
