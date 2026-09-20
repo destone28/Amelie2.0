@@ -1449,6 +1449,12 @@ class TestUnLuogoNonEUnUva:
         base.update(kw)
         return Fatti(**base)
 
+    def test_il_da_liscio_apre_un_elenco_di_uve(self):
+        """«Nasce da Barbaresco»: c'erano «dal», «dalla», «dai», non «da»."""
+        f = self._fatti(nome="Arenile Pecorino", denominazione="Ripa Teatina")
+        ok, inv = verifica("Nasce da Ripa Teatina: giallo paglierino.", f)
+        assert not ok and any("uve" in x for x in inv)
+
     def test_nemmeno_il_produttore(self):
         """«Si ottiene da Restivo»: Restivo e' la cantina."""
         f = self._fatti(cantina="Restivo")
@@ -1472,3 +1478,37 @@ class TestUnLuogoNonEUnUva:
                   vitigni=["Brachetto"], sicurezza=95.0,
                   disciplinare={"colore": "rosso rubino"})
         assert verifica("Nasce dal Brachetto d'Acqui, vitigno di casa.", f)[0]
+
+
+class TestChiLoFaNonEDoveSiFa:
+    """«Si produce in Produttori di Manduria», letto sul dispositivo.
+
+    Il modello impara la frase «Si produce in {regione}» e, quando la regione
+    nei fatti non c'e', la riempie col primo nome proprio che trova.
+    """
+
+    def _fatti(self, **kw):
+        base = dict(livello=Livello.VINO, nome="Primitivo di Manduria Dolce",
+                    denominazione="Primitivo di Manduria",
+                    cantina="Produttori di Manduria", colore="Rosso",
+                    vitigni=["Primitivo"], sicurezza=95.0,
+                    disciplinare={"colore": "rosso intenso"})
+        base.update(kw)
+        return Fatti(**base)
+
+    def test_la_cantina_non_e_un_luogo(self):
+        ok, inv = verifica("Si produce in Produttori di Manduria. Il disciplinare "
+                           "lo vuole rosso intenso.", self._fatti())
+        assert not ok and any("chi lo produce" in x for x in inv)
+
+    def test_la_regione_si(self):
+        f = self._fatti(regione="Puglia")
+        ok, _ = verifica("Si produce in Puglia. Il disciplinare lo vuole rosso intenso.", f)
+        assert ok
+
+    def test_una_denominazione_e_quasi_sempre_un_luogo(self):
+        """«si produce a Montalcino» non e' un errore, e' come si dice."""
+        f = self._fatti(cantina=None)
+        ok, _ = verifica("Si produce in Primitivo di Manduria. Il disciplinare "
+                         "lo vuole rosso intenso.", f)
+        assert ok

@@ -204,6 +204,7 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
     # bianchi, il vitigno Prosecco», «gradevole, fine, delicato, delicate».
     # Le note olfattive finivano nei posti delle uve e dei cibi, in
     # minuscolo, dove il controllo sui nomi propri non guarda.
+    invenzioni.extend(_produttore_al_posto_del_luogo(testo, fatti))
     invenzioni.extend(_note_al_posto_sbagliato(testo, fatti, lingua))
     invenzioni.extend(_cibi_al_posto_dei_profumi(testo, fatti, lingua))
     # Le ripetizioni che stanno dentro una citazione del registro non sono
@@ -304,7 +305,9 @@ _CONTESTO_VITIGNI = re.compile(
     # elenco intero e va guardato tutto; «Isabella, ibrido americano dal
     # profumo di fragola» finisce a Isabella, e la fragola non e' un'uva
     # detta male, e' un profumo detto bene.
-    r"(?:nasce\s+(?:dall'|dalla\s+|dalle\s+|dal\s+|dai\s+)\s*(?:solo\s+|incontro\s+di\s+)?"
+    # Il «da» liscio mancava: c'erano «dal», «dalla», «dall'», «dai», non
+    # «nasce da Barbaresco» - letto sul dispositivo, e Barbaresco e' il vino.
+    r"(?:nasce\s+(?:dall'|dalla\s+|dalle\s+|dal\s+|dai\s+|da\s+)\s*(?:solo\s+|incontro\s+di\s+)?"
     r"|vitign[oi]\s+(?=(?-i:[A-ZÀ-Ý]))|uv[ae]\s+(?:di\s+)?(?=(?-i:[A-ZÀ-Ý]))"
     # «It comes from Ripa Teatina», «It is made from Nebbiolo»: sono le frasi
     # inglesi del lessico, e quel che segue sono uve. Mancavano, e un luogo
@@ -393,6 +396,39 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
         if re.search(re.escape(v) + r"\s*(?:,\s*(?:che\s+)?(?:e'?\s+)?|\s+(?:e'?|is)\s+)?"
                      r"(?:un|a)\s+(?:grande\s+)?(?:vitigno|grape)\b", piano):
             fuori.append(f"«{v}» detto vitigno, ma e' il vino")
+    return fuori
+
+
+# Dove un testo dice DOVE si fa: quel che segue e' un luogo.
+_CONTESTO_LUOGO = re.compile(
+    r"(?:si\s+produce\s+(?:in|a|nel|nella|nelle|nei|negli)\s+"
+    r"|nasce\s+(?:in|a|nel|nella)\s+"
+    r"|(?:is\s+)?produced\s+in\s+|made\s+in\s+|grown\s+in\s+)([^.;:!?]*)", re.I)
+
+
+def _produttore_al_posto_del_luogo(testo: str, fatti: Fatti) -> list[str]:
+    """Il nome della cantina messo dove va la regione.
+
+    «Si produce in Produttori di Manduria», letto sul dispositivo: quello e'
+    chi lo fa, non dove si fa. Il modello impara la frase «Si produce in
+    {regione}» e, quando la regione nei fatti non c'e', la riempie col primo
+    nome proprio che trova.
+
+    Si guarda solo la cantina, e solo se nel pezzo la regione non c'e': una
+    denominazione E' quasi sempre anche un luogo - «si produce a Montalcino» -
+    e bocciarla sarebbe un allarme falso.
+    """
+    cantina = _senza_accenti(fatti.cantina or "").lower().strip()
+    if len(cantina) <= 4:
+        return []
+    regione = _senza_accenti(fatti.regione or "").lower()
+    fuori = []
+    for m in _CONTESTO_LUOGO.finditer(testo):
+        dove = _senza_accenti(m.group(1)).lower()
+        if regione and regione in dove:
+            continue
+        if cantina in dove:
+            fuori.append(f"«{fatti.cantina}» detto come luogo, ma e' chi lo produce")
     return fuori
 
 
