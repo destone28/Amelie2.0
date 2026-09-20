@@ -371,10 +371,14 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
     pulito = re.sub(r"[«“\"][^»”\"]*[»”\"]", " ", testo)
     for pezzo in (fatti.note_vitigno, fatti.nota_in(lingua)):
         # La scheda si riporta anche a pezzi - il racconto composto ne prende
-        # la prima frase - quindi si toglie frase per frase.
+        # la prima frase - quindi si toglie frase per frase. Ma solo quando e'
+        # ATTRIBUITA, cioe' preceduta dai due punti: «Trebbiano: Non un
+        # vitigno solo ma una famiglia...» e' la scheda del Trebbiano, mentre
+        # «Nasce da Siciliano, chiamato Ansonica in Toscana» e' la stessa
+        # scheda messa dove vanno le uve - e «Siciliano» un vitigno non e'.
         for frase in spezza_in_frasi(pezzo or ""):
             if len(frase) > 12:
-                pulito = re.sub(re.escape(frase), " ", pulito, flags=re.I)
+                pulito = re.sub(r":\s*" + re.escape(frase), ": ", pulito, flags=re.I)
 
     # Per l'elenco voce per voce si tolgono anche i NOMI: la cantina «Uva Mia
     # di Luisella» e la tipologia «San Severo Uva di Troia» aprono un elenco

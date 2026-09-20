@@ -1627,6 +1627,25 @@ class TestOgniVoceDellElencoDeveEssereUnUva:
                          "lo vuole giallo paglierino.", self._fatti())
         assert ok
 
+    def test_la_scheda_vale_solo_se_attribuita(self):
+        """«Nasce da Siciliano, chiamato Ansonica in Toscana»: e' la scheda
+        dell'Inzolia messa dove vanno le uve, e «Siciliano» un vitigno non e'."""
+        f = self._fatti(vitigni=["Ansonica"],
+                        note_vitigno="Siciliano, chiamato Ansonica in Toscana "
+                                     "dove è arrivato dall'isola.")
+        ok, inv = verifica("Nasce da Siciliano, chiamato Ansonica in Toscana dove "
+                           "è arrivato dall'isola.", f)
+        assert not ok and any("fra le uve non c'e'" in x for x in inv)
+
+    def test_ma_attribuita_va_bene(self):
+        f = self._fatti(vitigni=["Ansonica"],
+                        note_vitigno="Siciliano, chiamato Ansonica in Toscana "
+                                     "dove è arrivato dall'isola.")
+        ok, _ = verifica("Ansonica: Siciliano, chiamato Ansonica in Toscana dove "
+                         "è arrivato dall'isola. Il disciplinare lo vuole giallo "
+                         "paglierino.", f)
+        assert ok
+
     def test_il_nome_fra_virgolette_non_e_un_elenco(self):
         """«Da Uve Garganega Monte Fiorentine»: quell'«Uve» e' l'etichetta."""
         f = self._fatti(nome="Da Uve Garganega Monte Fiorentine", vitigni=["Garganega"])
