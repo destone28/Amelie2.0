@@ -507,8 +507,18 @@ def per_la_voce(testo: str, lingua: str = "it") -> str:
     testo = re.sub(r"[«»“”\"]", "", testo)
     for pattern, sostituto in _COMPILATE.get(lingua, _COMPILATE["it"]):
         testo = pattern.sub(sostituto, testo)
-    # Il trattino fra numeri si legge "meno": va sciolto.
-    testo = re.sub(r"(\d)\s*-\s*(\d)", r"\1 e \2", testo)
+    # Il trattino fra numeri si legge "meno": va sciolto. E la congiunzione
+    # e' della lingua in cui si parla: «serve at 8 e 10 degrees», sentito
+    # riascoltando i testi inglesi, e' una parola italiana in mezzo a una
+    # frase inglese - lo stesso difetto delle sigle, in piccolo.
+    testo = re.sub(r"(\d)\s*-\s*(\d)",
+                   r"\1 to \2" if lingua == "en" else r"\1 e \2", testo)
+    # «13.0%»: in italiano il decimale si scrive con la virgola, e chi legge
+    # dice «tredici punto zero» solo se glielo si scrive col punto. Il
+    # separatore delle migliaia - «1.500 metri» - ha tre cifre dopo il punto
+    # e non va toccato.
+    if lingua != "en":
+        testo = re.sub(r"(\d)\.(\d{1,2})(?!\d)", r"\1,\2", testo)
     return re.sub(r"\s+", " ", testo).strip()
 
 

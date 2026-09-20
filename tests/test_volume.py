@@ -789,6 +789,26 @@ class TestLaPronunciaSegueLaLingua:
         assert "denominazione di origine controllata e garantita" in per_la_voce(
             "Un Barolo DOCG.")
 
+    def test_l_intervallo_si_congiunge_nella_lingua_giusta(self):
+        """«Serve at 8 e 10 degrees»: una parola italiana in una frase inglese."""
+        from amelie.speech import per_la_voce
+
+        assert "8 to 10" in per_la_voce("Serve at 8-10 degrees.", "en")
+        assert "8 e 10" in per_la_voce("Si serve fra 8-10 gradi.", "it")
+
+    def test_il_decimale_italiano_ha_la_virgola(self):
+        """«13.0» si sente «tredici punto zero»."""
+        from amelie.speech import per_la_voce
+
+        assert "13,5" in per_la_voce("Ha 13.5% di alcol.", "it")
+        assert "13.5" in per_la_voce("It has 13.5% alcohol.", "en")
+
+    def test_le_migliaia_non_sono_un_decimale(self):
+        """«1.500 metri» non diventa «millecinquecento virgola»."""
+        from amelie.speech import per_la_voce
+
+        assert "1.500" in per_la_voce("Sale a 1.500 metri.", "it")
+
     def test_i_nomi_francesi_non_si_riscrivono_per_la_voce_inglese(self):
         """«sciardonè» serve a una voce italiana; a una inglese fa solo danno."""
         from amelie.speech import per_la_voce
