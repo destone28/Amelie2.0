@@ -360,9 +360,15 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
     # che posto fosse finito. Si flagga solo se nell'elenco non compare
     # nessuna delle uve vere: «Brachetto d'Acqui» contiene il Brachetto, ed e'
     # un modo legittimo di dirlo.
+    # «It comes from Trentino-Alto Adige» dice da DOVE viene, ed e' vero: in
+    # inglese la stessa apertura serve alle uve e alla provenienza. Se nel
+    # pezzo c'e' la regione dei fatti, si sta parlando di quella.
+    regione = _senza_accenti(fatti.regione or "").lower()
     for m in _CONTESTO_VITIGNI.finditer(testo):
         elenco = _senza_accenti(m.group(1)).lower()
         if any(re.search(r"\b" + re.escape(u) + r"\b", elenco) for u in uve if u):
+            continue
+        if regione and regione in elenco:
             continue
         for v in vino:
             if v and len(v) > 4 and v in elenco:
