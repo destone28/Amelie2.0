@@ -986,3 +986,41 @@ class TestIlBloccoInglesePerDavvero:
         note_en = ", ".join(f.sensoriali_in("en"))
         if note_en and note_en != ", ".join(f.note_sensoriali):
             assert note_en in en
+
+
+class TestIlColoreScrittoNelNome:
+    """«Franciacorta Rosé» prendeva la descrizione del Franciacorta bianco.
+
+    La tipologia si aggancia al vino per somiglianza del nome, e con una sola
+    tipologia la si prendeva senza nemmeno confrontare il colore. Da li'
+    venivano colore, categoria e citazione del disciplinare: la descrizione di
+    un altro vino, letta a voce con sicurezza.
+
+    In archivio, quando si e' guardato: 467 record cambiano colore e 109
+    citazioni erano del vino sbagliato - un «Nebbiolo Brut Rosé» si portava
+    dietro il testo del Barolo, un «Bianco Veronese» quello del Valpolicella.
+    """
+
+    def test_il_nome_dichiara_il_colore(self, m):
+        assert m._colore_scritto_nel_nome("franciacorta rose") == "Rosato"
+        assert m._colore_scritto_nel_nome("lambrusco frizzante rosato dolce") == "Rosato"
+        assert m._colore_scritto_nel_nome("cuvee blanc de blancs brut") == "Bianco"
+
+    def test_il_nero_del_vitigno_non_conta(self, m):
+        assert m._colore_scritto_nel_nome("pinot nero brut") is None
+        assert m._colore_scritto_nel_nome("nero d'avola") is None
+
+    def test_la_rosa_non_e_un_rosato(self, m):
+        """Il Moscato Rosa e' un'uva, e il suo vino e' rosso."""
+        assert m._colore_scritto_nel_nome("moscato rosa") is None
+
+    def test_due_colori_non_decidono(self, m):
+        assert m._colore_scritto_nel_nome("cuvee bianco e rosso") is None
+
+    def test_il_franciacorta_rose_non_e_il_franciacorta(self, m):
+        """Il caso che ha fatto nascere la regola, sul record vero."""
+        f = m._fatti_vino(2333)
+        assert f.nome == "Franciacorta Rosé"
+        assert f.colore == "Rosato"
+        assert "ros" in (f.disciplinare_di or "").lower(), (
+            f"un Franciacorta Rosé descritto come «{f.disciplinare_di}»")

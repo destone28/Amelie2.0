@@ -910,6 +910,23 @@ class Matcher:
             # Il primo non contraddice niente: non c'e' nulla da correggere.
             return candidati[0]
 
+        # Prima di scendere: se la denominazione del primo ha una tipologia del
+        # colore dichiarato, e il suo nome si legge sull'etichetta, il primo
+        # non e' da scartare - e' da correggere, e lo fa `_del_colore_dichiarato`
+        # scegliendo fra i fratelli. Scendere gli farebbe perdere una
+        # denominazione che sulla bottiglia c'e' scritta.
+        #
+        # Serve da quando i colori sono piu' completi: su «TARVESIUM PROSECCO
+        # ROSE DOC» i primi quattordici candidati pareggiano tutti a 80, e
+        # sono tutti «X prosecco extra dry» tranne un «canti rose extra dry»
+        # del Piemonte. Scendere su quello significava cambiare denominazione
+        # per via del colore, e poi non poter nominare ne' «Canti» ne'
+        # «Piemonte», che sull'etichetta non ci sono: non usciva piu' niente.
+        if self._fratelli_leggibili(
+                self._denominazione_di(candidati[0].ambito, candidati[0].ambito_id),
+                detto, token):
+            return candidati[0]
+
         # Si scende SOLO su chi il colore giusto ce l'ha detto. Accontentarsi
         # di chi non lo dichiara e' stato provato e fa danni: la lista sotto un
         # bianco e' piena di record senza colore, e il primo che capita non ha
@@ -1016,7 +1033,13 @@ class Matcher:
                 colore = self._colore_di("tipologia", tid)
                 if colore is not None:
                     return colore
-        return COLORE_UE.get(r["tipo"] or "")
+        # Ultima spiaggia: il colore scritto sull'etichetta. Seicentotrentacinque
+        # vini non hanno colore da nessun'altra parte - quasi tutti spumanti e
+        # passiti, dove `tipo` dice lo stile e non il colore - e senza colore
+        # non c'e' citazione, perche' il registro si interroga per
+        # denominazione E colore.
+        return COLORE_UE.get(r["tipo"] or "") or self._colore_scritto_nel_nome(
+            r["nome_norm"])
 
     def _stesso_vino(self, f: Fatti, c: Candidato) -> bool:
         """Questo candidato e' lo stesso vino di un altro produttore?
@@ -1158,6 +1181,30 @@ class Matcher:
             libere.pop(i)
         return True
 
+    def _denominazione_di(self, ambito: str, ident: int) -> int | None:
+        """Sotto quale denominazione sta questo record."""
+        if ambito == "denominazione":
+            return ident
+        if ambito in ("vino", "tipologia"):
+            r = self.con.execute(
+                f"SELECT denominazione_id FROM {ambito} WHERE id = ?", (ident,)).fetchone()
+            return r["denominazione_id"] if r else None
+        return None
+
+    def _fratelli_leggibili(self, den_id: int | None, detto: str,
+                            token: Sequence[str]) -> list:
+        """Le tipologie di questa denominazione, del colore dichiarato, il cui
+        nome si legge tutto sull'etichetta."""
+        if den_id is None:
+            return []
+        atteso = [k for k, v in COLORE_UE.items() if v == detto]
+        righe = self.con.execute(
+            "SELECT t.id, r.testo, r.peso FROM tipologia t"
+            " JOIN ricerca r ON r.ambito = 'tipologia' AND r.ambito_id = t.id"
+            " WHERE t.denominazione_id = ? AND t.colore IN (%s)"
+            % ",".join("?" * len(atteso)), (den_id, *atteso)).fetchall()
+        return [r for r in righe if self._tutto_letto(r["testo"], token)]
+
     def _del_colore_dichiarato(self, f: Fatti, token: Sequence[str],
                                testo_norm: str, tetto: float) -> Fatti:
         """Se il colore scritto contraddice ancora, si cerca il fratello giusto.
@@ -1179,16 +1226,9 @@ class Matcher:
             return f
         if f.colore is None or COLORE_UE.get(f.colore, f.colore) == detto:
             return f
-        atteso = [k for k, v in COLORE_UE.items() if v == detto]
-        righe = self.con.execute(
-            "SELECT t.id, r.testo, r.peso FROM tipologia t"
-            " JOIN denominazione d ON d.id = t.denominazione_id"
-            " JOIN ricerca r ON r.ambito = 'tipologia' AND r.ambito_id = t.id"
-            " WHERE d.nome = ? AND t.colore IN (%s)"
-            % ",".join("?" * len(atteso)), (f.denominazione, *atteso)).fetchall()
-        for r in righe:
-            if not self._tutto_letto(r["testo"], token):
-                continue
+        den = self.con.execute("SELECT id FROM denominazione WHERE nome = ?",
+                               (f.denominazione,)).fetchone()
+        for r in self._fratelli_leggibili(den["id"] if den else None, detto, token):
             fratello = self._componi(Candidato(ambito="tipologia", ambito_id=r["id"],
                                                testo=r["testo"], somiglianza=0.0,
                                                peso=r["peso"]))
@@ -1656,16 +1696,54 @@ class Matcher:
             self._tipologie[chiave] = self._cerca_tipologia(den_id, nome_norm)
         return self._tipologie[chiave]
 
+    # Il colore scritto nel nome del vino: «Franciacorta Rosé», «Lambrusco
+    # Frizzante Rosato Dolce». Le forme inglesi e francesi ci sono perche'
+    # stanno sulle etichette da esportazione.
+    #
+    # «rosa» NON c'e' di proposito: il Moscato Rosa e' un'uva, e il suo vino
+    # e' rosso. E prima di cercare si tolgono i nomi dei vitigni, perche'
+    # «Pinot Nero Brut» e' uno spumante BIANCO fatto con un'uva nera.
+    _COLORE_NEL_NOME = {"rosso": "Rosso", "red": "Rosso",
+                        "bianco": "Bianco", "blanc": "Bianco", "blancs": "Bianco",
+                        "white": "Bianco",
+                        "rosato": "Rosato", "rose": "Rosato", "rosati": "Rosato"}
+    _PAROLA_DI_COLORE = re.compile(
+        r"\b(" + "|".join(_COLORE_NEL_NOME) + r")\b")
+
+    def _colore_scritto_nel_nome(self, nome_norm: str) -> str | None:
+        """Il colore che il nome dichiara, o None se non ne dichiara uno solo.
+
+        «Terre Bianche Rosso» ne dichiara due e non vale: quando le famiglie
+        sono piu' d'una non si sceglie, si tace.
+        """
+        resto = f" {nome_norm} "
+        for v in self._vitigni_noti():
+            resto = resto.replace(f" {v} ", " ")
+        trovate = {self._COLORE_NEL_NOME[x] for x in self._PAROLA_DI_COLORE.findall(resto)}
+        return trovate.pop() if len(trovate) == 1 else None
+
     @sotto_lucchetto
     def _cerca_tipologia(self, den_id: int, nome_norm: str) -> int | None:
         from rapidfuzz import fuzz
 
         with self._db:
             righe = self.con.execute(
-                "SELECT id, nome_norm FROM tipologia WHERE denominazione_id = ?",
+                "SELECT id, nome_norm, colore FROM tipologia WHERE denominazione_id = ?",
                 (den_id,)).fetchall()
         if not righe:
             return None
+        # Se il nome dichiara un colore, una tipologia d'altro colore non e'
+        # questo vino. Prima non si guardava, e con una sola tipologia la si
+        # prendeva senza nemmeno confrontare: «Franciacorta Rosé» si agganciava
+        # al Franciacorta bianco, e da li' prendeva colore, categoria e
+        # citazione del disciplinare - la descrizione di un altro vino, letta
+        # a voce con sicurezza. In archivio: 216 vini su 2.279 col colore
+        # scritto nel nome ne ricevevano uno diverso.
+        if (detto := self._colore_scritto_nel_nome(nome_norm)):
+            righe = [r for r in righe
+                     if COLORE_UE.get(r["colore"] or "") in (detto, None)]
+            if not righe:
+                return None
         if len(righe) == 1:
             return righe[0]["id"]
         migliore = max(righe, key=lambda r: fuzz.token_set_ratio(
