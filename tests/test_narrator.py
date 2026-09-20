@@ -1449,6 +1449,12 @@ class TestUnLuogoNonEUnUva:
         base.update(kw)
         return Fatti(**base)
 
+    def test_nemmeno_il_produttore(self):
+        """«Si ottiene da Restivo»: Restivo e' la cantina."""
+        f = self._fatti(cantina="Restivo")
+        ok, inv = verifica("Si ottiene da Restivo: rosso rubino con riflessi granato.", f)
+        assert not ok and any("uve" in x for x in inv)
+
     def test_la_denominazione_non_sta_fra_le_uve(self):
         ok, inv = verifica("It comes from Ripa Teatina: from Abruzzo.",
                            self._fatti(regione="Abruzzo"), "en")

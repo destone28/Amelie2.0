@@ -311,6 +311,11 @@ _CONTESTO_VITIGNI = re.compile(
     # detto al posto di un vitigno passava - letto sul dispositivo.
     # Non «from the»: e' troppo generico, e dentro la scheda di un vitigno
     # - «Arneis: Piedmontese, from the Roero» - diceva che il Roero e' un'uva.
+    # «Si ottiene da {vitigni}» e' una frase del lessico, quindi il modello
+    # l'ha imparata: e quel che segue sono uve per definizione. Mancava, e
+    # «Si ottiene da Restivo» - il produttore - passava.
+    r"|si\s+ottien(?:e|gono)\s+(?:da(?:i|l|lla|lle|gli)?\s*)(?=(?-i:[A-ZÀ-Ý]))"
+    r"|ottenut[oaie]\s+(?:da(?:i|l|lla|lle|gli)?\s*)(?=(?-i:[A-ZÀ-Ý]))"
     r"|grapes?\s+(?=(?-i:[A-Z]))"
     r"|(?:comes?|made|is\s+made)\s+from\s+(?=(?-i:[A-Z])))"
     r"((?:[^.;:!?,]|,(?=\s+(?-i:[A-ZÀ-Ý])))*)", re.I)
@@ -335,8 +340,12 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
     uve = {_senza_accenti(v).lower() for v in fatti.vitigni + fatti.vitigni_ammessi}
     note = {_senza_accenti(n).lower()
             for n in list(fatti.note_sensoriali) + list(fatti.sensoriali_in(lingua))}
+    # La cantina c'e' dentro, e non e' un di piu': «Si ottiene da Restivo»,
+    # letto sul dispositivo, dove Restivo e' il produttore. Passava perche' il
+    # nome sta nei fatti e nessuna regola guardava in che posto fosse finito.
     vino = {_senza_accenti(x).lower() for x in (fatti.nome, fatti.tipologia,
-                                                  fatti.denominazione) if x}
+                                                  fatti.denominazione,
+                                                  fatti.cantina) if x}
     fuori: list[str] = []
     for m in _CONTESTO_VITIGNI.finditer(testo):
         for nome in re.findall(r"\b([A-ZÀ-Ý][a-zà-ÿ']{2,})\b", m.group(1)):
