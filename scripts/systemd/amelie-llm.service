@@ -11,14 +11,18 @@ WorkingDirectory=/home/arduino/amelie
 # prefill gira a ~8 token/s, quindi le istruzioni fisse costerebbero venti
 # secondi a ogni bottiglia. Rilette una volta sola, costano zero.
 ExecStart=/home/arduino/amelie/llama.cpp/build/bin/llama-server \
-    --model /home/arduino/amelie/models/gemma-3-1b-it-Q4_K_M.gguf \
+    # Lo studente affinato, non il modello di partenza: `studente-q4_k_m.gguf`
+    # e' il nome fisso, e `scripts/rilascio.sh` ci copia sopra la versione
+    # nuova tenendo da parte quella di prima. Cosi' l'unita' non cambia a
+    # ogni riaddestramento.
+    --model /home/arduino/amelie/models/studente-q4_k_m.gguf \
     --host 127.0.0.1 --port 8081 \
     --threads 4 --ctx-size 2048 \
     --cache-reuse 256 \
     --no-webui
 Restart=on-failure
 RestartSec=10
-# Il modello occupa ~800 MB: il tetto lascia respiro a OCR, voce e interfaccia
+# Lo studente in Q4_K_M occupa ~400 MB: il tetto lascia respiro a OCR, voce e interfaccia
 # sui 3,6 GiB della board, e fa fallire il servizio invece di mandare tutto
 # in swap su eMMC, che sarebbe molto peggio.
 MemoryMax=1400M
