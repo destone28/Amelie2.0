@@ -1226,8 +1226,16 @@ def template(f: Fatti, lex: Lessico | None = None, lingua: str = "it") -> str:
     """
     lex = lex or carica()
     seme = seme_di(f)
-    testo = " ".join([_apertura(f, lex, lingua, seme)]
-                     + _corpo(f, lex, lingua, seme)).strip()
+    pezzi = [_apertura(f, lex, lingua, seme)]
+    # Il produttore, quando si e' letto ma il vino non si sa. Al livello
+    # «vino» sta gia' dentro l'apertura - «il "Cannubi" di Marchesi di
+    # Barolo» - e ripeterlo sarebbe goffo; piu' in basso non lo diceva
+    # nessuno, e si buttava via la cosa piu' identificante dell'etichetta.
+    if f.cantina and f.livello is not Livello.VINO:
+        pezzi.append(lex.frase("apertura", "cantina_sola", lingua=lingua,
+                               seme=_seme_per(seme, "cantina_sola"),
+                               cantina=f.cantina))
+    testo = " ".join(pezzi + _corpo(f, lex, lingua, seme)).strip()
     if lingua == "it":
         # «abbinato a antipasti»: davanti a un'altra a l'italiano vuole «ad»,
         # e la voce sintetica legge lo iato. Quattromila record cominciano

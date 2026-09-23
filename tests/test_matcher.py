@@ -1109,3 +1109,58 @@ class TestLaCitazioneSiRipulisce:
 
         intera = "rosso rubino con riflessi granato con l'invecchiamento"
         assert _citazioni_utili(self._riga(desc_colore=intera))["colore"] == intera
+
+
+class TestIlProduttoreScrittoSullEtichetta:
+    """«ALBAROSSA NEGROAMARO PALAMÀ VINICOLA DEL SALENTO», letta sul dispositivo.
+
+    «Palamà» si legge benissimo - e' una delle 6.168 cantine dell'archivio, e
+    sulle 139 etichette di prova la cantina si legge nell'81% dei casi - ma
+    finiva buttata via ogni volta che la cascata scendeva sotto il vino: il
+    dispositivo diceva «Questo è un Salento» e basta.
+
+    Il record giusto perdeva perche' ha cinque parole di cui l'OCR ne legge
+    una (il nome del vino e' in un carattere decorativo), mentre un Negroamaro
+    di un ALTRO produttore ne ha due, generiche, tutte lette. Cosi' vinceva un
+    vino di cui non si sa il produttore, e da li' si scendeva al vitigno.
+
+    Qui non si sceglie un vino: si aggiunge un fatto che e' scritto sulla
+    bottiglia. Sulle 139 etichette vere: 16 produttori recuperati, zero
+    sbagliati, e la coerenza sale dal 79,9% all'87,1%.
+    """
+
+    def test_il_produttore_letto_si_dice_anche_senza_il_vino(self, m):
+        f = m.cerca(["PALAMA", "NEGROAMARO", "SALENTO", "VINICOLA"])
+        assert f.cantina == "Palamà", f"produttore perso: {f.cantina!r}"
+
+    def test_anche_con_l_ocr_che_sbaglia_il_vitigno(self, m):
+        """Come e' stata letta davvero: «TEGDOAMADO» per Negroamaro."""
+        f = m.cerca(["PALAMA", "TEGDOAMADO", "SALENTO", "VINICOLA"])
+        assert f.cantina == "Palamà"
+
+    def test_una_parola_del_vino_non_firma_un_produttore(self, m):
+        """«Serra dei Turchi · SANSILVESTRO · BAROLO»: «Serra» e' del VINO,
+        e in archivio c'e' anche una cantina «Castel di Serra»."""
+        f = m.cerca(["Serra dei Turehi", "SANSILVESTRO", "BAROLO"])
+        assert not f.cantina or "silvestro" in f.cantina.lower(), \
+            f"attribuito a {f.cantina!r}"
+
+    def test_un_luogo_non_firma_un_produttore(self, m):
+        """«Vigneti del Salento» si faceva provare da «salento», che
+        sull'etichetta e' l'indicazione geografica."""
+        f = m.cerca(["SALENTO", "NEGROAMARO", "2021"])
+        assert not f.cantina or "salento" not in f.cantina.lower(), \
+            f"attribuito a {f.cantina!r}"
+
+    def test_un_nome_di_vigna_non_firma_un_produttore(self, m):
+        """«Bellavista» e' una vigna di Castello di Ama, ed e' anche una
+        cantina di Franciacorta."""
+        f = m.cerca(["CASTELLO DI AMA", "BELLAVISTA", "CHIANTI CLASSICO"])
+        assert not f.cantina or "bellavista" not in f.cantina.lower(), \
+            f"attribuito a {f.cantina!r}"
+
+    def test_le_parole_devono_provare_quel_produttore_e_nessun_altro(self, m):
+        """Se le stesse parole stanno in un'altra cantina, non firmano."""
+        indice = m._cantine_per_parola()
+        assert indice["palama"] == {"palama"}
+        assert len(indice.get("serra", ())) > 1

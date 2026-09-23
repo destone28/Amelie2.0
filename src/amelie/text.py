@@ -242,6 +242,7 @@ PAROLE_VUOTE = frozenset("""
     denominazione origine controllata garantita indicazione geografica tipica
     doc docg igt igp dop azienda agricola societa cantina cantine tenuta
     tenute podere poderi fattoria casa vigna vigne vigneto vigneti
+    vinicola vinicole viticoltori viticoltore viticultori cooperativa
     contiene solfiti contains sulfites bottiglia cl ml vol alc alcool
     annata vendemmia harvest riserva superiore classico
 """.split())

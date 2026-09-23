@@ -93,6 +93,11 @@ RIVALI = 6
 # ogni produttore di tre parole una quarantina di punti che sull'etichetta non
 # c'erano. Un refuso vale ottanta e passa, quindi la soglia non lo taglia.
 RISCONTRO_PAROLA = 70.0
+# E quanto deve valere per dire il produttore quando il vino NON si sa: qui il
+# nome esce dalla bocca del dispositivo da solo, senza un vino accanto che lo
+# corregga, quindi si pretende che sia letto quasi esatto. Vedi
+# `_il_produttore_scritto`.
+PRODUTTORE_SCRITTO = 90.0
 
 # Quanti candidati chiedere a FTS5 prima di riordinarli col fuzzy.
 CANDIDATI = 200
@@ -837,6 +842,8 @@ class Matcher:
         self.con.row_factory = sqlite3.Row
         self._db = threading.RLock()
         self._vitigni: tuple[str, ...] | None = None
+        self._luoghi: frozenset[str] | None = None
+        self._per_parola: dict[str, set[str]] | None = None
         # Cio' che si e' gia' chiesto all'archivio, e che non cambiera'.
         #
         # Una ricerca faceva quasi cinquecento interrogazioni SQL, e le faceva
@@ -888,6 +895,9 @@ class Matcher:
         # cantina: non si nomina cio' che non si e' letto.
         fatti = self._non_oltre_cio_che_si_e_letto(fatti, token, testo_norm, tetto)
         fatti = self._del_colore_dichiarato(fatti, token, testo_norm, tetto)
+        # Il produttore lo si dice se lo si e' LETTO, anche quando non si sa
+        # quale suo vino sia: vedi `_il_produttore_scritto`.
+        fatti = self._il_produttore_scritto(fatti, candidati, testo_norm)
         if self._c_e_un_altro_produttore(candidati):
             fatti.sicurezza = min(fatti.sicurezza, SOGLIA_CERTA - 0.5)
         fatti.annata = annata
@@ -1386,6 +1396,134 @@ class Matcher:
         log.info("produttore non letto e nessun ripiego: %r resta senza nome", f.nome)
         f.cantina = None
         f.sicurezza = min(f.sicurezza, SOGLIA_CERTA - 0.5)
+        return f
+
+    @sotto_lucchetto
+    def _cantine_per_parola(self) -> dict[str, set[str]]:
+        """Per ogni parola, quali produttori dell'archivio la portano.
+
+        Serve a sapere se le parole che provano un produttore provano LUI o
+        mezza Italia. «Palamà» sta in un nome di cantina solo; «Serra» in
+        parecchi, e su «Serra dei Turchi · SANSILVESTRO · BAROLO» bastava a
+        far dire «la cantina è Castel di Serra» - una parola del VINO che
+        firmava un produttore che non c'entrava niente.
+        """
+        if self._per_parola is None:
+            indice: dict[str, set[str]] = {}
+            for (cantina,) in self.con.execute(
+                    "SELECT DISTINCT cantina_norm FROM vino"
+                    " WHERE cantina_norm IS NOT NULL AND cantina_norm <> ''"):
+                for parola in set(cantina.split()):
+                    indice.setdefault(parola, set()).add(cantina)
+            self._per_parola = indice
+        return self._per_parola
+
+    @sotto_lucchetto
+    def _parole_di_luogo(self) -> frozenset[str]:
+        """Le parole che in archivio sono nomi di denominazione o di regione.
+
+        Stanno sull'etichetta perche' dicono da dove viene il vino, non chi
+        l'ha fatto, e quindi non possono provare un produttore.
+        """
+        if self._luoghi is None:
+            parole: set[str] = set()
+            for (nome,) in self.con.execute("SELECT nome_norm FROM denominazione"):
+                parole.update((nome or "").split())
+            for (regione,) in self.con.execute(
+                    "SELECT DISTINCT regione FROM vino WHERE regione IS NOT NULL"):
+                parole.update(normalizza(regione).split())
+            self._luoghi = frozenset(p for p in parole if len(p) >= 4)
+        return self._luoghi
+
+    def _il_produttore_scritto(self, f: Fatti, candidati: list[Candidato],
+                               testo_norm: str) -> Fatti:
+        """Il produttore si dice se lo si e' letto, anche se il vino non si sa.
+
+        Sull'etichetta il nome della cantina e' la cosa piu' identificante che
+        ci sia: in archivio ci sono 6.168 produttori e 19.602 vini, e le
+        etichette di prova lo fanno leggere bene nell'81% dei casi. Eppure
+        finiva buttato via ogni volta che la cascata scendeva sotto il vino.
+
+        Il caso che l'ha fatto vedere, su una bottiglia vera: «ALBAROSSA
+        NEGROAMARO PALAMÀ VINICOLA DEL SALENTO». «Palamà» letto benissimo,
+        tre suoi vini in archivio, e il dispositivo diceva «Questo è un
+        Salento» - perche' il record vincente era il Negroamaro di un ALTRO
+        produttore, che ha due parole generiche tutte lette mentre il record
+        giusto ne ha cinque di cui l'OCR legge solo «Palamà» (il nome del vino
+        e' in un carattere decorativo che non si legge mai).
+
+        Qui non si sceglie un vino: si aggiunge un fatto che e' scritto sulla
+        bottiglia. La prova e' la stessa che serve per nominarlo accanto a un
+        vino - `_prova_del_produttore`, cioe' le parole che il produttore ha
+        di suo - e si tace se i produttori che reggono quella prova sono piu'
+        d'uno, perche' allora non si sa di chi sia.
+        """
+        if f.cantina or f.livello is Livello.NULLA:
+            return f
+        parole = parole_utili(testo_norm)
+        if not parole:
+            return f
+        norme = self._norme_vino([c.ambito_id for c in candidati
+                                  if c.ambito == "vino"])
+        # Le parole che stanno nel NOME di un vino candidato sono sull'etichetta
+        # come parole del vino, non come firma. «Bellavista» e «Cerequio» sono
+        # vigne, «Morra» un paese, e tutti e tre sono anche nomi di cantine
+        # altrui: su un Castello di Ama usciva «la cantina è Bellavista». E' la
+        # regola che il progetto ha gia' accanto a un vino - il produttore non
+        # si fa confermare dalle parole del vino - portata dove il vino non si sa.
+        dei_vini = {x for nome, _, _ in norme.values() for x in nome.split()}
+        # La soglia e' piu' alta di `RISCONTRO_PAROLA`, e non per prudenza
+        # generica: questo nome verra' DETTO. Con la soglia normale «Santoro»
+        # si faceva confermare da «Salento» - settantuno punti di pura
+        # aritmetica delle lettere - e bastava a rendere ambiguo un «Palamà»
+        # letto a cento.
+        trovati: dict[str, float] = {}
+        for _, cantina, denominazione in norme.values():
+            if not cantina or cantina in trovati:
+                continue
+            # Qui la prova si stringe due volte rispetto a `_prova_del_produttore`,
+            # perche' qui il nome esce da solo, senza un vino accanto.
+            #
+            # Le parole devono essere PAROLE: a «Cantina del Nebbiolo», tolte
+            # quelle della sua denominazione e quelle che stanno su ogni
+            # bottiglia, resta «del» - un articolo, che su un'etichetta che
+            # dice «Barolo DEL Comune di Serralunga» si ritrova a cento.
+            #
+            # E non devono stare sull'etichetta per un ALTRO motivo. «Vigneti
+            # del Salento» si faceva provare da «salento», che c'e' come
+            # indicazione geografica; «Ca'Delle Rose» da «rose», che c'e'
+            # perche' la bottiglia dichiara il proprio colore - su
+            # «Leggiadro · Brut Rosé · METODO CLASSICO».
+            #
+            # `PAROLE_GENERICHE` e' gia' l'elenco di cio' che non identifica
+            # un vino, e una parola che non identifica un vino non puo'
+            # identificare chi l'ha fatto. I luoghi si aggiungono perche'
+            # `_prova_del_produttore` toglie solo quelli della denominazione
+            # di QUEL record, e un record senza denominazione non ne toglieva
+            # nessuno.
+            prova = [x for x in self._prova_del_produttore(cantina, denominazione)
+                     if len(x) >= 4 and x not in PAROLE_GENERICHE
+                     and x not in dei_vini
+                     and x not in self._parole_di_luogo()]
+            if not prova:
+                continue
+            # E devono provare LUI: se le stesse parole stanno anche nel nome
+            # di un altro produttore, non firmano nessuno.
+            indice = self._cantine_per_parola()
+            insieme = set.intersection(*(indice.get(x, set()) for x in prova))
+            if insieme != {cantina}:
+                continue
+            punti = self._copertura(" ".join(prova), parole)
+            if punti >= PRODUTTORE_SCRITTO:
+                trovati[cantina] = punti
+        if len(trovati) != 1:
+            return f
+        riga = self.con.execute(
+            "SELECT cantina FROM vino WHERE cantina_norm = ? LIMIT 1",
+            (next(iter(trovati)),)).fetchone()
+        if riga and riga["cantina"]:
+            f.cantina = riga["cantina"]
+            log.info("il produttore e' scritto sull'etichetta: %r", f.cantina)
         return f
 
     @sotto_lucchetto

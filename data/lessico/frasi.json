@@ -123,6 +123,20 @@
     "illeggibile": {
       "it": "Provi a girare l'etichetta verso di me.",
       "en": "Please turn the label towards me."
+    },
+    "cantina_sola": {
+      "it": [
+        "Lo produce {cantina}.",
+        "Il produttore è {cantina}.",
+        "È di {cantina}.",
+        "La cantina è {cantina}."
+      ],
+      "en": [
+        "It is made by {cantina}.",
+        "The producer is {cantina}.",
+        "The winery is {cantina}.",
+        "{cantina} makes it."
+      ]
     }
   },
   "corpo": {
