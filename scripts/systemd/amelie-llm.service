@@ -22,6 +22,16 @@ ExecStart=/home/arduino/amelie/llama.cpp/build/bin/llama-server \
     --no-webui
 Restart=on-failure
 RestartSec=10
+# Lo spegnimento a vuoto e' istantaneo, ma se arriva mentre il modello sta
+# scrivendo `llama-server` non risponde al SIGTERM finche' non ha finito, e con
+# il minuto e mezzo di default systemd lo lascia in «deactivating» per tutto
+# quel tempo - poi lo ammazza e l'unita' resta in stato «failed». Misurato: 90
+# secondi in cui una richiesta di accensione resterebbe in coda.
+#
+# Quindici secondi bastano: non c'e' niente da salvare, il modello e' un file
+# di sola lettura e il racconto in corso e' gia' perso comunque.
+TimeoutStopSec=15
+KillMode=mixed
 # Lo studente in Q4_K_M occupa ~400 MB: il tetto lascia respiro a OCR, voce e interfaccia
 # sui 3,6 GiB della board, e fa fallire il servizio invece di mandare tutto
 # in swap su eMMC, che sarebbe molto peggio.
