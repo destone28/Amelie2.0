@@ -107,13 +107,21 @@ class TestImpostazioni:
         assert ImpostazioniOCR().usa_classificatore is False
 
     def test_la_risoluzione_del_rilevatore_e_un_compromesso_misurato(self):
-        """Sotto sbaglia le lettere, sopra costa e basta.
+        """Sotto sbaglia le lettere, sopra si guadagna fino a un certo punto.
 
-        Sulla stessa etichetta: a 224 il rilevatore trova in 110 ms e si legge
-        `SERARUOLS`, a 320 trova in 274 ms e si legge `CERASUOLO`, a 756 trova
-        in 2835 ms e si leggono le stesse righe di 320.
+        «Sopra costa e basta» veniva da UN'etichetta - a 756 si leggevano le
+        stesse righe di 320 - e sulle 139 vere, con l'OCR della board, non e'
+        cosi':
+
+                           cantina letta   nome letto   riconoscimento   tempo
+            lato 320          112/139        72/139         87,1%        1,02 s
+            lato 480          114/139        74/139         90,6%        1,32 s
+
+        Piu' su si torna a peggiorare: a 960 la stessa etichetta da'
+        `PALAMA · VINICOLANLSALENTO`, con le parole incollate e il vitigno
+        perso. Il rilevatore ha una scala sua.
         """
-        assert ImpostazioniOCR().lato_rilevatore == 320
+        assert ImpostazioniOCR().lato_rilevatore == 480
 
     def test_si_leggono_solo_le_righe_piu_alte(self):
         """Ogni riga costa quaranta millesimi, e una parete ne dà trentotto."""

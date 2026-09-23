@@ -82,7 +82,29 @@ class ImpostazioniOCR:
     #     224   trova in 110 ms   `CERARUOLO` `SEARRUZZO`
     #     320   trova in 274 ms   `CERASUOLO` `DABRUZZO`
     #     756   trova in 2835 ms  le stesse due righe
-    lato_rilevatore: int = 320
+    #
+    # Quel «sopra costa e basta» veniva da UN'etichetta. Sulle 139 vere, con
+    # l'OCR della board, non e' cosi':
+    #
+    #                    cantina letta   nome letto   riconoscimento   tempo
+    #     lato 320          112/139        72/139         87,1%        1,02 s
+    #     lato 480          114/139        74/139         90,6%        1,32 s
+    #
+    # Trenta centesimi per tre punti e mezzo di riconoscimento, e i casi
+    # «sbagliato E dichiarato certo» restano zero in tutti e due. Su una
+    # bottiglia vera la differenza si vede a occhio: a 320 `APADOSEN · PALAMA
+    # · SALENTO`, a 480 `PALAMÀ · NECROAMARO · VINICOLA L SALENTO`.
+    #
+    # Piu' su si torna a peggiorare: a 960 la stessa etichetta da' `PALAMA ·
+    # VINICOLANLSALENTO`, con le parole incollate e il vitigno perso. Il
+    # rilevatore ha una scala sua, e piu' pixel non vuol dire meglio.
+    #
+    # E' stato provato anche a pagarli solo «quando serve» - un secondo colpo
+    # da vicino se il primo raccoglieva poco - e non serve a niente: un
+    # etichetta che si legge da' quasi sempre le tre parole che bastano, il
+    # secondo colpo non scatta mai, e la misura e' identica a 320 fino
+    # all'ultima cifra. Meglio un numero solo, misurato.
+    lato_rilevatore: int = 480
 
     # Quante righe si leggono, delle tante che il rilevatore trova.
     #
