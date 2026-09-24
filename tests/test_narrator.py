@@ -792,6 +792,26 @@ class TestIlLimiteSiDiceSoloSeSiEDetto:
         finally:
             n.chiudi()
 
+    def test_il_colore_sta_dove_lo_vuole_la_lingua(self):
+        """Accodato, in inglese usciva «a sparkling wine rosé»."""
+        from amelie.lessico import carica
+        from amelie.matcher import Fatti, Livello
+        from amelie.narrator import _che_tipo_di_vino, titolo_generico
+
+        lex = carica()
+        f = Fatti(livello=Livello.GENERICO, colore="Rosato",
+                  qualificatori=["spumante", "metodo", "brut"])
+        assert _che_tipo_di_vino(f, lex, "it") == "uno spumante rosato metodo classico, brut"
+        assert _che_tipo_di_vino(f, lex, "en") == "a rosé sparkling wine metodo classico, brut"
+        assert titolo_generico(f, lex, "it") == "Spumante rosato metodo classico, brut"
+        assert titolo_generico(f, lex, "en") == "Rosé sparkling wine metodo classico, brut"
+        senza_colore = Fatti(livello=Livello.GENERICO, qualificatori=["frizzante"])
+        assert _che_tipo_di_vino(senza_colore, lex, "it") == "un vino frizzante"
+        assert _che_tipo_di_vino(senza_colore, lex, "en") == "a semi-sparkling wine"
+        solo_colore = Fatti(livello=Livello.GENERICO, colore="Rosso")
+        assert _che_tipo_di_vino(solo_colore, lex, "en") == "a red wine"
+        assert titolo_generico(solo_colore, lex, "it") == "Vino rosso"
+
     def test_senza_niente_da_dire_la_frase_non_c_e(self):
         from amelie.matcher import Fatti, Livello
         from amelie.narrator import Narratore

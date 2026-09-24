@@ -894,27 +894,42 @@ def _che_tipo_di_vino(f: Fatti, lex: Lessico, lingua: str) -> str:
     puo' finire in bocca al dispositivo. Se non c'e' nessun pezzo non si dice
     niente, e il racconto passa alla frase che chiede di girare l'etichetta.
     """
-    g = lambda chiave: lex.frase("generico", chiave, lingua=lingua)
+    g = lambda chiave, **kw: lex.frase("generico", chiave, lingua=lingua, **kw)
     parole = set(f.qualificatori)
-    base = next((g(k) for k in ("spumante", "frizzante", "passito", "liquoroso")
+    base = next((k for k in ("spumante", "frizzante", "passito", "liquoroso")
                  if k in parole), None)
     # «Metodo» da solo dichiara uno spumante: se c'e' quello e manca la parola
     # «spumante», si dice comunque spumante.
     if base is None and "metodo" in parole:
-        base = g("spumante")
+        base = "spumante"
     colore = {"Rosato": "rosato", "Rosso": "rosso", "Bianco": "bianco"}.get(
         f.colore or "")
     if base is None and colore is None:
         return ""
-    pezzi = [base or g("vino")]
-    if colore:
-        pezzi.append(g(colore))
+    # Il colore lo mette il lessico, perche' ogni lingua lo vuole in un posto
+    # diverso: «uno spumante rosato», «a rosé sparkling wine». Accodato, in
+    # inglese usciva «a sparkling wine rosé».
+    pezzi = [" ".join(g(base or "vino", colore=g(colore) if colore else "").split())]
     if "metodo" in parole:
         pezzi.append(g("metodo"))
     dosaggio = next((g(k) for k in ("nature", "brut", "extra", "dry", "secco",
                                     "amabile", "dolce") if k in parole), None)
     testo = " ".join(pezzi)
     return f"{testo}, {dosaggio}" if dosaggio else testo
+
+
+_ARTICOLO = re.compile(r"^(?:un'|(?:uno|una|un|an|a)\s+)", re.IGNORECASE)
+
+
+def titolo_generico(f: Fatti, lex: Lessico, lingua: str) -> str:
+    """Il titolo della schermata al livello generico: il tipo di vino senza
+    articolo, con la maiuscola - «Spumante rosato metodo classico, brut».
+
+    Era la frase del racconto tale e quale, e a schermo il titolo diventava
+    «uno spumante rosato metodo classico, brut».
+    """
+    testo = _ARTICOLO.sub("", _che_tipo_di_vino(f, lex, lingua), count=1)
+    return testo[:1].upper() + testo[1:]
 
 
 def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:

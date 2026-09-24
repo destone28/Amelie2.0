@@ -205,7 +205,7 @@ SCENE: dict[str, list[dict]] = {
     # e sotto c'e' il pulsante per correggerlo.
     "fuori_archivio": [
         LINGUA_IT,
-        {"tipo": "stato", "vista": "racconto", "titolo": "spumante rosato metodo classico, brut",
+        {"tipo": "stato", "vista": "racconto", "titolo": "Spumante rosato metodo classico, brut",
          "sottotitolo": "", "voce_muta": False, "correzione": "correggi"},
         {"tipo": "racconto", "origine": "template", "frasi": [
             "Si tratta di uno spumante rosato metodo classico, brut.",
@@ -218,7 +218,7 @@ SCENE: dict[str, list[dict]] = {
     # e la voce e' arrivata alle ultime righe - che devono essere salite in vista.
     "fuori_archivio_fine": [
         LINGUA_IT,
-        {"tipo": "stato", "vista": "racconto", "titolo": "spumante rosato metodo classico, brut",
+        {"tipo": "stato", "vista": "racconto", "titolo": "Spumante rosato metodo classico, brut",
          "sottotitolo": "", "voce_muta": False, "correzione": "correggi"},
         {"tipo": "racconto", "origine": "template", "frasi": [
             "Si tratta di uno spumante rosato metodo classico, brut.",
@@ -233,7 +233,7 @@ SCENE: dict[str, list[dict]] = {
     # sull'etichetta, e il pulsante.
     "fuori_archivio_cantina": [
         LINGUA_IT,
-        {"tipo": "stato", "vista": "racconto", "titolo": "spumante rosato metodo classico, brut",
+        {"tipo": "stato", "vista": "racconto", "titolo": "Spumante rosato metodo classico, brut",
          "sottotitolo": "Palamà · 2021", "voce_muta": False, "correzione": "correggi"},
         {"tipo": "racconto", "origine": "template", "frasi": [
             "Si tratta di uno spumante rosato metodo classico, brut, di Palamà.",

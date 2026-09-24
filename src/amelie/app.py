@@ -55,7 +55,7 @@ from .correzioni import Correzioni
 from .giornale import Giornale
 from .mirino import LetturaContinua, Mirino
 from .matcher import Fatti, Livello, Matcher
-from .narrator import Narratore, _che_tipo_di_vino, spezza_in_frasi
+from .narrator import Narratore, spezza_in_frasi, titolo_generico
 from .ocr import Lettore, OCRNonDisponibile
 from .speech import (
     VOCI, VOLUME_PREDEFINITO, ImpostazioniVoce, Riproduttore, Voce,
@@ -501,9 +501,9 @@ class Amelie:
                     # descrizione senza sapere di CHE COSA.
                     #
                     # Il titolo c'e' lo stesso, ed e' quello che si e' letto
-                    # sul vetro: «spumante rosato brut». Sono le stesse parole
+                    # sul vetro: «Spumante rosato brut». Sono le stesse parole
                     # con cui il racconto apre, e non ne aggiunge nessuna.
-                    m["titolo"] = _che_tipo_di_vino(f, self.lex, self.lingua)
+                    m["titolo"] = titolo_generico(f, self.lex, self.lingua)
                 pezzi = [x for x in (f.cantina,
                                      str(f.annata) if f.annata else None) if x]
                 m["sottotitolo"] = " · ".join(pezzi)

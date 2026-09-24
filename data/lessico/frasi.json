@@ -583,24 +583,24 @@
   },
   "generico": {
     "spumante": {
-      "it": "uno spumante",
-      "en": "a sparkling wine"
+      "it": "uno spumante {colore}",
+      "en": "a {colore} sparkling wine"
     },
     "frizzante": {
-      "it": "un vino frizzante",
-      "en": "a semi-sparkling wine"
+      "it": "un vino frizzante {colore}",
+      "en": "a {colore} semi-sparkling wine"
     },
     "passito": {
-      "it": "un passito",
-      "en": "a wine from dried grapes"
+      "it": "un passito {colore}",
+      "en": "a {colore} wine from dried grapes"
     },
     "liquoroso": {
-      "it": "un vino liquoroso",
-      "en": "a fortified wine"
+      "it": "un vino liquoroso {colore}",
+      "en": "a {colore} fortified wine"
     },
     "vino": {
-      "it": "un vino",
-      "en": "a wine"
+      "it": "un vino {colore}",
+      "en": "a {colore} wine"
     },
     "rosato": {
       "it": "rosato",

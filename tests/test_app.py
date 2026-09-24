@@ -409,7 +409,8 @@ class TestLingua:
         amelie._mostra(Stato.RACCONTO)
         titolo = catturati[0]["titolo"]
         assert titolo.strip(), "nessun titolo al livello generico"
-        assert "spumante" in titolo.lower()
+        # Senza l'articolo del racconto: a schermo si leggeva «uno spumante».
+        assert titolo == "Spumante rosato, brut"
 
     def _attendi(self, amelie, stato, secondi=5.0):
         """L'annuncio e la ripresa girano in un thread: non sono istantanei."""
