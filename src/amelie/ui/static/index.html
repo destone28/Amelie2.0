@@ -307,7 +307,10 @@ svg { display: block; }
   position: absolute; left: 50%; transform: translateX(-50%);
   bottom: calc(var(--passo) * 1.6);
 }
-#racconto .testo { padding-bottom: 176px; }
+/* Il fondo vuoto e' alto quanto la sfumatura: l'ultima riga del racconto
+   deve poter salire FUORI dalla sfumatura. Era 176, cioe' fin dove la
+   sfumatura finisce: l'ultima riga si fermava a meta' dissolvenza. */
+#racconto .testo { padding-bottom: 216px; }
 /* Il titolo lascia il posto ai comandi d'angolo, e lo stesso posto a sinistra
    e a destra: centrato sul vetro, non sullo spazio che avanza. */
 .intestazione { flex: 0 0 auto; padding: 0 256px; width: 100%; }
@@ -346,8 +349,14 @@ svg { display: block; }
 }
 /* La sfumatura in testa e in coda dice che il testo continua oltre il bordo.
    Sta sul testo, come maschera: il fondo è radiale, e due strisce di colore
-   fisso ci si vedevano sopra come bande. */
+   fisso ci si vedevano sopra come bande. Quella in testa c'e' solo quando il
+   testo e' scorso: a testo fermo sopra non c'e' niente, e sfumava a meta' la
+   prima riga. I 34 e 210 pixel li conosce anche `segui()`. */
 .testo {
+  mask-image: linear-gradient(to bottom, #000 0,
+                              #000 calc(100% - 210px), transparent calc(100% - 176px));
+}
+.testo.scorso {
   mask-image: linear-gradient(to bottom, transparent 0, #000 34px,
                               #000 calc(100% - 210px), transparent calc(100% - 176px));
 }
@@ -1223,6 +1232,9 @@ function componiRacconto(elenco) {
   });
   viva = -1;
   t.scrollTop = 0;
+  t.classList.remove("scorso");
+  ultimaCima = -1;
+  frasePartita = { i: -1, t: 0 };
   avanzamento(0);
   segnaCorrezione();
 }
@@ -1232,8 +1244,85 @@ function illumina(i) {
   if (frasi[viva]) frasi[viva].classList.remove("viva");
   viva = i;
   frasi[viva].classList.add("viva");
-  /* Il testo scorre dietro alla voce: chi ascolta non deve trascinare nulla. */
-  frasi[viva].scrollIntoView({ block: "center", behavior: "smooth" });
+  segui(frasi[viva]);
+}
+
+/* Il testo scorre dietro alla voce: chi ascolta non deve trascinare nulla.
+
+   La frase viva va al centro della parte che si LEGGE, fra le due sfumature
+   della maschera di `.testo` - non al centro della scatola, che continua sotto
+   i comandi. Centrata nella scatola, una frase di quattro righe perdeva
+   l'ultima dietro ai pulsanti: proprio quella che dice «questa bottiglia non
+   e' nel mio archivio».
+
+   Una frase piu' alta della parte leggibile si mostra dall'inizio, e sale di
+   una riga quando la voce arriva alla penultima visibile: si legge sempre la
+   riga detta e quella dopo. */
+const SFUMA_SU = 34, SFUMA_GIU = 210;        /* gli stessi della maschera */
+let ultimaCima = -1;
+function segui(el, quota = 0) {
+  const t = $("r-testo");
+  const box = t.getBoundingClientRect();
+  /* La scena e' scalata sul vetro: i rettangoli arrivano in pixel del vetro,
+     lo scorrimento si misura in pixel della scena. */
+  const k = box.height / t.offsetHeight || 1;
+  /* Una riga per rettangolo: uno span che va a capo ne ha uno per riga. */
+  const righe = [];
+  for (const r of el.getClientRects()) {
+    const su = (r.top - box.top) / k + t.scrollTop;
+    const giu = (r.bottom - box.top) / k + t.scrollTop;
+    const ultima = righe[righe.length - 1];
+    if (ultima && Math.abs(ultima.su - su) < 2) ultima.giu = Math.max(ultima.giu, giu);
+    else righe.push({ su, giu });
+  }
+  if (!righe.length) return;
+  const sopra = righe[0].su, sotto = righe[righe.length - 1].giu;
+  const leggibile = t.clientHeight - SFUMA_SU - SFUMA_GIU;
+  let cima;
+  if (sotto - sopra <= leggibile) {
+    cima = sopra - SFUMA_SU - (leggibile - (sotto - sopra)) / 2;
+  } else {
+    const detta = Math.min(righe.length - 1, Math.floor(quota * righe.length));
+    const fondo = righe[Math.min(righe.length - 1, detta + 1)].giu;
+    cima = Math.min(Math.max(sopra, fondo - leggibile), sotto - leggibile) - SFUMA_SU;
+  }
+  /* Mai piu' giu' di quanto serve a portare in vista la fine del testo: un
+     racconto che sta tutto nella parte leggibile non si muove. */
+  const ultima = frasi[frasi.length - 1];
+  const coda = ultima && ultima.getClientRects();
+  if (coda && coda.length) {
+    const fine = (coda[coda.length - 1].bottom - box.top) / k + t.scrollTop;
+    cima = Math.min(cima, fine - SFUMA_SU - leggibile);
+  }
+  cima = Math.max(0, Math.round(cima));
+  if (Math.abs(cima - ultimaCima) < 2) return;
+  ultimaCima = cima;
+  t.scrollTo({ top: cima, behavior: "smooth" });
+}
+
+/* Dove e' la voce DENTRO la frase. Il riproduttore sa solo a che secondo e'
+   arrivato: la durata di una frase la si stima dalle lettere, alla velocita'
+   misurata su quelle gia' dette. Serve solo alle frasi piu' alte dello
+   schermo, e sbagliare di mezzo secondo vuol dire salire di una riga poco
+   prima o poco dopo. */
+let lettereAlSecondo = 14;
+let frasePartita = { i: -1, t: 0 };
+function tieniIlPasso(i, secondi) {
+  if (typeof secondi !== "number" || !frasi[i]) return;
+  if (i !== frasePartita.i) {
+    const prima = frasi[frasePartita.i];
+    if (prima && i === frasePartita.i + 1 && secondi - frasePartita.t > 1) {
+      const misurata = prima.textContent.length / (secondi - frasePartita.t);
+      /* Chi ha toccato «avanti» non ha ascoltato la frase fino in fondo. */
+      if (misurata > 8 && misurata < 25) {
+        lettereAlSecondo = .7 * lettereAlSecondo + .3 * misurata;
+      }
+    }
+    frasePartita = { i, t: secondi };
+    return;
+  }
+  const quota = (secondi - frasePartita.t) * lettereAlSecondo / frasi[i].textContent.length;
+  segui(frasi[i], Math.max(0, Math.min(1, quota)));
 }
 
 function avanzamento(quota) {
@@ -1582,6 +1671,7 @@ eventi.onmessage = (e) => {
 
     case "riproduzione":
       illumina(m.frase || 0);
+      tieniIlPasso(m.frase || 0, m.posizione);
       segnaPausa(m.in_pausa === true);
       /* La quota la calcola il server, che e' l'unico a sapere quanto dura
          il racconto INTERO. Qui si divideva posizione per durata, ma quella
@@ -2160,6 +2250,11 @@ function aggiornaMaiuscola() {
   const vuole = prima.trim() === "" || /[.!?…]\s+$/.test(prima) || /\n\s*$/.test(prima);
   if (vuole !== maiuscola) { maiuscola = vuole; disegnaTastiera(); }
 }
+
+/* La sfumatura in testa si accende solo a testo scorso. */
+$("r-testo").addEventListener("scroll", (e) => {
+  e.target.classList.toggle("scorso", e.target.scrollTop > 2);
+}, { passive: true });
 
 (function preparaEditor() {
   disegnaTastiera();

@@ -214,6 +214,21 @@ SCENE: dict[str, list[dict]] = {
         {"tipo": "riproduzione", "frase": 2, "posizione": 9.0, "durata": 12.0,
          "quota": 0.75, "in_pausa": False}],
 
+    # La stessa, otto secondi dopo: la frase e' piu' alta della parte leggibile,
+    # e la voce e' arrivata alle ultime righe - che devono essere salite in vista.
+    "fuori_archivio_fine": [
+        LINGUA_IT,
+        {"tipo": "stato", "vista": "racconto", "titolo": "spumante rosato metodo classico, brut",
+         "sottotitolo": "", "voce_muta": False, "correzione": "correggi"},
+        {"tipo": "racconto", "origine": "template", "frasi": [
+            "Si tratta di uno spumante rosato metodo classico, brut.",
+            "Va servito fra 6 e 8 gradi.",
+            _frase_corpo("generico_limite", "it")]},
+        {"tipo": "riproduzione", "frase": 2, "posizione": 9.0, "durata": 18.0,
+         "quota": 0.5, "in_pausa": False},
+        {"tipo": "riproduzione", "frase": 2, "posizione": 17.0, "durata": 18.0,
+         "quota": 0.95, "in_pausa": False}],
+
     # Il caso piu' alto dell'intestazione: titolo su due righe, la cantina letta
     # sull'etichetta, e il pulsante.
     "fuori_archivio_cantina": [
@@ -282,11 +297,18 @@ RISPOSTE = {
 # Sostituisce EventSource e fetch: la pagina crede di parlare col server.
 FINTA = """
 <script>
+// I messaggi partono a carattere caricato, come sul dispositivo, dove il
+// racconto arriva secondi dopo la pagina: misurato col carattere di ripiego,
+// lo scorrimento del testo si fermava a righe che col Garamond non ci sono.
 class EventSource {
-  constructor() { setTimeout(() => MESSAGGI.forEach(m => {
-    try { this.onmessage && this.onmessage({ data: JSON.stringify(m) }); }
-    catch (e) { console.error(m.tipo, e); }
-  }), 30); }
+  constructor() {
+    const manda = () => MESSAGGI.forEach(m => {
+      try { this.onmessage && this.onmessage({ data: JSON.stringify(m) }); }
+      catch (e) { console.error(m.tipo, e); }
+    });
+    document.fonts.load('50px "EB Garamond"').catch(() => {})
+      .then(() => setTimeout(manda, 30));
+  }
   close() {}
 }
 const RISPOSTE = __RISPOSTE__;
@@ -349,7 +371,9 @@ def main() -> None:
         ritrai(browser, avvio, fuori / "avvio.png", args)
 
     for nome in [n for n in (args.solo or SCENE) if n != "avvio"]:
-        pagina = sorgente.replace(
+        # Col tempo virtuale lo scorrimento morbido non parte: si scorre di colpo,
+        # e la fotografia mostra dove il testo arriva.
+        pagina = sorgente.replace('behavior: "smooth"', 'behavior: "instant"').replace(
             '"/correzione/foto/adesso?" + Date.now()', json.dumps(_FOTO)).replace(
             '"/correzione/foto/" + encodeURIComponent(v.id)', json.dumps(_FOTO)).replace(
             'url("/fonts/', f'url("file://{PAGINA.parent}/fonts/').replace(
