@@ -349,8 +349,8 @@
       ]
     },
     "generico_limite": {
-      "it": "Questa bottiglia non è nel mio archivio: quello che le ho detto è scritto sull'etichetta.",
-      "en": "This bottle is not in my archive: what I told you is written on the label."
+      "it": "Questa bottiglia non è nel mio archivio; la descrizione è stata generata in autonomia sulla base dei dati e del catalogo a mia disposizione.",
+      "en": "This bottle is not in my archive; the description was generated independently, from the data and catalogue available to me."
     }
   },
   "voce": {
