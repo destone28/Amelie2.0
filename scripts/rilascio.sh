@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Amelie 2.0 - porta sul dispositivo quello che c'e' nel repository.
 #
-#   bash scripts/rilascio.sh                 codice, dati, database, test
+#   bash scripts/rilascio.sh                 codice, interfaccia, dati, database, test
 #   bash scripts/rilascio.sh --con-modello   e anche il modello linguistico
 #   bash scripts/rilascio.sh --host amelie2  su un'altra unita'
 #
@@ -62,6 +62,19 @@ for f in app.py narrator.py matcher.py ocr.py speech.py; do
 done
 echo "  $(ls src/amelie/*.py | wc -l) moduli"
 
+# L'interfaccia: la pagina, la schermata d'avvio, il carattere. Mancava, e per
+# due rilasci la board ha girato col server nuovo e la pagina vecchia: nessun
+# errore, solo un'interfaccia che non cambiava. I test della pagina girano
+# sulla board, quindi si copia PRIMA dei test.
+echo "### $(ora) interfaccia"
+ssh "$HOST" "mkdir -p $REMOTO/src/amelie/ui/static/fonts"
+scp -q src/amelie/ui/static/*.html "$HOST:$REMOTO/src/amelie/ui/static/"
+scp -q src/amelie/ui/static/fonts/* "$HOST:$REMOTO/src/amelie/ui/static/fonts/"
+for f in index.html avvio.html fonts/EBGaramond.woff2 fonts/EBGaramond-Italic.woff2; do
+    verifica "src/amelie/ui/static/$f" "$REMOTO/src/amelie/ui/static/$f"
+done
+echo "  pagina, avvio, $(ls src/amelie/ui/static/fonts | wc -l) file del carattere"
+
 # Il lessico e' dati, non codice, e si dimentica: `frasi.json` porta le varianti
 # con cui si compone il racconto, e una board che ha il codice nuovo col lessico
 # vecchio racconta in un modo che nessuna misura ha mai visto.
@@ -107,6 +120,10 @@ fi
 echo "### $(ora) riavvio"
 ssh "$HOST" 'sudo systemctl restart amelie.service
 sudo systemctl try-restart amelie-llm.service 2>/dev/null || true
+# Il chiosco carica la pagina una volta sola e ci resta per giorni: riavviato
+# il server si riaggancia agli eventi, ma la pagina resta quella di prima.
+# Ripartendo mostra la schermata d avvio finche il server non risponde.
+sudo systemctl try-restart amelie-kiosk.service 2>/dev/null || true
 sleep 35
 echo "  servizio: $(systemctl is-active amelie.service)"
 echo "  modo:     $(cat ~/amelie/var/modo 2>/dev/null)"
