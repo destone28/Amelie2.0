@@ -570,3 +570,66 @@ class TestIlRitaglioSegueIlRiquadro:
         c = self.camera((0.5, 0.5, 0.5001, 0.5001))
         out = c.ritaglia(immagine(1000, 500))
         assert out.shape[:2] == (950, 350)
+
+
+class TestLaCameraCheSiFerma:
+    """Una serala sala si e' fatta buia, la posa e' salita a 5000 e
+    la camera ha smesso di dare fotogrammi. Ogni riapertura riapplicava 5000:
+    solo spegnere il dispositivo la sbloccava."""
+
+    class Muta:
+        """Una camera che, come quella vera, si ferma da una posa in su."""
+
+        def __init__(self, soglia=4999):
+            self.soglia, self.posa, self.rilasciata = soglia, 900, False
+
+        def isOpened(self):
+            return True
+
+        def set(self, *_a):
+            return True
+
+        def read(self):
+            if self.posa >= self.soglia:
+                return False, None
+            return True, np.full((100, 200, 3), 90, dtype=np.uint8)
+
+        def release(self):
+            self.rilasciata = True
+
+    def _camera(self, monkeypatch, posa, soglia=4999):
+        import amelie.capture as modulo
+        muta = self.Muta(soglia)
+        monkeypatch.setattr(modulo.cv2, "VideoCapture", lambda *_a: muta)
+        monkeypatch.setattr(modulo, "imposta_posa",
+                            lambda _d, p: setattr(muta, "posa", p))
+        c = modulo.Camera(ImpostazioniCamera(esposizione=posa))
+        c._percorso = "/dev/finto"
+        return c, muta
+
+    def test_il_tetto_sta_sotto_la_soglia_misurata(self):
+        assert ImpostazioniCamera().posa_massima <= 4500
+
+    def test_alla_seconda_lettura_a_vuoto_si_riparte_dalla_posa_sicura(self, monkeypatch):
+        c, muta = self._camera(monkeypatch, 5000)
+        assert c.fotogramma() is None            # 5000: muta
+        assert c.imp.esposizione == 5000         # una volta sola puo' capitare
+        assert c.fotogramma() is None
+        assert c.imp.esposizione == c.imp.posa_sicura
+        assert c.fotogramma() is not None        # riaperta a 900: parla
+        assert c._vuoti == 0
+
+    def test_con_una_posa_corta_non_si_tocca_niente(self, monkeypatch):
+        c, muta = self._camera(monkeypatch, 900, soglia=0)     # muta sempre
+        for _ in range(3):
+            assert c.fotogramma() is None
+        assert c.imp.esposizione == 900
+
+    def test_ripristinare_riporta_la_camera_come_all_accensione(self, monkeypatch):
+        c, muta = self._camera(monkeypatch, 4400)
+        c.riquadro = (0.1, 0.1, 0.9, 0.9)
+        c._vuoti = 5
+        c.ripristina()
+        assert c.imp.esposizione == c.imp.posa_sicura and c.riquadro is None
+        assert c._vuoti == 0 and c._cap is None
+        assert c._percorso is None, "il device si ricerca: dopo un inceppamento USB cambia nome"

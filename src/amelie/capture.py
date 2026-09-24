@@ -149,12 +149,20 @@ class ImpostazioniCamera:
     # nemmeno in pieno giorno; sopra il massimo la raffica costa più del
     # racconto, e una bottiglia che oscilla viene mossa.
     posa_minima: int = 300
-    # Il massimo e' quello della camera: `v4l2-ctl` dice `exposure_time_absolute
-    # max=5000`. Era 4000, e nella sala a luci basse ci si arrivava contro -
-    # «posa 4000» a giornale, con la luce ancora sotto il bersaglio. Un
-    # fotogramma a 5000 costa 110 ms invece di 90: si paga solo al buio, dove
-    # senza si leggeva meno.
-    posa_massima: int = 5000
+    # NON il massimo della camera. `v4l2-ctl` dice `exposure_time_absolute
+    # max=5000`, ed era stato alzato fino li' perche' nella sala a luci basse
+    # si arrivava contro il 4000. Ma a 5000 la camera SI FERMA: visto sul
+    # dispositivo una sera,la sala si e' fatta buia, la posa e'
+    # salita a 5000 e undici secondi dopo non e' piu' arrivato un fotogramma -
+    # ogni bottiglia un guasto, e solo spegnere e riaccendere la sbloccava,
+    # perche' ogni riapertura riapplicava 5000. Misurato a camera sola, otto
+    # fotogrammi per posa: fino a 4900 arrivano (lenti, uno al secondo), a
+    # 4999 e a 5000 nessuno in dodici secondi. 4500 lascia un margine; e se su
+    # un'altra camera la soglia fosse piu' bassa, vedi `_a_vuoto`.
+    posa_massima: int = 4500
+    # La posa da cui si riparte quando lo stream resta muto: quella di
+    # partenza, che al buio legge poco ma legge.
+    posa_sicura: int = 900
 
     # Raffica. Erano cinque e cinque, scelti quando un fotogramma costava 30 ms.
     # A 90 ms costavano un secondo intero, e la scena è FERMA: bottiglia e
@@ -776,6 +784,8 @@ class Camera:
         # cambiato la posa: il driver la applica con tre fotogrammi di ritardo.
         self._da_saltare = 0
         self._da_guardare = 1
+        # Letture di fila senza fotogramma. Vedi `_a_vuoto`.
+        self._vuoti = 0
 
     @property
     def percorso(self) -> str:
@@ -845,6 +855,39 @@ class Camera:
         if self._cap is not None:
             self._cap.release()
             self._cap = None
+
+    def _a_vuoto(self) -> None:
+        """Una lettura senza fotogramma, col lucchetto preso.
+
+        Riaccendere lo stream basta quando si e' inceppato il flusso; non basta
+        quando e' la POSA a fermare la camera, perche' ogni riaccensione la
+        riapplica. Alla seconda lettura a vuoto di fila con una posa lunga si
+        riparte dalla posa sicura: al buio si leggera' meno, ma si leggera', e
+        la regolazione risale da li' - fino al tetto, che adesso sta sotto la
+        soglia in cui questa camera si ferma.
+        """
+        self._vuoti += 1
+        if self._vuoti >= 2 and self.imp.esposizione > self.imp.posa_sicura:
+            log.warning("camera muta con posa %d: riparto da %d",
+                        self.imp.esposizione, self.imp.posa_sicura)
+            self.imp = replace(self.imp, esposizione=self.imp.posa_sicura)
+            self._da_saltare = self.imp.fotogrammi_da_scartare
+
+    def ripristina(self) -> None:
+        """Rimette la camera com'era all'accensione, senza riaccendere niente.
+
+        Stream spento e guardiano fermo, posa di partenza, nessun riquadro, e
+        il device si ricerca da capo - dopo un inceppamento USB puo' tornare
+        con un nome diverso. Alla prossima richiesta si riapre tutto.
+        """
+        self.chiudi()
+        with self._lucchetto:
+            self._vuoti = 0
+            self._da_saltare = 0
+            self.imp = replace(self.imp, esposizione=self.imp.posa_sicura)
+            self.riquadro = None
+            if not self.imp.device:
+                self._percorso = None
 
     def sorveglia(self) -> None:
         """Tiene lo stream in moto, perché scattare non costi niente.
@@ -919,9 +962,11 @@ class Camera:
                 # Uno stream che non dà più fotogrammi non guarisce da solo.
                 log.warning("guardiano: fotogramma a vuoto, riaccendo")
                 with self._lucchetto:
+                    self._a_vuoto()
                     self._spegni()
                 self._basta.wait(0.5)
                 continue
+            self._vuoti = 0
             self._recente = (time.monotonic(), frame)
             self._ritocca_la_posa(frame)
 
@@ -1078,8 +1123,10 @@ class Camera:
                 # Uno stream che non da' piu' fotogrammi non guarisce da solo:
                 # si spegne, e la prossima richiesta lo riaccende.
                 log.warning("fotogramma a vuoto: riaccendo lo stream")
+                self._a_vuoto()
                 self._spegni()
                 return None
+            self._vuoti = 0
             return self._raddrizza(frame)
         except CameraNonDisponibile as e:
             log.warning("camera non disponibile: %s", e)
@@ -1284,6 +1331,7 @@ class Camera:
                 # Lo stream resta acceso fra uno scatto e l'altro, ma uno che
                 # non dà fotogrammi non è uno stream: si spegne, e il
                 # prossimo tentativo riparte da zero invece di insistere.
+                self._a_vuoto()
                 self._spegni()
                 raise CameraNonDisponibile(
                     f"nessun fotogramma letto da {self.percorso}"
