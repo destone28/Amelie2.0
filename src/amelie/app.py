@@ -84,6 +84,8 @@ VISTA = {
 
 # Dopo tre letture a vuoto si smette di riprovare.
 TENTATIVI_MAX = 3
+# Quanto si aspetta che finisca il lavoro di prima prima di dichiarare guasto.
+ATTESA_DEL_LAVORO_S = 8.0
 
 # Il ripristino da soli. Un guasto isolato scade in sei secondi e torna in
 # attesa: non serve niente. Tre in tre minuti vogliono dire che qualcosa si e'
@@ -549,7 +551,8 @@ class Amelie:
             "annulla": self.lex.frase("schermo", "annulla", lingua=self.lingua),
             # Le scritte dell'editor della correzione, e della sua tastiera.
             "correzione": {
-                chiave: self.lex.frase("schermo", chiave, lingua=self.lingua)
+                # `n` resta segnaposto: «altre {n}» lo riempie la pagina.
+                chiave: self.lex.frase("schermo", chiave, lingua=self.lingua, n="{n}")
                 for chiave in ("correggi_descrizione", "modifica_descrizione",
                                "campo_titolo", "campo_descrizione", "salva",
                                "titolo_vuoto", "descrizione_vuota",
@@ -1384,16 +1387,36 @@ class Amelie:
                     and self._lavoro.is_alive()
                     and self._lavoro is not threading.current_thread())
         if occupato:
-            # Ignorare e basta lascerebbe la macchina ad aspettare un evento che
-            # nessuno mandera' mai. Meglio dichiarare il guasto, che scade da
-            # solo e riporta in attesa.
-            log.warning("lavoro già in corso, dichiaro guasto invece di %s",
-                        funzione.__name__)
-            self.macchina.invia(Evento.ERRORE)
+            # Succede quando la bottiglia «sparisce» per un istante durante una
+            # lettura e torna: la lettura di prima sta ancora finendo. Visto
+            # sul dispositivo subito dopo un riavvio - OCR da caricare, tre
+            # secondi di scatto - e dichiarato guasto al primo colpo. Si
+            # aspetta invece che finisca, in un thread per non fermare il
+            # battito; se non finisce, e solo allora, e' un guasto. Ignorare e
+            # basta lascerebbe la macchina ad aspettare un evento che nessuno
+            # mandera' mai.
+            precedente, stato = self._lavoro, self.macchina.stato
+            self._lavoro = threading.Thread(
+                target=self._dopo_il_precedente, args=(precedente, stato, funzione),
+                daemon=True)
+            self._lavoro.start()
             return
         self._lavoro = threading.Thread(target=self._protetto, args=(funzione,),
                                         daemon=True)
         self._lavoro.start()
+
+    def _dopo_il_precedente(self, precedente, stato, funzione) -> None:
+        precedente.join(timeout=ATTESA_DEL_LAVORO_S)
+        if precedente.is_alive():
+            log.warning("lavoro già in corso da troppo, dichiaro guasto invece di %s",
+                        funzione.__name__)
+            self.macchina.invia(Evento.ERRORE)
+            return
+        if self.macchina.stato is not stato:
+            # Nel frattempo la bottiglia e' stata tolta, o si e' annullato:
+            # quel lavoro non lo aspetta piu' nessuno.
+            return
+        self._protetto(funzione)
 
     def _protetto(self, funzione) -> None:
         try:

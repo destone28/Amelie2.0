@@ -187,8 +187,10 @@ class TestDifettiTrovatiDallaVerifica:
             assert DURATE_S[stato] is not None, f"{stato} senza tetto"
             assert (stato, Evento.SCADENZA) in TRANSIZIONI, f"{stato} non gestisce SCADENZA"
 
-    def test_lavoro_sovrapposto_dichiara_guasto(self, amelie):
-        """Ignorare e basta lasciava la macchina bloccata in SCANSIONE."""
+    def test_lavoro_sovrapposto_non_blocca_la_macchina(self, amelie):
+        """Ignorare e basta lasciava la macchina bloccata in SCANSIONE. Ora il
+        lavoro nuovo aspetta quello di prima e parte; se quello non finisce e'
+        un guasto (vedi test_ripristino.TestIlLavoroDiPrima)."""
         import threading
         import time
 
@@ -197,9 +199,10 @@ class TestDifettiTrovatiDallaVerifica:
         amelie._lavoro.start()
         time.sleep(0.05)
         amelie.macchina.stato = Stato.SCANSIONE
-        amelie._avvia(lambda: None)
+        partito = threading.Event()
+        amelie._avvia(partito.set)
         fermo.set()
-        assert amelie.macchina.stato is Stato.GUASTO
+        assert partito.wait(3), "la macchina resterebbe ad aspettare per sempre"
 
 
 class TestCicloCompleto:

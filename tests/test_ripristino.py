@@ -117,3 +117,42 @@ class TestDaSolo:
 def test_la_rotta_c_e(amelie):
     from amelie.app import crea_app
     assert "/ripristina" in {r.path for r in crea_app(amelie).routes}
+
+
+class TestIlLavoroDiPrima:
+    """La bottiglia «sparisce» un istante durante una lettura e torna: la
+    lettura di prima sta ancora finendo. Era un guasto al primo colpo."""
+
+    def _occupa(self, amelie, secondi):
+        fine = threading.Event()
+        t = threading.Thread(target=lambda: fine.wait(secondi), daemon=True)
+        t.start()
+        amelie._lavoro = t
+        return fine
+
+    def test_si_aspetta_che_finisca(self, amelie):
+        fine = self._occupa(amelie, 5)
+        amelie.macchina.stato = Stato.SCANSIONE
+        fatto = threading.Event()
+        amelie._avvia(fatto.set)
+        assert amelie.macchina.stato is Stato.SCANSIONE, "non e' un guasto"
+        fine.set()
+        assert fatto.wait(3), "finito quello di prima, il nuovo parte"
+
+    def test_se_non_finisce_e_un_guasto(self, amelie, monkeypatch):
+        from amelie import app as modulo
+        monkeypatch.setattr(modulo, "ATTESA_DEL_LAVORO_S", 0.1)
+        self._occupa(amelie, 5)
+        amelie.macchina.stato = Stato.SCANSIONE
+        amelie._avvia(lambda: pytest.fail("non doveva partire"))
+        amelie._lavoro.join(2)
+        assert amelie.macchina.stato is Stato.GUASTO
+
+    def test_se_intanto_la_bottiglia_e_stata_tolta_non_parte(self, amelie):
+        fine = self._occupa(amelie, 5)
+        amelie.macchina.stato = Stato.SCANSIONE
+        amelie._avvia(lambda: pytest.fail("nessuno lo aspetta piu'"))
+        amelie.macchina.stato = Stato.ATTESA
+        fine.set()
+        amelie._lavoro.join(2)
+        assert amelie.macchina.stato is Stato.ATTESA
