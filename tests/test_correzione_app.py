@@ -37,12 +37,17 @@ def _etichetta(testo: str, seme: int):
 
 
 @pytest.fixture
-def amelie(tmp_path):
+def amelie(tmp_path, monkeypatch):
+    from amelie import app as modulo
     from amelie.app import Amelie, Configurazione
+    monkeypatch.setattr(modulo, "PERCORSO_CORREZIONI_ATTIVE", tmp_path / "correzioni_attive")
     a = Amelie(Configurazione(simula_mcu=True, senza_camera=True, senza_voce=True,
                               senza_modello=True))
     a.correzioni = Correzioni(tmp_path / "correzioni")
     a._scansione = {}
+    # Quasi tutti i test sono di chi corregge: l'interruttore acceso. Quelli
+    # a interruttore spento lo spengono da se'.
+    a.correzioni_attive = True
     yield a
     a.matcher.chiudi()
     a.narratore.chiudi()
@@ -136,20 +141,80 @@ class TestLeLingue:
 
 
 class TestIlPulsante:
+    """«Aggiungi correzioni» acceso: il pulsante su OGNI racconto. Spento: mai."""
+
     def test_correggi_sulla_bottiglia_fuori_archivio(self, amelie):
         amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato",
                               qualificatori=["spumante"])
         assert amelie._azione_correzione() == "correggi"
 
-    def test_niente_su_una_bottiglia_dell_archivio(self, amelie):
+    def test_correggi_anche_su_una_bottiglia_riconosciuta(self, amelie):
         amelie._fatti = Fatti(livello=Livello.VINO, nome="Barolo Cannubi")
+        assert amelie._azione_correzione() == "correggi"
+
+    def test_modifica_su_una_bottiglia_gia_corretta(self, amelie):
+        _correggi(amelie)
+        _appoggia(amelie)
+        amelie._riconosci()
+        assert amelie._azione_correzione() == "modifica"
+
+    def test_niente_senza_un_racconto(self, amelie):
+        amelie._fatti = Fatti()
         assert amelie._azione_correzione() is None
 
-    def test_niente_quando_non_si_e_detto_niente(self, amelie):
-        """Senza colore ne' tipo il racconto chiede di girare l'etichetta: li'
-        non c'e' nessuna descrizione da correggere."""
-        amelie._fatti = Fatti(livello=Livello.GENERICO)
+    def test_a_interruttore_spento_nessun_pulsante_mai(self, amelie):
+        amelie.correzioni_attive = False
+        for f in (Fatti(livello=Livello.GENERICO, colore="Rosato"),
+                  Fatti(livello=Livello.VINO, nome="Barolo Cannubi")):
+            amelie._fatti = f
+            assert amelie._azione_correzione() is None
+        _correggi(amelie)
+        _appoggia(amelie)
+        amelie._riconosci()
+        assert amelie._correzione is not None, "le correzioni salvate valgono sempre"
         assert amelie._azione_correzione() is None
+
+    def test_a_interruttore_spento_l_editor_non_si_apre(self, amelie):
+        _appoggia(amelie)
+        amelie._fatti = Fatti(livello=Livello.VINO, nome="Barolo Cannubi")
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.correzioni_attive = False
+        assert amelie.apri_correzione() == {"ok": False}
+
+
+class TestLInterruttore:
+    def test_si_ricorda_dopo_un_riavvio(self, amelie):
+        from amelie import app as modulo
+        amelie.imposta_correzioni(True)
+        assert modulo.Amelie._correzioni_attive_salvate() is True
+        amelie.imposta_correzioni(False)
+        assert modulo.Amelie._correzioni_attive_salvate() is False
+
+    def test_spento_se_non_c_e_niente_di_salvato(self, amelie):
+        from amelie import app as modulo
+        assert modulo.Amelie._correzioni_attive_salvate() is False
+
+    def test_il_pulsante_cambia_sul_racconto_a_schermo(self, amelie):
+        amelie._fatti = Fatti(livello=Livello.VINO, nome="Barolo Cannubi")
+        amelie.macchina.stato = Stato.RACCONTO
+        detti = []
+        amelie._pubblica = detti.append
+        amelie.imposta_correzioni(False)
+        assert {"tipo": "correzione", "azione": None} in detti
+        amelie.imposta_correzioni(True)
+        assert {"tipo": "correzione", "azione": "correggi"} in detti
+        assert [m["correzioni"] for m in detti if m.get("tipo") == "impostazioni"] == [False, True]
+
+    def test_spegnendo_con_l_editor_aperto_l_editor_si_chiude(self, amelie):
+        _appoggia(amelie)
+        amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato")
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.apri_correzione()
+        detti = []
+        amelie._pubblica = detti.append
+        amelie.imposta_correzioni(False)
+        assert amelie._correggendo is None
+        assert {"tipo": "correzione", "aperta": False} in detti
 
 
 class TestIlTempoPerCorreggere:
@@ -167,8 +232,9 @@ class TestIlTempoPerCorreggere:
         amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato")
         assert self._finisci(amelie) > modulo.CONCLUSO_CON_CORREZIONE_S - 1
 
-    def test_un_vino_dell_archivio_se_ne_va_come_prima(self, amelie):
-        amelie._fatti = Fatti(livello=Livello.VINO, nome="Barolo Cannubi")
+    def test_a_interruttore_spento_se_ne_va_come_prima(self, amelie):
+        amelie.correzioni_attive = False
+        amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato")
         assert self._finisci(amelie) < 3
 
 
@@ -181,7 +247,10 @@ class TestLEditor:
     def test_aprire_ferma_il_dispositivo(self, amelie):
         self._in_racconto(amelie)
         esito = amelie.apri_correzione()
-        assert esito["ok"] and esito["id"] is None and esito["titolo"] == ""
+        # Fuori archivio non c'e' nessun vino a cui la bottiglia sia gia'
+        # collegata, e il titolo si scrive da capo.
+        assert esito["ok"] and esito["id"] is None
+        assert esito["titolo"] == "" and esito["riferimento"] is None
         assert amelie._correggendo is not None
         assert not amelie._va_sorvegliata()
 
@@ -332,3 +401,130 @@ class TestLeScritte:
         for lingua in amelie.lex.lingue:
             for k in chiavi:
                 assert amelie.lex.frase("schermo", k, lingua=lingua).strip(), (lingua, k)
+
+
+class TestIlCollegamento:
+    """Scegliere un vino dalla ricerca collega l'etichetta a quel vino: la volta
+    dopo si riconosce come lui, e senza descrizione si racconta la sua scheda."""
+
+    def _in_racconto(self, amelie, testo="PALAMA|NEGROAMARO|ALBAROSSA", seme=7):
+        # Qui conta cosa si riconosce, non il racconto: niente thread di lavoro,
+        # che il racconto del salvataggio terrebbe occupato.
+        amelie._avvia = lambda _f: None
+        _appoggia(amelie, testo, seme)
+        amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato")
+        amelie.macchina.stato = Stato.RACCONTO
+
+    def test_collegata_all_archivio_senza_descrizione(self, amelie):
+        self._in_racconto(amelie)
+        amelie.apri_correzione()
+        esito = amelie.salva_correzione(
+            "Cannubi Barolo", "", riferimento={"tipo": "archivio", "ambito": "vino", "id": 510})
+        assert esito["ok"], esito
+        c = amelie.correzioni.trova(esito["id"])
+        assert c.riferimento == {"tipo": "archivio", "ambito": "vino", "id": 510,
+                                 "titolo": "Cannubi Barolo — Marchesi di Barolo"}
+        # La volta dopo: riconosciuta, e raccontata come quel vino.
+        _appoggia(amelie)
+        amelie._riconosci()
+        assert amelie._correzione.id == c.id
+        assert not amelie._correzione_parla_ora()
+        assert amelie._fatti.nome == "Cannubi Barolo"
+        assert amelie._fatti.cantina == "Marchesi di Barolo"
+        assert amelie.macchina.stato is Stato.RACCONTO
+
+    def test_con_la_descrizione_parla_la_descrizione(self, amelie):
+        self._in_racconto(amelie)
+        amelie.apri_correzione()
+        amelie.salva_correzione("Cannubi Barolo", "Scritta da chi lo conosce.",
+                                riferimento={"tipo": "archivio", "ambito": "vino", "id": 510})
+        _appoggia(amelie)
+        amelie._riconosci()
+        assert amelie._correzione_parla_ora()
+        assert amelie._racconta_dalla_correzione().testo.endswith("Scritta da chi lo conosce.")
+        # e in inglese, dove la descrizione non c'e', parla il vino collegato
+        amelie.lingua = "en"
+        assert not amelie._correzione_parla_ora()
+        assert amelie._fatti.nome == "Cannubi Barolo"
+
+    def test_senza_collegamento_la_descrizione_serve(self, amelie):
+        self._in_racconto(amelie)
+        amelie.apri_correzione()
+        assert amelie.salva_correzione("Un vino", "") == {"ok": False, "campo": "descrizione"}
+
+    def test_un_collegamento_inventato_non_si_salva(self, amelie):
+        self._in_racconto(amelie)
+        amelie.apri_correzione()
+        esito = amelie.salva_correzione(
+            "Un vino", "", riferimento={"tipo": "archivio", "ambito": "vino", "id": 99999999})
+        assert esito == {"ok": False, "campo": "descrizione"}
+        esito = amelie.salva_correzione(
+            "Un vino", "", riferimento={"tipo": "archivio", "ambito": "vitigno", "id": 1})
+        assert esito == {"ok": False, "campo": "descrizione"}
+
+    def test_la_bottiglia_riconosciuta_si_propone_collegata_a_se_stessa(self, amelie):
+        _appoggia(amelie)
+        amelie._fatti = amelie.matcher.fatti_di("vino", 510)
+        amelie.macchina.stato = Stato.RACCONTO
+        esito = amelie.apri_correzione()
+        assert esito["riferimento"]["id"] == 510
+        assert esito["titolo"] == "Cannubi Barolo — Marchesi di Barolo"
+
+    def test_collegata_alla_carta(self, amelie, tmp_path):
+        from amelie.carta import Carta
+        csv = tmp_path / "carta.csv"
+        csv.write_text('titolo,descrizione\n"Albarossa Palamà","Il rosato di casa, '
+                       'fresco e sapido."\n', encoding="utf-8")
+        amelie.carta = Carta(csv)
+        self._in_racconto(amelie)
+        amelie.apri_correzione()
+        esito = amelie.salva_correzione("Albarossa Palamà", "",
+                                        riferimento={"tipo": "carta", "titolo": "Albarossa Palamà"})
+        assert esito["ok"], esito
+        amelie.modo = "archivio"          # vale in qualunque modo
+        _appoggia(amelie)
+        amelie._riconosci()
+        assert amelie._la_carta_parla_ora()
+        assert amelie._racconta_dalla_carta().testo.endswith("fresco e sapido.")
+
+
+class TestLaRicerca:
+    def test_prima_le_corrette_poi_la_carta_poi_l_archivio(self, amelie, tmp_path):
+        from amelie.carta import Carta
+        csv = tmp_path / "carta.csv"
+        csv.write_text('titolo,descrizione\n"Barolo DOCG","Nebbiolo in purezza."\n',
+                       encoding="utf-8")
+        amelie.carta = Carta(csv)
+        _correggi(amelie, titolo="Barolo di casa", descrizione="Il nostro.")
+        tipi = [p["tipo"] for p in amelie.cerca_bottiglie("barol")]
+        assert tipi[0] == "correzione" and tipi[1] == "carta" and "archivio" in tipi
+        primo_archivio = next(p for p in amelie.cerca_bottiglie("barolo")
+                              if p["tipo"] == "archivio")
+        assert primo_archivio["ambito"] == "denominazione", \
+            "«Barolo» prima dei duecento Barolo di un produttore"
+        assert all(p["sotto"] for p in amelie.cerca_bottiglie("barolo"))
+
+    def test_le_parole_scritte_restringono(self, amelie):
+        proposte = amelie.cerca_bottiglie("cannubi marchesi")
+        assert any(p.get("id") == 510 for p in proposte)
+
+    def test_niente_a_interruttore_spento_o_campo_vuoto(self, amelie):
+        assert amelie.cerca_bottiglie("") == []
+        amelie.correzioni_attive = False
+        assert amelie.cerca_bottiglie("barolo") == []
+
+
+def test_si_puo_togliere_un_collegamento(amelie):
+    amelie._avvia = lambda _f: None
+    _appoggia(amelie)
+    amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato")
+    amelie.macchina.stato = Stato.RACCONTO
+    amelie.apri_correzione()
+    esito = amelie.salva_correzione("Cannubi Barolo", "",
+                                    riferimento={"tipo": "archivio", "ambito": "vino", "id": 510})
+    amelie.apri_correzione()
+    # senza descrizione, togliere il collegamento non si puo': non resterebbe niente
+    assert amelie.salva_correzione("Cannubi", "", scollega=True) == {
+        "ok": False, "campo": "descrizione"}
+    assert amelie.salva_correzione("Cannubi", "Detto a mano.", scollega=True)["ok"]
+    assert amelie.correzioni.trova(esito["id"]).riferimento is None

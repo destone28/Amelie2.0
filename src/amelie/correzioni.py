@@ -237,6 +237,12 @@ class Correzione:
     viste: list[Vista]
     creata: str = ""
     modificata: str = ""
+    # A quale bottiglia conosciuta e' stata collegata, se qualcuno l'ha scelta
+    # dalla ricerca dell'editor: {"tipo": "archivio", "ambito": "vino",
+    # "id": 510, "titolo": ...} oppure {"tipo": "carta", "titolo": ...}. Con un
+    # collegamento la descrizione e' facoltativa: senza, si racconta la scheda
+    # di quella bottiglia.
+    riferimento: dict | None = None
 
     def testo_in(self, lingua: str) -> dict[str, str] | None:
         """Titolo e descrizione in questa lingua, se ci sono entrambi."""
@@ -250,7 +256,11 @@ class Correzione:
         for t in self.testi.values():
             if t.get("titolo"):
                 return t["titolo"]
-        return ""
+        return (self.riferimento or {}).get("titolo", "")
+
+    def descrizione_in(self, lingua: str) -> str:
+        """La descrizione scritta in questa lingua, anche senza titolo; o ""."""
+        return (self.testi.get(lingua) or {}).get("descrizione", "")
 
 
 @dataclass
@@ -310,7 +320,8 @@ class Correzioni:
                                      zona=tuple(v["zona"]) if v.get("zona") else None,
                                      quando=v.get("quando", ""))
                                for v in d.get("viste", [])],
-                        creata=d.get("creata", ""), modificata=d.get("modificata", "")))
+                        creata=d.get("creata", ""), modificata=d.get("modificata", ""),
+                        riferimento=d.get("riferimento")))
                 except (OSError, ValueError, KeyError) as e:
                     # Una correzione rovinata non deve fermare le altre.
                     log.warning("correzione illeggibile in %s: %s", sotto.name, e)
@@ -419,7 +430,8 @@ class Correzioni:
     # --------------------------------------------------------- scrittura
 
     def salva(self, *, righe: Sequence[Any], immagine, titolo: str, descrizione: str,
-              lingua: str, ident: str | None = None) -> Correzione:
+              lingua: str, ident: str | None = None,
+              riferimento: dict | None | object = ...) -> Correzione:
         """Scrive una correzione nuova, o aggiunge a una esistente.
 
         Aggiungere vuol dire due cose: il testo in questa lingua sostituisce
@@ -427,21 +439,30 @@ class Correzioni:
         viste della stessa bottiglia, prese quando qualcuno ha confermato che
         e' lei, sono il modo onesto di riconoscerla meglio: girata un po' di
         piu', con un'altra luce.
+
+        `riferimento` collega la bottiglia a una conosciuta (vedi il campo di
+        `Correzione`); lasciato fuori, il collegamento che c'era resta, e
+        `None` lo toglie. Con un collegamento la descrizione puo' mancare.
         """
         import cv2
 
         titolo = _pulito(titolo, 120)
         descrizione = _pulito(descrizione, 2000)
-        if not titolo or not descrizione:
-            raise ValueError("titolo e descrizione servono tutti e due")
+        if not titolo:
+            raise ValueError("serve un titolo")
         ora = datetime.now()
         testi_righe = [getattr(r, "testo", r) for r in righe]
         with self._lucchetto:
             c = self.trova(ident) if ident else None
+            collegata = (riferimento if riferimento is not ... else
+                         (c.riferimento if c is not None else None))
+            if not descrizione and not collegata:
+                raise ValueError("senza un vino collegato serve una descrizione")
             if c is None:
                 c = Correzione(id=self._nuovo_id(ora), testi={}, viste=[],
                                creata=ora.isoformat(timespec="seconds"))
                 self._elenco.append(c)
+            c.riferimento = collegata
             c.testi[lingua] = {"titolo": titolo, "descrizione": descrizione}
             c.modificata = ora.isoformat(timespec="seconds")
             cartella = self.cartella / c.id
@@ -489,7 +510,7 @@ class Correzioni:
         """Scrittura atomica e durevole: il dispositivo si spegne togliendo la
         corrente, e un file troncato tornerebbe come correzione illeggibile."""
         d = {"id": c.id, "creata": c.creata, "modificata": c.modificata,
-             "testi": c.testi,
+             "testi": c.testi, "riferimento": c.riferimento,
              "viste": [{"immagine": v.immagine, "righe": v.righe, "parole": v.parole,
                         "zona": list(v.zona) if v.zona else None, "quando": v.quando}
                        for v in c.viste]}

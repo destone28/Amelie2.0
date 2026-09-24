@@ -523,12 +523,12 @@
       "en": "aloud and in writing"
     },
     "correggi_descrizione": {
-      "it": "Correggi la descrizione",
-      "en": "Correct the description"
+      "it": "Correggi la bottiglia",
+      "en": "Correct this bottle"
     },
     "modifica_descrizione": {
-      "it": "Modifica la descrizione",
-      "en": "Edit the description"
+      "it": "Modifica la correzione",
+      "en": "Edit the correction"
     },
     "campo_titolo": {
       "it": "Titolo",
@@ -551,12 +551,48 @@
       "en": "Please write a description"
     },
     "correzione_spiega": {
-      "it": "Foto, titolo e descrizione restano su questo dispositivo: la prossima volta riconoscerò la bottiglia.",
-      "en": "The photo, title and description stay on this device: next time I will recognise the bottle."
+      "it": "Scriva il nome e scelga il vino giusto, o ne scriva la descrizione: la prossima volta riconoscerò la bottiglia.",
+      "en": "Type the name and pick the right wine, or write its description: next time I will recognise the bottle."
     },
     "correzione_salvata": {
       "it": "Salvata. La riconoscerò.",
       "en": "Saved. I will recognise it."
+    },
+    "aggiungi_correzioni": {
+      "it": "Aggiungi correzioni",
+      "en": "Add corrections"
+    },
+    "aggiungi_correzioni_spiega": {
+      "it": "Su ogni racconto compare «Correggi la bottiglia», per scegliere il vino giusto o scriverne la descrizione.",
+      "en": "Every story shows «Correct this bottle», to pick the right wine or write its description."
+    },
+    "correzione_collegata": {
+      "it": "Collegata a",
+      "en": "Linked to"
+    },
+    "descrizione_facoltativa": {
+      "it": "Descrizione (facoltativa: vuota, racconto la sua scheda)",
+      "en": "Description (optional: if empty, I tell its own story)"
+    },
+    "fonte_correzione": {
+      "it": "corretta a mano",
+      "en": "corrected by hand"
+    },
+    "fonte_carta": {
+      "it": "carta dei vini",
+      "en": "wine list"
+    },
+    "fonte_vino": {
+      "it": "archivio · vino",
+      "en": "archive · wine"
+    },
+    "fonte_tipologia": {
+      "it": "archivio · tipologia",
+      "en": "archive · type"
+    },
+    "fonte_denominazione": {
+      "it": "archivio · denominazione",
+      "en": "archive · appellation"
     },
     "correzione_vicine": {
       "it": "È una di queste?",

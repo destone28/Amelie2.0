@@ -910,6 +910,33 @@ svg { display: block; }
 }
 .k-vicina img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
 .k-vicina.scelta { border-color: var(--oro); background: rgba(200,134,13,.18); }
+/* Le proposte mentre si scrive il titolo stanno nella stessa riga, al posto
+   della spiegazione: sotto il campo c'e' la descrizione, e sotto ancora la
+   tastiera, e un elenco a tendina avrebbe coperto l'una o l'altra. Una riga
+   di pillole che non va a capo: se ne vedono quante ci stanno, e ogni lettera
+   in piu' le restringe. */
+#k-nota { overflow: hidden; }
+.k-proposta {
+  flex: none; max-width: 420px; height: 56px; padding: 0 18px;
+  display: flex; flex-direction: column; justify-content: center;
+  border: 2px solid var(--oro-scuro); border-radius: 28px;
+  background: rgba(90,33,28,.45); text-align: left;
+}
+.k-proposta .t { font-size: var(--t-minuto); color: var(--avorio); line-height: 1.1;
+                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-proposta .f { font-size: 16px; color: var(--avorio-fioco); line-height: 1.2;
+                 white-space: nowrap; }
+.k-proposta.premuto, .k-vicina.premuto { background: rgba(200,134,13,.22); }
+/* Il collegamento scelto: a quale vino la bottiglia sara' ricondotta. La
+   crocetta lo toglie. */
+.k-collegata { color: var(--oro-chiaro); white-space: nowrap; overflow: hidden;
+               text-overflow: ellipsis; }
+.k-scollega {
+  flex: none; width: 48px; height: 48px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--oro-scuro); color: var(--avorio-tenue);
+}
+.k-scollega svg { width: 22px; height: 22px; fill: currentColor; }
 #k-campi {
   flex: 1 1 auto; min-height: 0; display: flex; gap: calc(var(--passo) * 1.5);
   padding: 0 var(--margine) var(--passo);
@@ -1118,6 +1145,13 @@ svg { display: block; }
     <button class="i-riga i-scelta" id="i-modo-carta" data-modo="carta">
       <div><div class="i-nome"></div><div class="i-spiega"></div></div>
       <div class="i-segno">&#10003;</div>
+    </button>
+    <button class="i-riga" id="i-correzioni" aria-pressed="false">
+      <div>
+        <div class="i-nome" id="i-correzioni-nome">Aggiungi correzioni</div>
+        <div class="i-spiega" id="i-correzioni-spiega"></div>
+      </div>
+      <div class="i-interruttore"><div class="i-pallina"></div></div>
     </button>
     <button class="i-riga" id="i-mirino">
       <div>
@@ -1731,6 +1765,8 @@ eventi.onmessage = (e) => {
             m.impostazioni["modo_" + nome + "_spiega"];
         }
         $("i-mirino-nome").textContent = m.impostazioni.mirino;
+        $("i-correzioni-nome").textContent = m.impostazioni.aggiungi_correzioni;
+        $("i-correzioni-spiega").textContent = m.impostazioni.aggiungi_correzioni_spiega;
         $("i-mirino-spiega").textContent = m.impostazioni.mirino_spiega;
         $("m-torna").textContent = m.impostazioni.mirino_torna;
         parole.mirino = { legge: m.impostazioni.mirino_legge,
@@ -1763,8 +1799,12 @@ eventi.onmessage = (e) => {
       break;
 
     case "correzione":
-      /* Il server chiude l'editor quando e' rimasto aperto troppo a lungo. */
+      /* Il server chiude l'editor quando e' rimasto aperto troppo a lungo, o
+         quando l'interruttore delle correzioni si spegne. */
       if (m.aperta === false) chiudiEditor(false);
+      /* E dice quale pulsante mostrare quando l'interruttore cambia con un
+         racconto a schermo: il racconto non si ridisegna. */
+      if ("azione" in m) { azioneCorrezione = m.azione || null; segnaCorrezione(); }
       break;
 
     case "salute":
@@ -1814,7 +1854,12 @@ const MODI = ["archivio", "generativa", "carta"];
 let modoScelto = "archivio";
 let modiServibili = MODI.slice();
 
+let correzioniAttive = false;
+
 function disegnaImpostazioni(m) {
+  if (typeof m.correzioni === "boolean") correzioniAttive = m.correzioni;
+  $("i-correzioni").classList.toggle("acceso", correzioniAttive);
+  $("i-correzioni").setAttribute("aria-pressed", String(correzioniAttive));
   if (typeof m.modo === "string") modoScelto = m.modo;
   if (Array.isArray(m.modi)) modiServibili = m.modi;
   for (const nome of MODI) {
@@ -1841,6 +1886,15 @@ function disegnaImpostazioni(m) {
     });
   }
   rendiToccabile($("i-mirino"), () => chiediMirino(!mirinoAcceso));
+  /* «Aggiungi correzioni»: come il modo, si disegna subito e si chiede dopo. */
+  rendiToccabile($("i-correzioni"), () => {
+    const prima = correzioniAttive;
+    disegnaImpostazioni({ correzioni: !prima });
+    fetch("/correzioni/" + (prima ? 0 : 1), { method: "POST" })
+      .then(r => r.json())
+      .then(disegnaImpostazioni)
+      .catch(() => disegnaImpostazioni({ correzioni: prima }));
+  });
   rendiToccabile($("i-stato"), apriDiagnostica);
   /* «Batteria ricaricata»: la stima riparte da piena, e il segno di spunta
      resta acceso un attimo per dire che il tocco e' arrivato. */
@@ -1980,6 +2034,12 @@ function segnaCorrezione() {
 
 let campoAttivo = "titolo";
 let idScelto = null;            /* la correzione a cui si aggiunge, se c'e' */
+let idIniziale = null;          /* quella che si stava modificando aprendo */
+/* Il vino a cui la bottiglia sara' collegata: quello riconosciuto, o quello
+   scelto fra le proposte. `null` con `scollegata` vuol dire «tolto a mano». */
+let rifScelto = null;
+let scollegata = false;
+let titoloScelto = "";          /* il titolo com'era quando si e' scelto */
 
 function scritte() { return parole.correzione || {}; }
 
@@ -1997,7 +2057,10 @@ function apriEditor() {
     .then(d => {
       if (!d.ok) return;
       const s = scritte();
-      idScelto = d.id || null;
+      idScelto = idIniziale = d.id || null;
+      rifScelto = d.riferimento || null;
+      scollegata = false;
+      titoloScelto = d.titolo || "";
       $("k-titolo-editor").textContent = d.id
         ? (s.modifica_descrizione || "Modifica la descrizione")
         : (s.correggi_descrizione || "Correggi la descrizione");
@@ -2010,7 +2073,8 @@ function apriEditor() {
       $("k-foto").src = "/correzione/foto/adesso?" + Date.now();
       for (const c of document.querySelectorAll(".k-campo")) c.classList.remove("vuoto");
       if (Array.isArray(d.vicine) && d.vicine.length) disegnaVicine(d.vicine);
-      else nota(s.correzione_spiega || "");
+      else notaDiRiposo();
+      segnaSegnaposto();
       $("correzione").hidden = false;
       /* Si riparte dalle lettere: chi aveva lasciato i numeri o le maiuscole
          fisse la volta prima non se lo ricorda. */
@@ -2024,6 +2088,7 @@ function apriEditor() {
 /* Una bottiglia gia' corretta che stavolta non si e' riconosciuta: si propone,
    con la sua foto, e toccarla vuol dire «e' lei». */
 function disegnaVicine(vicine) {
+  proposteInVista = false;
   const n = $("k-nota");
   n.innerHTML = "";
   n.classList.remove("errore", "fatto");
@@ -2054,8 +2119,122 @@ function disegnaVicine(vicine) {
   }
 }
 
+/* La riga sotto la barra quando non si stanno cercando nomi: il vino
+   collegato, con la crocetta per toglierlo, o la spiegazione. */
+function notaDiRiposo() {
+  proposteInVista = false;
+  const s = scritte();
+  if (!rifScelto) { nota(s.correzione_spiega || ""); return; }
+  const n = $("k-nota");
+  n.innerHTML = "";
+  n.classList.remove("errore", "fatto");
+  const t = document.createElement("span");
+  t.className = "k-collegata";
+  t.textContent = (s.correzione_collegata || "Collegata a") + ": " + rifScelto.titolo;
+  const x = document.createElement("div");
+  x.className = "k-scollega";
+  x.setAttribute("role", "button");
+  x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 ' +
+    '10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
+  rendiToccabile(x, () => {
+    rifScelto = null; scollegata = true;
+    notaDiRiposo(); segnaSegnaposto();
+  });
+  n.append(t, x);
+}
+
+/* Con un vino collegato la descrizione e' facoltativa, e il campo lo dice. */
+function segnaSegnaposto() {
+  const s = scritte();
+  $("k-descrizione").placeholder = rifScelto
+    ? (s.descrizione_facoltativa || s.campo_descrizione || "Descrizione")
+    : (s.campo_descrizione || "Descrizione");
+}
+
+/* Mentre si scrive il titolo si propongono le bottiglie che il dispositivo
+   conosce - quelle gia' corrette, la carta, l'archivio - e toccarne una vuol
+   dire «e' questa». Si chiede al server poco dopo l'ultima lettera, non a
+   ogni lettera: chi scrive in fretta farebbe partire dieci richieste per
+   vederne una. */
+let ritardoProposte = null;
+let ultimaRichiesta = 0;
+let proposteInVista = false;
+function proponi() {
+  clearTimeout(ritardoProposte);
+  ritardoProposte = setTimeout(() => {
+    const q = $("k-titolo").value.trim();
+    if (q.length < 2) { notaDiRiposo(); return; }
+    const questa = ++ultimaRichiesta;
+    fetch("/correzione/cerca?q=" + encodeURIComponent(q))
+      .then(r => r.json())
+      .then(proposte => {
+        /* Una risposta arrivata dopo un'altra piu' recente non vale piu'. */
+        if (questa !== ultimaRichiesta || campoAttivo !== "titolo") return;
+        disegnaProposte(Array.isArray(proposte) ? proposte : []);
+      })
+      .catch(() => {});
+  }, 200);
+}
+
+function disegnaProposte(proposte) {
+  if (!proposte.length) { notaDiRiposo(); return; }
+  proposteInVista = true;
+  const n = $("k-nota");
+  n.innerHTML = "";
+  n.classList.remove("errore", "fatto");
+  for (const p of proposte) {
+    const b = document.createElement("div");
+    b.className = "k-proposta";
+    b.setAttribute("role", "button");
+    const t = document.createElement("span");
+    t.className = "t";
+    t.textContent = p.titolo;
+    const f = document.createElement("span");
+    f.className = "f";
+    f.textContent = p.sotto || "";
+    b.append(t, f);
+    rendiToccabile(b, () => scegliProposta(p));
+    n.appendChild(b);
+  }
+}
+
+function scegliProposta(p) {
+  $("k-titolo").value = p.titolo;
+  titoloScelto = p.titolo;
+  if (p.tipo === "correzione") {
+    /* Una bottiglia gia' corretta: questa foto si aggiunge alla sua. */
+    idScelto = p.id;
+    rifScelto = null;
+    if (p.descrizione && !$("k-descrizione").value.trim()) {
+      $("k-descrizione").value = p.descrizione;
+    }
+  } else {
+    idScelto = idIniziale;
+    rifScelto = p.tipo === "carta"
+      ? { tipo: "carta", titolo: p.titolo }
+      : { tipo: "archivio", ambito: p.ambito, id: p.id, titolo: p.titolo };
+    scollegata = false;
+  }
+  $("k-titolo").classList.remove("vuoto");
+  notaDiRiposo();
+  segnaSegnaposto();
+  attiva("descrizione");
+}
+
+/* Il titolo cambiato a mano dopo una scelta non e' piu' quella scelta. */
+function titoloToccato() {
+  if (titoloScelto && $("k-titolo").value !== titoloScelto) {
+    if (rifScelto) { rifScelto = null; scollegata = true; segnaSegnaposto(); }
+    idScelto = idIniziale;
+    titoloScelto = "";
+    notaDiRiposo();
+  }
+  proponi();
+}
+
 function chiudiEditor(avvisa) {
   fermaRipetizione();
+  clearTimeout(ritardoProposte);
   $("correzione").hidden = true;
   document.activeElement && document.activeElement.blur();
   if (avvisa) fetch("/correzione/chiudi", { method: "POST" }).catch(() => {});
@@ -2069,15 +2248,18 @@ function salvaEditor() {
   const titolo = $("k-titolo").value.trim();
   const descrizione = $("k-descrizione").value.trim();
   $("k-titolo").classList.toggle("vuoto", !titolo);
-  $("k-descrizione").classList.toggle("vuoto", !descrizione);
+  $("k-descrizione").classList.toggle("vuoto", !descrizione && !rifScelto && !idScelto);
   if (!titolo) { nota(s.titolo_vuoto || "", true); attiva("titolo"); return; }
-  if (!descrizione) { nota(s.descrizione_vuota || "", true); attiva("descrizione"); return; }
+  if (!descrizione && !rifScelto && !idScelto) {
+    nota(s.descrizione_vuota || "", true); attiva("descrizione"); return;
+  }
   salvando = true;
   $("k-salva").classList.add("in-corso");
   const libera = () => { salvando = false; $("k-salva").classList.remove("in-corso"); };
   fetch("/correzione/salva", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ titolo, descrizione, id: idScelto }),
+    body: JSON.stringify({ titolo, descrizione, id: idScelto,
+                           riferimento: rifScelto, scollega: scollegata && !rifScelto }),
   })
     .then(r => r.json())
     .then(d => {
@@ -2102,6 +2284,7 @@ function salvaEditor() {
 }
 
 function attiva(nome, alFondo = true) {
+  if (nome !== "titolo" && proposteInVista) { clearTimeout(ritardoProposte); notaDiRiposo(); }
   campoAttivo = nome;
   for (const c of document.querySelectorAll(".k-campo")) {
     c.classList.toggle("attivo", c.id === "k-" + nome);
@@ -2272,6 +2455,7 @@ function batti(t) {
   }
   campo.classList.remove("vuoto");
   aggiornaMaiuscola();
+  if (campoAttivo === "titolo" && fatto) titoloToccato();
   return fatto;
 }
 
@@ -2311,6 +2495,8 @@ $("r-testo").addEventListener("scroll", (e) => {
     campo.addEventListener("pointerdown", () => attiva(nome, false));
     campo.addEventListener("click", aggiornaMaiuscola);
   }
+  /* Una tastiera vera attaccata alla board scrive direttamente nel campo. */
+  $("k-titolo").addEventListener("input", titoloToccato);
 })();
 </script>
 </body>

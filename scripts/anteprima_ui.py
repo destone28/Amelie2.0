@@ -59,7 +59,8 @@ LINGUA_EN = _lingua("en")
 _CHIAVI_CORREZIONE = ("correggi_descrizione", "modifica_descrizione", "campo_titolo",
                       "campo_descrizione", "salva", "titolo_vuoto", "descrizione_vuota",
                       "correzione_spiega", "correzione_salvata", "correzione_vicine",
-                      "tasto_spazio", "annulla")
+                      "tasto_spazio", "annulla", "correzione_collegata",
+                      "descrizione_facoltativa")
 for _l, _m in (("it", LINGUA_IT), ("en", LINGUA_EN)):
     _m["correzione"] = {k: _scritta(k, _l) for k in _CHIAVI_CORREZIONE}
 
@@ -83,7 +84,8 @@ _CHIAVI_IMPOSTAZIONI = (
     "mirino_torna", "mirino_legge", "mirino_trova", "mirino_niente", "modo_titolo",
     "modo_archivio", "modo_archivio_spiega", "modo_generativa",
     "modo_generativa_spiega", "modo_carta", "modo_carta_spiega",
-    "batteria_ricaricata", "batteria_spiega")
+    "batteria_ricaricata", "batteria_spiega", "aggiungi_correzioni",
+    "aggiungi_correzioni_spiega")
 LINGUA_IT_PIENA = {**LINGUA_IT, "impostazioni": {
     k: _scritta(k, "it") for k in _CHIAVI_IMPOSTAZIONI}}
 
@@ -191,7 +193,7 @@ SCENE: dict[str, list[dict]] = {
     # Il pannello si apre col gesto da tre secondi, quindi anche qui si finge.
     "impostazioni": [
         LINGUA_IT_PIENA, {"tipo": "stato", "vista": "attesa"},
-        {"tipo": "impostazioni", "modo": "archivio",
+        {"tipo": "impostazioni", "modo": "archivio", "correzioni": True,
          "modi": ["archivio", "generativa", "carta"]},
         {"tipo": "mirino", "acceso": False, "disponibile": True},
         {"tipo": "salute", "tutto_bene": True, "batteria": {"tacche": 3}}],
@@ -254,6 +256,21 @@ SCENE: dict[str, list[dict]] = {
                            "correzione": "correggi"}],
     "editor_vicine": [LINGUA_IT, {"tipo": "stato", "vista": "racconto", "titolo": "x",
                                   "correzione": "correggi"}],
+    # Una bottiglia riconosciuta: l'editor la propone gia' collegata.
+    "editor_collegata": [LINGUA_IT, {"tipo": "stato", "vista": "racconto", "titolo": "x",
+                                     "correzione": "correggi"}],
+    # Si sta scrivendo il titolo: sotto la barra, le bottiglie che si conoscono.
+    "editor_ricerca": [LINGUA_IT, {"tipo": "stato", "vista": "racconto", "titolo": "x",
+                                   "correzione": "correggi"}],
+    # Un vino dell'archivio, con l'interruttore acceso: il pulsante c'e' anche qui.
+    "racconto_correggibile": [
+        LINGUA_IT,
+        {"tipo": "stato", "vista": "racconto", "titolo": "Cannubi Barolo",
+         "sottotitolo": "Marchesi di Barolo · 2016", "voce_muta": False,
+         "correzione": "correggi"},
+        {"tipo": "racconto", "origine": "template", "frasi": RACCONTO_IT[:3]},
+        {"tipo": "riproduzione", "frase": 0, "posizione": 1.0, "durata": 20.0,
+         "quota": 0.05, "in_pausa": False}],
 
     "senza_voce": [
         {**LINGUA_EN, "voce_muta": True,
@@ -275,6 +292,9 @@ DOPO = {
     "impostazioni": "apriImpostazioni()",
     "editor": "apriEditor()",
     "editor_vicine": "apriEditor()",
+    "editor_collegata": "apriEditor()",
+    "editor_ricerca": ("apriEditor(); setTimeout(() => { attiva('titolo'); "
+                       "for (const c of 'barolo') batti(c); }, 400)"),
 }
 
 # Che cosa risponde il server finto, per le scene che gli chiedono qualcosa.
@@ -283,6 +303,25 @@ RISPOSTE = {
         "ok": True, "id": None, "lingua": "it", "titolo": "Albarossa Negroamaro",
         "descrizione": "Un rosato del Salento da uve Negroamaro, di Palamà. "
                        "Fresco e sapido, con note di fragola", "vicine": []}},
+    "editor_collegata": {"/correzione/apri": {
+        "ok": True, "id": None, "lingua": "it", "vicine": [], "descrizione": "",
+        "titolo": "Cannubi Barolo — Marchesi di Barolo",
+        "riferimento": {"tipo": "archivio", "ambito": "vino", "id": 510,
+                        "titolo": "Cannubi Barolo — Marchesi di Barolo"}}},
+    "editor_ricerca": {
+        "/correzione/apri": {"ok": True, "id": None, "lingua": "it", "titolo": "",
+                             "descrizione": "", "vicine": [], "riferimento": None},
+        "/correzione/cerca": [
+            {"tipo": "correzione", "id": "c1", "titolo": "Barolo di casa",
+             "sotto": "corretta a mano", "descrizione": "Il nostro."},
+            {"tipo": "carta", "titolo": "Barolo DOCG", "sotto": "carta dei vini",
+             "descrizione": "Nebbiolo in purezza."},
+            {"tipo": "archivio", "ambito": "denominazione", "id": 36,
+             "titolo": "Barolo DOP", "sotto": "archivio · denominazione", "descrizione": ""},
+            {"tipo": "archivio", "ambito": "tipologia", "id": 470, "titolo": "Barolo",
+             "sotto": "archivio · tipologia", "descrizione": ""},
+            {"tipo": "archivio", "ambito": "tipologia", "id": 476,
+             "titolo": "Barolo Chinato", "sotto": "archivio · tipologia", "descrizione": ""}]},
     "editor_vicine": {"/correzione/apri": {
         "ok": True, "id": None, "lingua": "it", "titolo": "", "descrizione": "",
         "vicine": [{"id": "a", "titolo": "Albarossa Negroamaro Rosato", "descrizione": ""},

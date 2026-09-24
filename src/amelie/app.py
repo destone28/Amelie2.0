@@ -117,6 +117,9 @@ PERCORSO_GENERATI = RADICE / "var" / "racconti_generati"
 #               una persona. Vedi `amelie.carta`.
 MODI = ("archivio", "generativa", "carta")
 PERCORSO_MODO = RADICE / "var" / "modo"
+# L'interruttore «Aggiungi correzioni»: acceso, su ogni racconto compare il
+# pulsante per correggere la bottiglia. Resta com'e' anche dopo un riavvio.
+PERCORSO_CORREZIONI_ATTIVE = RADICE / "var" / "correzioni_attive"
 # Il servizio di sistema che tiene su il modello linguistico. Lo accende e lo
 # spegne il modo di racconto: vedi `Amelie._accendi_il_modello`.
 SERVIZIO_MODELLO = "amelie-llm.service"
@@ -344,6 +347,7 @@ class Amelie:
         # subito. Chi vuole la generazione dal vivo la accende sapendo che
         # costa un'attesa.
         self.modo = self._modo_salvato()
+        self.correzioni_attive = self._correzioni_attive_salvate()
 
     @staticmethod
     def _apri_carta(percorso: str | None):
@@ -532,7 +536,8 @@ class Amelie:
                                "campo_titolo", "campo_descrizione", "salva",
                                "titolo_vuoto", "descrizione_vuota",
                                "correzione_spiega", "correzione_salvata",
-                               "correzione_vicine", "tasto_spazio", "annulla")
+                               "correzione_vicine", "tasto_spazio", "annulla",
+                               "correzione_collegata", "descrizione_facoltativa")
             },
             # La frase sotto il nome, e che cosa fa l'oggetto in tre passi,
             # sulla schermata d'attesa.
@@ -561,7 +566,8 @@ class Amelie:
                                "modo_archivio_spiega", "modo_generativa",
                                "modo_generativa_spiega", "modo_carta",
                                "modo_carta_spiega", "batteria_ricaricata",
-                               "batteria_spiega")
+                               "batteria_spiega", "aggiungi_correzioni",
+                               "aggiungi_correzioni_spiega")
             },
         })
 
@@ -667,6 +673,36 @@ class Amelie:
         log.info("sfondo del piatto vuoto aggiornato")
 
     # ------------------------------------------------------- impostazioni
+
+    @staticmethod
+    def _correzioni_attive_salvate() -> bool:
+        """Spento se non c'e' niente di salvato: gli ospiti non devono trovare
+        un pulsante per correggere, lo accende chi gestisce il locale."""
+        try:
+            return PERCORSO_CORREZIONI_ATTIVE.read_text(encoding="utf-8").strip() == "1"
+        except OSError:
+            return False
+
+    def imposta_correzioni(self, attive: bool) -> dict[str, Any]:
+        """L'interruttore «Aggiungi correzioni», dalle impostazioni.
+
+        Vale subito, anche sul racconto a schermo: il pulsante compare o
+        sparisce senza rifare niente. Spegnendo con l'editor aperto, l'editor
+        si chiude senza salvare. Le correzioni gia' salvate restano e si
+        riconoscono comunque: l'interruttore decide solo se se ne possono
+        scrivere.
+        """
+        self.correzioni_attive = bool(attive)
+        self._scrivi_durevole(PERCORSO_CORREZIONI_ATTIVE,
+                              "1" if attive else "0", "l'interruttore delle correzioni")
+        if not attive and self._correggendo is not None:
+            self.chiudi_correzione()
+            self._pubblica({"tipo": "correzione", "aperta": False})
+        self._manda_impostazioni()
+        if self.macchina.stato in (Stato.RACCONTO, Stato.CONCLUSO):
+            self._pubblica({"tipo": "correzione", "azione": self._azione_correzione()})
+        log.info("correzioni dal vetro: %s", "accese" if attive else "spente")
+        return {"ok": True, "correzioni": self.correzioni_attive}
 
     def _modo_salvato(self) -> str:
         """Come raccontava l'ultima volta.
@@ -884,6 +920,7 @@ class Amelie:
                         # comando che non fa niente e' peggio di nessun comando.
                         "modi": [m for m in MODI if self._modo_servibile(m)],
                         "generati": self.genera_racconti,
+                        "correzioni": self.correzioni_attive,
                         # Senza un modello acceso l'interruttore non si mostra:
                         # un comando che non fa niente e' peggio di nessun
                         # comando. E' lo stesso criterio del volume senza voce.
@@ -1372,16 +1409,17 @@ class Amelie:
         # in qualunque modo di racconto - archivio, generativa, carta - perche'
         # chi l'ha scritta ne sa piu' di tutte e tre.
         self._correzione = self._cerca_correzione()
-        if self._correzione_parla_ora():
-            # I fatti dell'archivio si cercano lo stesso: se l'ospite cambia
-            # lingua e la correzione in quella lingua non c'e', si racconta da
-            # li', come fa la carta quando non ha la traduzione.
-            self._fatti = self.matcher.cerca(getattr(self, "_righe", []))
+        c = self._correzione
+        if c is not None and (self._correzione_parla_ora() or c.riferimento):
+            # Il vino a cui e' stata collegata, se c'e'; altrimenti i fatti
+            # dell'archivio si cercano lo stesso: se l'ospite cambia lingua e
+            # la correzione in quella lingua non c'e', si racconta da li'.
+            self._fatti, self._voce = self._della_correzione(c)
             self._candidati = []
             self._scansione.update({
                 "livello": "correzione", "sicurezza": 100,
                 "correzione": self._correzione.id,
-                "titolo": self._correzione.testo_in(self.lingua)["titolo"]})
+                "titolo": c.titolo()})
             self.macchina.invia(Evento.MATCH_SICURO)
             return
         if self.modo == "carta" and self.carta is not None:
@@ -1435,6 +1473,26 @@ class Amelie:
         self._scansione["perche_correzione"] = r.perche
         return r.correzione
 
+    def _della_correzione(self, c):
+        """I fatti, e la voce della carta, della bottiglia a cui una correzione
+        e' collegata. Senza collegamento, quelli che l'archivio trova da se'."""
+        from .text import estrai_annata
+        righe = getattr(self, "_righe", [])
+        rif = c.riferimento or {}
+        if rif.get("tipo") == "archivio":
+            try:
+                f = self.matcher.fatti_di(rif["ambito"], int(rif["id"]))
+            except (KeyError, ValueError, TypeError) as e:
+                log.warning("collegamento illeggibile in %s: %s", c.id, e)
+            else:
+                if not f.vuoto:
+                    f.annata = estrai_annata(righe)
+                    return f, None
+        voce = None
+        if rif.get("tipo") == "carta" and self.carta is not None:
+            voce = self.carta.voce(rif.get("titolo", ""))
+        return self.matcher.cerca(righe), voce
+
     def _correzione_parla_ora(self) -> bool:
         """C'e' una correzione per questa bottiglia E sa dirla in questa lingua?
 
@@ -1447,19 +1505,20 @@ class Amelie:
                 and self._correzione.testo_in(self.lingua) is not None)
 
     def _azione_correzione(self) -> str | None:
-        """Quale pulsante offrire sotto il racconto: correggere, modificare, niente.
+        """Quale pulsante offrire sopra il racconto: correggere, modificare, niente.
 
-        «Correggi» solo sulla schermata della bottiglia che non e' in archivio -
-        quella che dice di aver fatto da se' - e «Modifica» su una bottiglia che
-        qualcuno ha gia' corretto, anche in un'altra lingua.
+        Niente, se l'interruttore «Aggiungi correzioni» e' spento: gli ospiti
+        non vedono nessun pulsante per correggere. Acceso, c'e' su OGNI
+        racconto, riconosciuto o no: «Modifica» su una bottiglia gia'
+        corretta, anche in un'altra lingua, «Correggi» su tutte le altre.
         """
+        if not self.correzioni_attive:
+            return None
         if self._correzione is not None:
             return "modifica"
-        f = self._fatti
-        if (not self._la_carta_parla_ora() and f.livello is Livello.GENERICO
-                and (f.qualificatori or f.colore)):
-            return "correggi"
-        return None
+        if self._fatti.vuoto and self._voce is None:
+            return None
+        return "correggi"
 
     def _tentativo_fallito(self) -> None:
         """Letto, ma senza trovare un vino: si chiede di girare l'etichetta,
@@ -1812,6 +1871,8 @@ class Amelie:
         scrive qualcuno cambia bottiglia, la correzione deve restare attaccata
         alla bottiglia che si stava correggendo, non a quella nuova.
         """
+        if not self.correzioni_attive:
+            return {"ok": False}
         if self.macchina.stato not in (Stato.RACCONTO, Stato.CONCLUSO):
             return {"ok": False}
         if getattr(self, "_ultimo_scatto", None) is None:
@@ -1821,13 +1882,25 @@ class Amelie:
                              "immagine": self._ultimo_scatto,
                              "lingua": self.lingua, "quando": time.monotonic()}
         c = self._correzione
-        t = (c.testo_in(self.lingua) or {}) if c is not None else {}
+        t = (c.testi.get(self.lingua) or {}) if c is not None else {}
+        if c is not None:
+            riferimento = c.riferimento
+            # Il titolo si propone anche da un'altra lingua: il nome di un vino
+            # di solito non si traduce.
+            titolo = t.get("titolo") or c.titolo()
+        else:
+            riferimento = self._riferimento_attuale()
+            # Il nome del vino riconosciuto, gia' collegato; fuori archivio il
+            # campo resta vuoto: «Vino rosato» andrebbe solo cancellato.
+            titolo = riferimento["titolo"] if riferimento else ""
         return {
             "ok": True, "lingua": self.lingua,
             "id": c.id if c is not None else None,
-            # Il titolo si propone anche da un'altra lingua: il nome di un vino
-            # di solito non si traduce.
-            "titolo": t.get("titolo") or (c.titolo() if c is not None else ""),
+            "titolo": titolo,
+            # Il vino a cui la bottiglia e' collegata: quello della correzione,
+            # o quello che il dispositivo ha appena riconosciuto. Lasciando la
+            # descrizione vuota si racconta la sua scheda.
+            "riferimento": riferimento,
             "descrizione": t.get("descrizione", ""),
             # Se questa bottiglia somiglia a una gia' corretta ma non abbastanza
             # da riconoscerla, si chiede a chi scrive se e' lei.
@@ -1838,21 +1911,39 @@ class Amelie:
         }
 
     def salva_correzione(self, titolo: str, descrizione: str,
-                         ident: str | None = None) -> dict:
-        """Scrive la correzione e la racconta subito: e' la prova che ha funzionato."""
+                         ident: str | None = None,
+                         riferimento: dict | None = None,
+                         scollega: bool = False) -> dict:
+        """Scrive la correzione e la racconta subito: e' la prova che ha funzionato.
+
+        `riferimento` e' la bottiglia scelta dalla ricerca (archivio o carta):
+        con quella la descrizione e' facoltativa. `ident` e' una correzione gia'
+        esistente a cui aggiungere questa foto.
+        """
         g = self._correggendo
         if g is None:
             return {"ok": False, "motivo": "editor chiuso"}
         if not str(titolo or "").strip():
             return {"ok": False, "campo": "titolo"}
-        if not str(descrizione or "").strip():
-            return {"ok": False, "campo": "descrizione"}
+        riferimento = self._riferimento_valido(riferimento)
         if ident is None and self._correzione is not None:
             ident = self._correzione.id
+        esistente = self.correzioni.trova(ident) if ident else None
+        descrizione = str(descrizione or "").strip()
+        if not descrizione and esistente is not None and riferimento is None:
+            # Aggiungendo una foto a una correzione gia' fatta senza riscriverla,
+            # la descrizione resta quella che c'era.
+            descrizione = esistente.descrizione_in(g["lingua"])
+        # `scollega`: chi corregge ha tolto il collegamento che c'era.
+        collegata = None if scollega else (
+            riferimento or (esistente.riferimento if esistente else None))
+        if not descrizione and not collegata:
+            return {"ok": False, "campo": "descrizione"}
         try:
             c = self.correzioni.salva(righe=g["righe"], immagine=g["immagine"],
                                       titolo=titolo, descrizione=descrizione,
-                                      lingua=g["lingua"], ident=ident)
+                                      lingua=g["lingua"], ident=ident,
+                                      riferimento=collegata)
         except (OSError, ValueError) as e:
             log.warning("correzione non salvata: %s", e)
             return {"ok": False, "motivo": str(e)}
@@ -1862,6 +1953,71 @@ class Amelie:
         # Si rientra nel racconto: titolo e descrizione nuovi a schermo, e a voce.
         self.macchina.invia(Evento.RIPETI)
         return {"ok": True, "id": c.id}
+
+    def _riferimento_valido(self, rif) -> dict | None:
+        """Il collegamento arrivato dalla pagina, ricontrollato qui: si salva
+        solo cio' che esiste davvero, col titolo scritto da noi."""
+        if not isinstance(rif, dict):
+            return None
+        if rif.get("tipo") == "archivio":
+            try:
+                ambito, ident = str(rif["ambito"]), int(rif["id"])
+            except (KeyError, ValueError, TypeError):
+                return None
+            if ambito not in self.matcher.AMBITI_SCEGLIBILI:
+                return None
+            titolo = self.matcher.etichetta(ambito, ident)
+            return ({"tipo": "archivio", "ambito": ambito, "id": ident, "titolo": titolo}
+                    if titolo else None)
+        if rif.get("tipo") == "carta" and self.carta is not None:
+            voce = self.carta.voce(str(rif.get("titolo", "")))
+            return {"tipo": "carta", "titolo": voce.titolo} if voce else None
+        return None
+
+    def _riferimento_attuale(self) -> dict | None:
+        """La bottiglia che il dispositivo ha appena riconosciuto, come
+        collegamento: e' quella che l'editor propone di partenza."""
+        if self._la_carta_parla_ora():
+            return {"tipo": "carta", "titolo": self._voce.titolo}
+        f = self._fatti
+        if (f.origine and f.origine[0] in self.matcher.AMBITI_SCEGLIBILI
+                and f.livello in (Livello.VINO, Livello.TIPOLOGIA, Livello.DENOMINAZIONE)):
+            return self._riferimento_valido(
+                {"tipo": "archivio", "ambito": f.origine[0], "id": f.origine[1]})
+        return None
+
+    def cerca_bottiglie(self, testo: str) -> list[dict]:
+        """Cosa proporre mentre si scrive il titolo nell'editor.
+
+        Tutte le bottiglie che il dispositivo conosce: prima quelle gia'
+        corrette a mano, poi la carta dei vini, poi l'archivio. Ognuna con la
+        sua provenienza scritta sotto, perche' «Barolo» c'e' in tutti e tre.
+        """
+        if not self.correzioni_attive:
+            return []
+        from .text import normalizza
+        testo = str(testo or "")[:80]
+        parole = normalizza(testo).split()
+        if not parole:
+            return []
+        fonte = lambda k: self.lex.frase("schermo", f"fonte_{k}", lingua=self.lingua)
+        fuori: list[dict] = []
+        for c in self.correzioni.tutte():
+            titolo = c.titolo()
+            sue = normalizza(titolo).split()
+            if (all(p in sue for p in parole[:-1])
+                    and any(s.startswith(parole[-1]) for s in sue)):
+                fuori.append({"tipo": "correzione", "id": c.id, "titolo": titolo,
+                              "sotto": fonte("correzione"),
+                              "descrizione": c.descrizione_in(self.lingua)})
+        if self.carta is not None:
+            for v in self.carta.suggerisci(testo, 3):
+                fuori.append({"tipo": "carta", "titolo": v.titolo, "sotto": fonte("carta"),
+                              "descrizione": v.testo_in(self.lingua) or ""})
+        for ambito, ident, titolo in self.matcher.suggerisci(testo, 5):
+            fuori.append({"tipo": "archivio", "ambito": ambito, "id": ident,
+                          "titolo": titolo, "sotto": fonte(ambito), "descrizione": ""})
+        return fuori[:6]
 
     def chiudi_correzione(self) -> dict:
         """Si esce dall'editor senza salvare: il racconto fermato si da' per finito."""
@@ -2247,7 +2403,15 @@ def crea_app(amelie: Amelie):
     async def correzione_salva(d: dict = Body(...)):
         return JSONResponse(amelie.salva_correzione(
             str(d.get("titolo", "")), str(d.get("descrizione", "")),
-            d.get("id") or None))
+            d.get("id") or None, d.get("riferimento"), bool(d.get("scollega"))))
+
+    @app.get("/correzione/cerca")
+    async def correzione_cerca(q: str = ""):
+        return JSONResponse(amelie.cerca_bottiglie(q))
+
+    @app.post("/correzioni/{acceso}")
+    async def correzioni(acceso: int):
+        return JSONResponse(amelie.imposta_correzioni(bool(acceso)))
 
     @app.post("/correzione/chiudi")
     async def correzione_chiudi():

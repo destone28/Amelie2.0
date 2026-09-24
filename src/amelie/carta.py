@@ -145,6 +145,28 @@ class Carta:
         if not self.voci:
             raise CartaVuota(f"nessuna voce utilizzabile in {self.percorso}")
 
+    def voce(self, titolo: str) -> Voce | None:
+        """La voce con questo titolo esatto: quella scelta nell'editor delle
+        correzioni. Si ritrova per titolo e non per posizione, perche' il file
+        si puo' riscrivere fra un avvio e l'altro."""
+        return next((v for v in self.voci if v.titolo == titolo), None)
+
+    def suggerisci(self, testo: str, quanti: int = 5) -> list[Voce]:
+        """Le voci il cui titolo contiene ogni parola scritta, l'ultima come
+        inizio di parola: «barolo ris» trova «Barolo DOCG Riserva»."""
+        from .text import normalizza
+        parole = normalizza(testo).split()
+        if not parole:
+            return []
+        fuori = []
+        for v in self.voci:
+            sue = normalizza(v.titolo).split()
+            if (all(p in sue for p in parole[:-1])
+                    and any(s.startswith(parole[-1]) for s in sue)):
+                fuori.append(v)
+        fuori.sort(key=lambda v: len(v.titolo))
+        return fuori[:quanti]
+
     def cerca(self, righe: Sequence[str]) -> Voce | None:
         """Il titolo che la bottiglia dichiara, se lo dichiara.
 

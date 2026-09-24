@@ -1609,6 +1609,50 @@ class Matcher:
         return bool(mia) and any(
             norme.get(i, ("", "", ""))[1] not in ("", mia) for i in vini)
 
+    # Cosa si puo' scegliere nell'editor delle correzioni: le bottiglie, cioe'
+    # i vini, le tipologie e le denominazioni. Il vitigno no: e' un'uva, e dire
+    # che un'etichetta «e'» il Nebbiolo non e' riconoscerla.
+    AMBITI_SCEGLIBILI = ("vino", "tipologia", "denominazione")
+
+    @sotto_lucchetto
+    def suggerisci(self, testo: str, quanti: int = 5) -> list[tuple[str, int, str]]:
+        """Le bottiglie dell'archivio il cui nome comincia come si sta scrivendo.
+
+        Serve al campo titolo dell'editor delle correzioni: a ogni lettera si
+        propongono i nomi che la contengono, l'ultima parola presa come
+        inizio di parola («barolo cann» trova «Cannubi Barolo»). Prima i nomi
+        che cominciano proprio cosi', poi i piu' corti - «Barolo» prima dei
+        duecento Barolo di un produttore - e a parita' l'ordine di FTS5.
+
+        Restituisce (ambito, id, come si scrive a schermo). Sotto il
+        millisecondo sull'indice di diciannovemila vini.
+        """
+        parole = normalizza(testo).split()
+        if not parole:
+            return []
+        termini = [f'"{p}"' for p in parole[:-1]] + [f'"{parole[-1]}"*']
+        try:
+            righe = self.con.execute(
+                "SELECT testo, ambito, ambito_id FROM ricerca"
+                " WHERE ricerca MATCH ? ORDER BY bm25(ricerca) LIMIT 80",
+                (" AND ".join(termini),)).fetchall()
+        except sqlite3.OperationalError as e:
+            log.warning("suggerimenti: query rifiutata (%s): %r", e, testo)
+            return []
+        inizio = " ".join(parole)
+        adatte = [(r["testo"], r["ambito"], r["ambito_id"], i) for i, r in enumerate(righe)
+                  if r["ambito"] in self.AMBITI_SCEGLIBILI]
+        adatte.sort(key=lambda r: (not r[0].startswith(inizio), len(r[0].split()), r[3]))
+        fuori, visti = [], set()
+        for _testo, ambito, ident, _i in adatte:
+            nome = self.etichetta(ambito, ident)
+            if nome and nome not in visti:
+                visti.add(nome)
+                fuori.append((ambito, ident, nome))
+            if len(fuori) >= quanti:
+                break
+        return fuori
+
     @sotto_lucchetto
     def etichetta(self, ambito: str, ambito_id: int) -> str:
         """Come si scrive un record su uno schermo, per farlo scegliere."""

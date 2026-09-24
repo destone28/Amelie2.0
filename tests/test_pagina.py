@@ -34,7 +34,10 @@ def test_ogni_indirizzo_della_pagina_ha_una_rotta(rotte):
     chiamate = re.findall(r'fetch\("([^"]+)"(\s*\+)?', PAGINA)
     assert len(chiamate) >= 10, "la ricerca dei fetch non trova piu' niente"
     for indirizzo, composto in chiamate:
-        if composto:
+        if "?" in indirizzo:
+            # «/correzione/cerca?q=» + il testo: la parte variabile e' la query.
+            assert indirizzo.split("?")[0] in rotte, indirizzo
+        elif composto:
             assert any(r.startswith(indirizzo) and "{" in r for r in rotte), indirizzo
         else:
             assert indirizzo in rotte, indirizzo

@@ -234,3 +234,23 @@ class TestLeVicine:
         c = archivio.salva(righe=righe, immagine=im, titolo="A", descrizione="B", lingua="it")
         assert archivio.foto(c.id).name == "vista-1.jpg"
         assert archivio.foto("non-esiste") is None
+
+
+def test_il_collegamento_si_salva_e_si_ricarica(tmp_path):
+    """Una correzione collegata a un vino conosciuto non ha bisogno della
+    descrizione, e il collegamento sopravvive al riavvio."""
+    im, righe = _etichetta("PALAMA|NEGROAMARO|ALBAROSSA", 7)
+    arch = Correzioni(tmp_path)
+    rif = {"tipo": "archivio", "ambito": "vino", "id": 510, "titolo": "Cannubi Barolo"}
+    c = arch.salva(righe=righe, immagine=im, titolo="Cannubi Barolo", descrizione="",
+                   lingua="it", riferimento=rif)
+    assert c.testo_in("it") is None and c.riferimento == rif
+    di_nuovo = Correzioni(tmp_path).trova(c.id)
+    assert di_nuovo.riferimento == rif and di_nuovo.titolo() == "Cannubi Barolo"
+    # aggiungendo una foto senza dire niente del collegamento, resta
+    arch.salva(righe=righe, immagine=im, titolo="Cannubi Barolo", descrizione="",
+               lingua="it", ident=c.id)
+    assert arch.trova(c.id).riferimento == rif
+    with pytest.raises(ValueError):
+        arch.salva(righe=righe, immagine=im, titolo="Senza niente", descrizione="",
+                   lingua="it")
