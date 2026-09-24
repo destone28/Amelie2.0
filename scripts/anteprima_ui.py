@@ -86,7 +86,7 @@ _CHIAVI_IMPOSTAZIONI = (
     "modo_archivio", "modo_archivio_spiega", "modo_generativa",
     "modo_generativa_spiega", "modo_carta", "modo_carta_spiega",
     "batteria_ricaricata", "batteria_spiega", "aggiungi_correzioni",
-    "aggiungi_correzioni_spiega")
+    "aggiungi_correzioni_spiega", "ripristina", "ripristina_spiega")
 LINGUA_IT_PIENA = {**LINGUA_IT, "impostazioni": {
     k: _scritta(k, "it") for k in _CHIAVI_IMPOSTAZIONI}}
 
@@ -199,6 +199,13 @@ SCENE: dict[str, list[dict]] = {
         {"tipo": "mirino", "acceso": False, "disponibile": True},
         {"tipo": "salute", "tutto_bene": True, "batteria": {"tacche": 3}}],
 
+    "impostazioni_fondo": [
+        LINGUA_IT_PIENA, {"tipo": "stato", "vista": "attesa"},
+        {"tipo": "impostazioni", "modo": "archivio", "correzioni": True,
+         "modi": ["archivio", "generativa", "carta"]},
+        {"tipo": "mirino", "acceso": False, "disponibile": True},
+        {"tipo": "salute", "tutto_bene": True, "batteria": {"tacche": 3}}],
+
     # La bottiglia che non e' in archivio: il racconto dice di aver fatto da se',
     # e sotto c'e' il pulsante per correggerlo.
     "fuori_archivio": [
@@ -291,6 +298,7 @@ DOPO = {
     "volume_muto": "alternaVolume()",
     "volume_sul_racconto": "alternaVolume()",
     "impostazioni": "apriImpostazioni()",
+    "impostazioni_fondo": "apriImpostazioni(); setTimeout(() => $('i-elenco').scrollTop = 9999, 50)",
     "editor": "apriEditor()",
     "editor_vicine": "apriEditor()",
     "editor_collegata": "apriEditor()",

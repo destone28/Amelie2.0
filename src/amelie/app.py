@@ -85,6 +85,18 @@ VISTA = {
 # Dopo tre letture a vuoto si smette di riprovare.
 TENTATIVI_MAX = 3
 
+# Il ripristino da soli. Un guasto isolato scade in sei secondi e torna in
+# attesa: non serve niente. Tre in tre minuti vogliono dire che qualcosa si e'
+# inceppato davvero - la camera che non da' piu' fotogrammi, un lavoro che
+# non torna - e ogni bottiglia finirebbe in guasto fino a spegnere e
+# riaccendere. Allora si ripristina: vedi `Amelie.ripristina`.
+GUASTI_PER_RIPRISTINO = 3
+FINESTRA_GUASTI_S = 180.0
+# Se i guasti tornano entro dieci minuti da un ripristino, ripristinare non e'
+# bastato: si riavvia il servizio, che riparte da zero in una quarantina di
+# secondi. E' quello che faceva spegnere e riaccendere, senza spegnere.
+DOPO_RIPRISTINO_S = 600.0
+
 # Di quanto saltano i due pulsanti laterali. Cinque secondi: meno non si
 # distingue da un tocco a vuoto, di piu' scavalca una frase intera.
 SALTO_S = 5.0
@@ -305,6 +317,10 @@ class Amelie:
         # sentire dopo, e i tocchi che si accumulano nel frattempo si riducono
         # a quell'unica richiesta.
         self._lucchetto_annuncio = threading.Lock()
+        # I guasti recenti, e quando si e' ripristinato l'ultima volta.
+        self._guasti: list[float] = []
+        self._ultimo_ripristino: float | None = None
+        self._da_ripristinare: str | None = None
         self._lingua_da_annunciare: str | None = None
         self._annunciatore_vivo = False
         # Il colpetto di ritorno del volume, rimandato finche' la mano si ferma.
@@ -382,6 +398,8 @@ class Amelie:
         # una transizione dichiarata, non un evento caduto nel vuoto.
         if t.cambia_stato or t.rientro:
             log.info("%s -> %s", t.da.value, t.a.value)
+            if t.a is Stato.GUASTO and t.cambia_stato:
+                self._conta_il_guasto()
             self._scadenza = (time.monotonic() + t.durata_s) if t.durata_s else None
             if t.a is Stato.CONCLUSO and self._azione_correzione() is not None:
                 self._scadenza = time.monotonic() + CONCLUSO_CON_CORREZIONE_S
@@ -569,7 +587,8 @@ class Amelie:
                                "modo_generativa_spiega", "modo_carta",
                                "modo_carta_spiega", "batteria_ricaricata",
                                "batteria_spiega", "aggiungi_correzioni",
-                               "aggiungi_correzioni_spiega")
+                               "aggiungi_correzioni_spiega", "ripristina",
+                               "ripristina_spiega")
             },
         })
 
@@ -759,7 +778,7 @@ class Amelie:
         self._accendi_il_modello(modo == "generativa")
         return {"ok": True, "modo": modo}
 
-    def _accendi_il_modello(self, acceso: bool) -> None:
+    def _accendi_il_modello(self, acceso: bool, riavvia: bool = False) -> None:
         """Il servizio del modello linguistico si accende solo se serve.
 
         Misurato sul dispositivo: `llama-server` fermo, senza nessuna richiesta,
@@ -784,7 +803,7 @@ class Amelie:
 
         def esegui() -> None:
             import subprocess
-            verbo = "start" if acceso else "stop"
+            verbo = ("restart" if riavvia else "start") if acceso else "stop"
             try:
                 subprocess.run(["systemctl", verbo, SERVIZIO_MODELLO],
                                check=True, capture_output=True, timeout=30)
@@ -1197,6 +1216,106 @@ class Amelie:
             lettore.ferma()
         if self.voce is not None:
             self.voce.zittisci()
+
+    # ------------------------------------------------------------ ripristino
+
+    def _conta_il_guasto(self) -> None:
+        ora = time.monotonic()
+        self._guasti = [t for t in self._guasti if ora - t < FINESTRA_GUASTI_S] + [ora]
+        if len(self._guasti) >= GUASTI_PER_RIPRISTINO and self._da_ripristinare is None:
+            log.warning("%d guasti in %.0f s: ripristino al prossimo battito",
+                        len(self._guasti), FINESTRA_GUASTI_S)
+            self._da_ripristinare = f"{len(self._guasti)} guasti di fila"
+
+    def _ripristina_da_solo(self, motivo: str) -> None:
+        """Il primo passo e' il ripristino; se i guasti tornano subito, il
+        riavvio del servizio."""
+        if (self._ultimo_ripristino is not None
+                and time.monotonic() - self._ultimo_ripristino < DOPO_RIPRISTINO_S):
+            self.riavvia_servizio(f"{motivo}, anche dopo un ripristino")
+            return
+        self.ripristina(motivo)
+
+    def ripristina(self, motivo: str = "a mano") -> dict[str, Any]:
+        """Rimette in moto il dispositivo senza spegnerlo.
+
+        Prima l'unico rimedio a un guasto che si ripete era staccare la
+        corrente. Qui si rifa' cio' che quello rifaceva, pezzo per pezzo:
+
+        - si ferma il racconto, l'annuncio e l'editor aperto;
+        - il lavoro in corso ha cinque secondi per uscire, e se non esce lo si
+          lascia andare: un thread non si uccide, ma non deve piu' tenere
+          occupata la pipeline (vedi `_avvia`, che col lavoro «in corso»
+          dichiarava guasto a ogni bottiglia);
+        - la camera torna come all'accensione: stream spento, posa di
+          partenza, device ricercato. E' il pezzo che una seraha
+          tenuto il dispositivo in guasto per un'ora: la posa salita a 5000;
+        - l'uscita audio si chiude e si riapre;
+        - col modo generativo, il modello si riavvia;
+        - i contatori dei tentativi si azzerano, e si torna all'invito: una
+          bottiglia gia' sul piatto si rilegge.
+
+        Lo si chiama dalle impostazioni, o da soli dopo tre guasti in tre
+        minuti (vedi `_conta_il_guasto`).
+        """
+        log.warning("ripristino (%s)", motivo)
+        self._ultimo_ripristino = time.monotonic()
+        self._guasti.clear()
+        self._scadenza = None
+        self._ferma_racconto()
+        with self._lucchetto_annuncio:
+            self._lingua_da_annunciare = None
+        if self._correggendo is not None:
+            self._correggendo = None
+            self._pubblica({"tipo": "correzione", "aperta": False})
+        if self.mirino is not None and self.mirino.acceso:
+            self._spegni_mirino()
+        self._attendi_lavoro(5.0)
+        lavoro = self._lavoro
+        if (lavoro is not None and lavoro.is_alive()
+                and lavoro is not threading.current_thread()):
+            log.warning("il lavoro non e' uscito: lo si lascia andare")
+            self._lavoro = None
+        if self.camera is not None:
+            try:
+                self.camera.ripristina()
+            except Exception as e:                          # noqa: BLE001
+                log.warning("camera non ripristinata: %s", e)
+        if self.voce is not None:
+            try:
+                self.voce.chiudi()
+                self.voce.uscita()
+            except Exception as e:                          # noqa: BLE001
+                log.warning("uscita audio non riaperta: %s", e)
+        if self.modo == "generativa":
+            self._accendi_il_modello(True, riavvia=True)
+        self._tentativi = 0
+        self._bottiglia_chiusa = False
+        self._cambiata_durante_il_racconto = False
+        self.macchina.reimposta()
+        self._mostra(Stato.ATTESA)
+        for e in EFFETTI_INGRESSO[Stato.ATTESA]:
+            self._esegui(e)
+        return {"ok": True, "motivo": motivo}
+
+    def riavvia_servizio(self, motivo: str) -> None:
+        """L'ultimo passo prima di spegnere: il processo esce, e systemd lo
+        riavvia (Restart=always) in una quarantina di secondi, voci comprese.
+        Solo sotto systemd - che lo fa sapere con INVOCATION_ID -: lanciato a
+        mano, uscire vorrebbe dire spegnersi e basta, e si ripristina e basta."""
+        import os
+        if not os.environ.get("INVOCATION_ID"):
+            log.warning("riavvio chiesto (%s) ma non sotto systemd: ripristino", motivo)
+            self.ripristina(motivo)
+            return
+        log.error("riavvio del servizio: %s", motivo)
+        self._ferma_racconto()
+        if self.camera is not None:
+            try:
+                self.camera.chiudi()
+            except Exception:                               # noqa: BLE001
+                pass
+        os._exit(75)
 
     def _attendi_lavoro(self, secondi: float) -> None:
         """Aspetta che il thread di lavoro esca. Mai se stessi."""
@@ -2091,6 +2210,12 @@ class Amelie:
 
     async def _un_battito(self) -> None:
         """Un giro solo: sbirciata, presenza, timer. Isolato per poterlo provare."""
+        if self._da_ripristinare is not None:
+            # In un thread: il ripristino aspetta fino a cinque secondi che il
+            # lavoro in corso esca, e il battito non puo' fermarsi tanto.
+            motivo, self._da_ripristinare = self._da_ripristinare, None
+            await asyncio.to_thread(self._ripristina_da_solo, motivo)
+            return
         if self._correggendo is not None:
             # Mentre qualcuno scrive, il dispositivo non guarda il piatto: una
             # bottiglia appoggiata o tolta sotto la tastiera farebbe partire un
@@ -2420,6 +2545,11 @@ def crea_app(amelie: Amelie):
     @app.get("/correzione/cerca")
     async def correzione_cerca(q: str = ""):
         return JSONResponse(amelie.cerca_bottiglie(q))
+
+    @app.post("/ripristina")
+    async def ripristina():
+        # In un thread: aspetta fino a cinque secondi il lavoro in corso.
+        return JSONResponse(await asyncio.to_thread(amelie.ripristina, "a mano"))
 
     @app.post("/correzioni/{acceso}")
     async def correzioni(acceso: int):

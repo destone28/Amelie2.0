@@ -606,6 +606,14 @@
       "it": "scrivo la descrizione",
       "en": "I'll write the description"
     },
+    "ripristina": {
+      "it": "Ripristina il funzionamento",
+      "en": "Restore operation"
+    },
+    "ripristina_spiega": {
+      "it": "Se «Qualcosa non ha funzionato» si ripete: rimette in moto camera, lettura e voce senza spegnere.",
+      "en": "If «Something went wrong» keeps coming back: restarts camera, reading and voice without switching off."
+    },
     "correzione_vicine": {
       "it": "È una di queste?",
       "en": "Is it one of these?"

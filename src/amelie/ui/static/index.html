@@ -758,6 +758,10 @@ svg { display: block; }
   font-size: var(--t-sottotit); color: var(--oro); visibility: hidden;
 }
 .i-scelta.acceso .i-segno { visibility: visible; }
+/* «Ripristina»: mentre lavora la riga si smorza, e a lavoro fatto la spunta
+   si accende un attimo, poi il pannello si chiude sull'invito. */
+#i-ripristina.in-corso { opacity: .55; }
+#i-ripristina.fatto .i-segno { visibility: visible; }
 .i-scelta.acceso { border-color: var(--oro); background: rgba(200,134,13,.12); }
 
 /* ===========================================================================
@@ -1180,6 +1184,13 @@ svg { display: block; }
         <div class="i-spiega" id="i-batteria-spiega"></div>
       </div>
       <div id="batteria" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    </button>
+    <button class="i-riga" id="i-ripristina">
+      <div>
+        <div class="i-nome" id="i-ripristina-nome">Ripristina il funzionamento</div>
+        <div class="i-spiega" id="i-ripristina-spiega"></div>
+      </div>
+      <div class="i-segno" aria-hidden="true">&#10003;</div>
     </button>
     <button class="i-riga" id="i-stato">
       <div class="i-nome" id="i-stato-nome">Stato tecnico</div>
@@ -1781,6 +1792,8 @@ eventi.onmessage = (e) => {
         }
         $("i-mirino-nome").textContent = m.impostazioni.mirino;
         $("i-correzioni-nome").textContent = m.impostazioni.aggiungi_correzioni;
+        $("i-ripristina-nome").textContent = m.impostazioni.ripristina;
+        $("i-ripristina-spiega").textContent = m.impostazioni.ripristina_spiega;
         $("i-correzioni-spiega").textContent = m.impostazioni.aggiungi_correzioni_spiega;
         $("i-mirino-spiega").textContent = m.impostazioni.mirino_spiega;
         $("m-torna").textContent = m.impostazioni.mirino_torna;
@@ -1911,6 +1924,28 @@ function disegnaImpostazioni(m) {
       .catch(() => disegnaImpostazioni({ correzioni: prima }));
   });
   rendiToccabile($("i-stato"), apriDiagnostica);
+  /* «Ripristina il funzionamento»: quello che prima si otteneva solo
+     staccando la corrente. Il server ci mette fino a qualche secondo. */
+  let ripristinando = false;
+  rendiToccabile($("i-ripristina"), () => {
+    if (ripristinando) return;
+    ripristinando = true;
+    const riga = $("i-ripristina");
+    riga.classList.add("in-corso");
+    fetch("/ripristina", { method: "POST" })
+      .then(r => r.json())
+      .then(d => {
+        riga.classList.remove("in-corso");
+        if (!d.ok) return;
+        riga.classList.add("fatto");
+        setTimeout(() => {
+          riga.classList.remove("fatto");
+          $("impostazioni").hidden = true;
+        }, 1200);
+      })
+      .catch(() => riga.classList.remove("in-corso"))
+      .finally(() => { ripristinando = false; });
+  });
   /* «Batteria ricaricata»: la stima riparte da piena, e il segno di spunta
      resta acceso un attimo per dire che il tocco e' arrivato. */
   rendiToccabile($("i-batteria"), () => {
