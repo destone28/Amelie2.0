@@ -594,6 +594,18 @@
       "it": "archivio · denominazione",
       "en": "archive · appellation"
     },
+    "nessuna_di_queste": {
+      "it": "Nessuna di queste",
+      "en": "None of these"
+    },
+    "altre_proposte": {
+      "it": "altre {n}",
+      "en": "{n} more"
+    },
+    "nessuna_scrivo_io": {
+      "it": "scrivo la descrizione",
+      "en": "I'll write the description"
+    },
     "correzione_vicine": {
       "it": "È una di queste?",
       "en": "Is it one of these?"

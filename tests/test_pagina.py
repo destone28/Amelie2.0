@@ -115,3 +115,13 @@ def test_nessuna_goccia_rimasta():
     avvio = (RADICE / "src/amelie/ui/static/avvio.html").read_text(encoding="utf-8")
     for testo in (PAGINA, avvio):
         assert "--goccia" not in testo and 'class="goccia"' not in testo
+
+
+def test_le_proposte_stanno_al_posto_della_descrizione():
+    """Mentre si scrive il titolo le bottiglie si scelgono dove c'e' la
+    descrizione, cinque per volta, e l'ultima casella e' «Nessuna di queste»."""
+    colonna = re.search(r'<div id="k-colonna">(.*?)</div>\s*</div>', PAGINA, re.S).group(1)
+    assert 'id="k-descrizione"' in colonna and 'id="k-proposte"' in colonna
+    assert "const PER_PAGINA = 5;" in PAGINA
+    pagina = re.search(r"function disegnaPagina\(\) \{(.*?)\n\}", PAGINA, re.S).group(1)
+    assert "nessuna_di_queste" in pagina and "paginaProposte++" in pagina

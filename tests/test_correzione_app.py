@@ -514,6 +514,14 @@ class TestLaRicerca:
             "«Barolo» prima dei duecento Barolo di un produttore"
         assert all(p["sotto"] for p in amelie.cerca_bottiglie("barolo"))
 
+    def test_ce_n_e_piu_di_una_pagina(self, amelie):
+        """La pagina ne mostra cinque per volta: «Nessuna di queste» deve avere
+        altre proposte da far scorrere, non le stesse cinque."""
+        proposte = amelie.cerca_bottiglie("barolo")
+        assert 10 <= len(proposte) <= 20
+        titoli = [p["titolo"] for p in proposte]
+        assert len(titoli) == len(set(titoli))
+
     def test_le_parole_scritte_restringono(self, amelie):
         proposte = amelie.cerca_bottiglie("cannubi marchesi")
         assert any(p.get("id") == 510 for p in proposte)

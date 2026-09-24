@@ -910,28 +910,37 @@ svg { display: block; }
 }
 .k-vicina img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
 .k-vicina.scelta { border-color: var(--oro); background: rgba(200,134,13,.18); }
-/* Le proposte mentre si scrive il titolo stanno nella stessa riga, al posto
-   della spiegazione: sotto il campo c'e' la descrizione, e sotto ancora la
-   tastiera, e un elenco a tendina avrebbe coperto l'una o l'altra. Una riga
-   di pillole che non va a capo: se ne vedono quante ci stanno, e ogni lettera
-   in piu' le restringe. */
-#k-nota { overflow: hidden; }
-/* Centrate come la spiegazione, le pillole uscivano dai due lati quando non ci
-   stavano, e la prima - la piu' pertinente - era tagliata a sinistra. Si
-   parte dal bordo sinistro dei campi: quelle che non ci stanno escono a
-   destra, dove sono le meno pertinenti. */
-#k-nota.proposte { justify-content: flex-start; padding-left: 162px; }
-.k-proposta {
-  flex: none; max-width: 420px; height: 56px; padding: 0 18px;
-  display: flex; flex-direction: column; justify-content: center;
-  border: 2px solid var(--oro-scuro); border-radius: 28px;
-  background: rgba(90,33,28,.45); text-align: left;
+/* Le proposte mentre si scrive il titolo prendono il posto della
+   descrizione: e' li' che l'occhio va, sotto il campo in cui si scrive, e
+   mentre si scrive il titolo la descrizione non serve. Tre colonne e due
+   righe: cinque bottiglie e, nell'ultima casella, «Nessuna di queste», che
+   passa alle cinque dopo o, finite, riporta alla descrizione. Erano pillole
+   nella riga sopra il titolo: se ne vedevano quante ci stavano, e le altre
+   uscivano dallo schermo senza modo di raggiungerle. */
+#k-proposte {
+  flex: 1; min-height: 0;
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
 }
-.k-proposta .t { font-size: var(--t-minuto); color: var(--avorio); line-height: 1.1;
-                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.k-proposta .f { font-size: 16px; color: var(--avorio-fioco); line-height: 1.2;
-                 white-space: nowrap; }
-.k-proposta.premuto, .k-vicina.premuto { background: rgba(200,134,13,.22); }
+#k-proposte[hidden], #k-descrizione[hidden] { display: none; }
+.k-opzione {
+  min-width: 0; min-height: 0; padding: 0 16px;
+  display: flex; flex-direction: column; justify-content: center;
+  border: 2px solid var(--oro-scuro); border-radius: 14px;
+  background: rgba(90,33,28,.45);
+  transition: background-color var(--d-tocco), border-color var(--d-tocco);
+}
+.k-opzione .t { font-size: var(--t-minuto); color: var(--avorio); line-height: 1.1;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-opzione .f { font-size: 16px; color: var(--avorio-fioco); line-height: 1.25;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-opzione.premuto { background: rgba(200,134,13,.22); border-color: var(--oro); }
+/* «Nessuna di queste» non e' una bottiglia: niente fondo, filetto a tratti. */
+.k-opzione.nessuna { background: transparent; border-style: dashed;
+                     border-color: rgba(200,134,13,.55); }
+.k-opzione.nessuna .t { color: var(--oro-chiaro); }
+.k-vicina.premuto { background: rgba(200,134,13,.22); }
 /* Il collegamento scelto: a quale vino la bottiglia sara' ricondotta. La
    crocetta lo toglie. */
 .k-collegata { color: var(--oro-chiaro); white-space: nowrap; overflow: hidden;
@@ -1212,6 +1221,7 @@ svg { display: block; }
                spellcheck="false" maxlength="120">
         <textarea id="k-descrizione" class="k-campo" inputmode="none"
                   spellcheck="false" maxlength="2000"></textarea>
+        <div id="k-proposte" hidden></div>
       </div>
     </div>
     <div id="tastiera"></div>
@@ -2077,6 +2087,7 @@ function apriEditor() {
       $("k-descrizione").value = d.descrizione || "";
       $("k-foto").src = "/correzione/foto/adesso?" + Date.now();
       for (const c of document.querySelectorAll(".k-campo")) c.classList.remove("vuoto");
+      nascondiProposte();
       if (Array.isArray(d.vicine) && d.vicine.length) disegnaVicine(d.vicine);
       else notaDiRiposo();
       segnaSegnaposto();
@@ -2093,9 +2104,7 @@ function apriEditor() {
 /* Una bottiglia gia' corretta che stavolta non si e' riconosciuta: si propone,
    con la sua foto, e toccarla vuol dire «e' lei». */
 function disegnaVicine(vicine) {
-  proposteInVista = false;
   const n = $("k-nota");
-  n.classList.remove("proposte");
   n.innerHTML = "";
   n.classList.remove("errore", "fatto");
   const d = document.createElement("span");
@@ -2128,8 +2137,6 @@ function disegnaVicine(vicine) {
 /* La riga sotto la barra quando non si stanno cercando nomi: il vino
    collegato, con la crocetta per toglierlo, o la spiegazione. */
 function notaDiRiposo() {
-  proposteInVista = false;
-  $("k-nota").classList.remove("proposte");
   const s = scritte();
   if (!rifScelto) { nota(s.correzione_spiega || ""); return; }
   const n = $("k-nota");
@@ -2165,45 +2172,79 @@ function segnaSegnaposto() {
    vederne una. */
 let ritardoProposte = null;
 let ultimaRichiesta = 0;
-let proposteInVista = false;
+let proposte = [];              /* tutte quelle arrivate, fino a venti */
+let paginaProposte = 0;
+const PER_PAGINA = 5;           /* piu' «Nessuna di queste»: sei caselle */
+
 function proponi() {
   clearTimeout(ritardoProposte);
   ritardoProposte = setTimeout(() => {
     const q = $("k-titolo").value.trim();
-    if (q.length < 2) { notaDiRiposo(); return; }
+    if (q.length < 2) { nascondiProposte(); return; }
     const questa = ++ultimaRichiesta;
     fetch("/correzione/cerca?q=" + encodeURIComponent(q))
       .then(r => r.json())
-      .then(proposte => {
-        /* Una risposta arrivata dopo un'altra piu' recente non vale piu'. */
+      .then(lista => {
+        /* Una risposta arrivata dopo un'altra piu' recente non vale piu', e
+           nemmeno una arrivata quando si e' gia' passati alla descrizione. */
         if (questa !== ultimaRichiesta || campoAttivo !== "titolo") return;
-        disegnaProposte(Array.isArray(proposte) ? proposte : []);
+        mostraProposte(Array.isArray(lista) ? lista : []);
       })
       .catch(() => {});
   }, 200);
 }
 
-function disegnaProposte(proposte) {
-  if (!proposte.length) { notaDiRiposo(); return; }
-  proposteInVista = true;
-  const n = $("k-nota");
-  n.classList.add("proposte");
-  n.innerHTML = "";
-  n.classList.remove("errore", "fatto");
-  for (const p of proposte) {
-    const b = document.createElement("div");
-    b.className = "k-proposta";
-    b.setAttribute("role", "button");
-    const t = document.createElement("span");
-    t.className = "t";
-    t.textContent = p.titolo;
-    const f = document.createElement("span");
-    f.className = "f";
-    f.textContent = p.sotto || "";
-    b.append(t, f);
+function mostraProposte(lista) {
+  proposte = lista;
+  paginaProposte = 0;
+  if (!lista.length) { nascondiProposte(); return; }
+  disegnaPagina();
+}
+
+function casella(titolo, sotto, classe) {
+  const b = document.createElement("div");
+  b.className = "k-opzione" + (classe ? " " + classe : "");
+  b.setAttribute("role", "button");
+  const t = document.createElement("span");
+  t.className = "t";
+  t.textContent = titolo;
+  const f = document.createElement("span");
+  f.className = "f";
+  f.textContent = sotto || "";
+  b.append(t, f);
+  return b;
+}
+
+function disegnaPagina() {
+  const s = scritte();
+  const box = $("k-proposte");
+  box.innerHTML = "";
+  const da = paginaProposte * PER_PAGINA;
+  for (const p of proposte.slice(da, da + PER_PAGINA)) {
+    const b = casella(p.titolo, p.sotto);
     rendiToccabile(b, () => scegliProposta(p));
-    n.appendChild(b);
+    box.appendChild(b);
   }
+  /* L'ultima casella dice anche cosa succede toccandola: quante ne restano,
+     o che si passa a scrivere. */
+  const resto = proposte.length - (da + PER_PAGINA);
+  const n = casella(s.nessuna_di_queste || "Nessuna di queste",
+                    resto > 0 ? (s.altre_proposte || "altre {n}").replace("{n}", resto)
+                              : (s.nessuna_scrivo_io || ""),
+                    "nessuna");
+  rendiToccabile(n, () => {
+    if (resto > 0) { paginaProposte++; disegnaPagina(); return; }
+    nascondiProposte();
+    attiva("descrizione");
+  });
+  box.appendChild(n);
+  $("k-descrizione").hidden = true;
+  box.hidden = false;
+}
+
+function nascondiProposte() {
+  $("k-proposte").hidden = true;
+  $("k-descrizione").hidden = false;
 }
 
 function scegliProposta(p) {
@@ -2224,6 +2265,7 @@ function scegliProposta(p) {
     scollegata = false;
   }
   $("k-titolo").classList.remove("vuoto");
+  nascondiProposte();
   notaDiRiposo();
   segnaSegnaposto();
   attiva("descrizione");
@@ -2243,6 +2285,7 @@ function titoloToccato() {
 function chiudiEditor(avvisa) {
   fermaRipetizione();
   clearTimeout(ritardoProposte);
+  nascondiProposte();
   $("correzione").hidden = true;
   document.activeElement && document.activeElement.blur();
   if (avvisa) fetch("/correzione/chiudi", { method: "POST" }).catch(() => {});
@@ -2292,7 +2335,7 @@ function salvaEditor() {
 }
 
 function attiva(nome, alFondo = true) {
-  if (nome !== "titolo" && proposteInVista) { clearTimeout(ritardoProposte); notaDiRiposo(); }
+  if (nome !== "titolo") { clearTimeout(ritardoProposte); nascondiProposte(); }
   campoAttivo = nome;
   for (const c of document.querySelectorAll(".k-campo")) {
     c.classList.toggle("attivo", c.id === "k-" + nome);

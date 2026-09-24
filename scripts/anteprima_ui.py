@@ -60,7 +60,8 @@ _CHIAVI_CORREZIONE = ("correggi_descrizione", "modifica_descrizione", "campo_tit
                       "campo_descrizione", "salva", "titolo_vuoto", "descrizione_vuota",
                       "correzione_spiega", "correzione_salvata", "correzione_vicine",
                       "tasto_spazio", "annulla", "correzione_collegata",
-                      "descrizione_facoltativa")
+                      "descrizione_facoltativa", "nessuna_di_queste", "altre_proposte",
+                      "nessuna_scrivo_io")
 for _l, _m in (("it", LINGUA_IT), ("en", LINGUA_EN)):
     _m["correzione"] = {k: _scritta(k, _l) for k in _CHIAVI_CORREZIONE}
 
@@ -321,7 +322,14 @@ RISPOSTE = {
             {"tipo": "archivio", "ambito": "tipologia", "id": 470, "titolo": "Barolo",
              "sotto": "archivio · tipologia", "descrizione": ""},
             {"tipo": "archivio", "ambito": "tipologia", "id": 476,
-             "titolo": "Barolo Chinato", "sotto": "archivio · tipologia", "descrizione": ""}]},
+             "titolo": "Barolo Chinato", "sotto": "archivio · tipologia", "descrizione": ""},
+            {"tipo": "archivio", "ambito": "tipologia", "id": 473,
+             "titolo": "Barolo Riserva", "sotto": "archivio · tipologia", "descrizione": ""},
+            {"tipo": "archivio", "ambito": "vino", "id": 72,
+             "titolo": "Barolo — Batasiolo", "sotto": "archivio · vino", "descrizione": ""},
+            {"tipo": "archivio", "ambito": "vino", "id": 510,
+             "titolo": "Cannubi Barolo — Marchesi di Barolo", "sotto": "archivio · vino",
+             "descrizione": ""}]},
     "editor_vicine": {"/correzione/apri": {
         "ok": True, "id": None, "lingua": "it", "titolo": "", "descrizione": "",
         "vicine": [{"id": "a", "titolo": "Albarossa Negroamaro Rosato", "descrizione": ""},

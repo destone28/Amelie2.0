@@ -537,7 +537,9 @@ class Amelie:
                                "titolo_vuoto", "descrizione_vuota",
                                "correzione_spiega", "correzione_salvata",
                                "correzione_vicine", "tasto_spazio", "annulla",
-                               "correzione_collegata", "descrizione_facoltativa")
+                               "correzione_collegata", "descrizione_facoltativa",
+                               "nessuna_di_queste", "altre_proposte",
+                               "nessuna_scrivo_io")
             },
             # La frase sotto il nome, e che cosa fa l'oggetto in tre passi,
             # sulla schermata d'attesa.
@@ -2019,13 +2021,15 @@ class Amelie:
                               "sotto": fonte("correzione"),
                               "descrizione": c.descrizione_in(self.lingua)})
         if self.carta is not None:
-            for v in self.carta.suggerisci(testo, 3):
+            for v in self.carta.suggerisci(testo, 5):
                 fuori.append({"tipo": "carta", "titolo": v.titolo, "sotto": fonte("carta"),
                               "descrizione": v.testo_in(self.lingua) or ""})
-        for ambito, ident, titolo in self.matcher.suggerisci(testo, 5):
+        for ambito, ident, titolo in self.matcher.suggerisci(testo, 15):
             fuori.append({"tipo": "archivio", "ambito": ambito, "id": ident,
                           "titolo": titolo, "sotto": fonte(ambito), "descrizione": ""})
-        return fuori[:6]
+        # Venti al massimo: la pagina ne mostra cinque per volta, e «Nessuna di
+        # queste» fa passare alle successive.
+        return fuori[:20]
 
     def chiudi_correzione(self) -> dict:
         """Si esce dall'editor senza salvare: il racconto fermato si da' per finito."""
