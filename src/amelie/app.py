@@ -51,6 +51,7 @@ from .capture import (
     Camera, CameraNonDisponibile, PresenzaOttica, blocca_esposizione,
 )
 from .carta import Carta, CartaVuota
+from .correzioni import Correzioni
 from .giornale import Giornale
 from .mirino import LetturaContinua, Mirino
 from .matcher import Fatti, Livello, Matcher
@@ -136,6 +137,10 @@ CARTELLA_GIORNALE = RADICE / "var" / "scansioni"
 # perche' valga la pena. La memoria della board e' flash: un aggiornamento al
 # minuto sarebbero settanta megabyte al giorno per un file che quasi non cambia.
 RIPOSO_SFONDO_S = 600.0
+# Quanto puo' restare aperto l'editor di una correzione prima che lo si chiuda
+# da soli. Dieci minuti: scrivere una descrizione vera ne chiede cinque, e oltre
+# c'e' un tavolo che aspetta.
+CORREZIONE_TETTO_S = 600.0
 SFONDO_DA_RISCRIVERE = 0.20
 # Di quanto sale e scende a ogni tocco. Dieci passi da un capo all'altro: meno
 # non si sente, di piu' non si regola.
@@ -249,6 +254,17 @@ class Amelie:
         # raccontata. Sostituisce i fatti per tutto il giro.
         self._voce: object | None = None
         self.matcher = Matcher()
+        # Le bottiglie corrette a mano da chi sta in sala: si riconoscono prima
+        # dell'archivio e prima della carta, in qualunque modo di racconto.
+        self.correzioni = Correzioni()
+        # La correzione riconosciuta per la bottiglia che c'e' adesso, se c'e'.
+        self._correzione = None
+        # L'editor aperto: la lettura da correggere, tenuta ferma. Finche' non
+        # e' None il dispositivo non guarda il piatto - vedi `_un_battito`.
+        self._correggendo: dict | None = None
+        # Le righe dell'OCR con il loro quadrilatero: servono a sapere dove sta
+        # l'etichetta nella foto. `_righe` ne tiene solo il testo.
+        self._righe_lette: list = []
         self.voce = None if cfg.senza_voce else Voce(
             ImpostazioniVoce(device_alsa=cfg.device_audio))
         self.narratore = Narratore(modello_addestrato=cfg.modello_addestrato,
@@ -453,7 +469,11 @@ class Amelie:
                              "voce_muta": not self._voce_disponibile()}
         if stato in (Stato.RACCONTO, Stato.CONCLUSO):
             f = self._fatti
-            if self._la_carta_parla_ora():
+            m["correzione"] = self._azione_correzione()
+            if self._correzione_parla_ora():
+                m["titolo"] = self._correzione.testo_in(self.lingua)["titolo"]
+                m["sottotitolo"] = ""
+            elif self._la_carta_parla_ora():
                 # Quando a raccontare e' la carta, il titolo e' il suo. Prima
                 # veniva sempre dai fatti dell'archivio, che in modo carta non
                 # si toccavano mai: a schermo restava il nome del vino
@@ -513,6 +533,15 @@ class Amelie:
             "avviso_muto": self.lex.frase("schermo", "voce_assente",
                                           lingua=self.lingua),
             "annulla": self.lex.frase("schermo", "annulla", lingua=self.lingua),
+            # Le scritte dell'editor della correzione, e della sua tastiera.
+            "correzione": {
+                chiave: self.lex.frase("schermo", chiave, lingua=self.lingua)
+                for chiave in ("correggi_descrizione", "modifica_descrizione",
+                               "campo_titolo", "campo_descrizione", "salva",
+                               "titolo_vuoto", "descrizione_vuota",
+                               "correzione_spiega", "correzione_salvata",
+                               "tasto_spazio", "annulla")
+            },
             # Che cosa fa l'oggetto, in tre passi, sulla schermata d'attesa.
             "passi": [
                 {"titolo": self.lex.frase("schermo", f"passo_{p}", lingua=self.lingua),
@@ -1293,6 +1322,7 @@ class Amelie:
             return
 
         self._righe = [r.testo for r in lettura.righe]
+        self._righe_lette = list(lettura.righe)
         # Si tiene l'ultimo scatto: se l'ospite segnala che il vino non e' fra
         # quelli proposti, e' l'unica cosa che permette di capire perche'.
         self._ultimo_scatto = scatto.immagine
@@ -1348,6 +1378,22 @@ class Amelie:
         # e l'altra deve restare vuota, perche' lo schermo guarda tutt'e due.
         self._voce = None
         self._fatti = Fatti()
+        # Prima di tutto: e' una bottiglia che qualcuno ha corretto a mano? Vale
+        # in qualunque modo di racconto - archivio, generativa, carta - perche'
+        # chi l'ha scritta ne sa piu' di tutte e tre.
+        self._correzione = self._cerca_correzione()
+        if self._correzione_parla_ora():
+            # I fatti dell'archivio si cercano lo stesso: se l'ospite cambia
+            # lingua e la correzione in quella lingua non c'e', si racconta da
+            # li', come fa la carta quando non ha la traduzione.
+            self._fatti = self.matcher.cerca(getattr(self, "_righe", []))
+            self._candidati = []
+            self._scansione.update({
+                "livello": "correzione", "sicurezza": 100,
+                "correzione": self._correzione.id,
+                "titolo": self._correzione.testo_in(self.lingua)["titolo"]})
+            self.macchina.invia(Evento.MATCH_SICURO)
+            return
         if self.modo == "carta" and self.carta is not None:
             self._riconosci_dalla_carta()
             return
@@ -1379,6 +1425,46 @@ class Amelie:
             self._tentativo_fallito()
         else:
             self.macchina.invia(Evento.MATCH_ASSENTE)
+
+    def _cerca_correzione(self):
+        """La correzione di questa bottiglia, o None. Non deve mai fermare il giro:
+        una correzione illeggibile vale quanto nessuna correzione."""
+        try:
+            r = self.correzioni.cerca(self._righe_lette,
+                                      getattr(self, "_ultimo_scatto", None))
+        except Exception as e:                              # noqa: BLE001
+            log.warning("correzioni: confronto non riuscito (%s)", e)
+            return None
+        if r is None:
+            return None
+        self._scansione["perche_correzione"] = r.perche
+        return r.correzione
+
+    def _correzione_parla_ora(self) -> bool:
+        """C'e' una correzione per questa bottiglia E sa dirla in questa lingua?
+
+        Lo stesso criterio della carta: una descrizione scritta in italiano non
+        si legge con la voce inglese, che la storpierebbe. Nell'altra lingua si
+        racconta come se la correzione non ci fosse, e lo schermo offre di
+        aggiungerla.
+        """
+        return (self._correzione is not None
+                and self._correzione.testo_in(self.lingua) is not None)
+
+    def _azione_correzione(self) -> str | None:
+        """Quale pulsante offrire sotto il racconto: correggere, modificare, niente.
+
+        «Correggi» solo sulla schermata della bottiglia che non e' in archivio -
+        quella che dice di aver fatto da se' - e «Modifica» su una bottiglia che
+        qualcuno ha gia' corretto, anche in un'altra lingua.
+        """
+        if self._correzione is not None:
+            return "modifica"
+        f = self._fatti
+        if (not self._la_carta_parla_ora() and f.livello is Livello.GENERICO
+                and (f.qualificatori or f.colore)):
+            return "correggi"
+        return None
 
     def _tentativo_fallito(self) -> None:
         """Letto, ma senza trovare un vino: si chiede di girare l'etichetta,
@@ -1478,9 +1564,29 @@ class Amelie:
         return Racconto(testo=f"{apre} {v.testo_in(self.lingua)}",
                         origine="carta", livello=Livello.TIPOLOGIA)
 
+    def _racconta_dalla_correzione(self):
+        """Il racconto e' quello scritto a mano, detto com'e'.
+
+        Davanti si mette il titolo, come per la carta: il dispositivo deve
+        prima dire CHE COSA ha in mano. Non passa dal modello e non passa dalla
+        verifica: e' la parola di chi conosce quella bottiglia.
+        """
+        from .narrator import Racconto, _con_articolo
+
+        import zlib
+
+        t = self._correzione.testo_in(self.lingua)
+        apre = self.lex.frase("apertura", "tipologia_nota", lingua=self.lingua,
+                              seme=zlib.crc32(t["titolo"].encode("utf-8")),
+                              cosa=_con_articolo(t["titolo"], self.lingua))
+        return Racconto(testo=f"{apre} {t['descrizione']}", origine="correzione",
+                        livello=Livello.TIPOLOGIA)
+
     def _racconta(self) -> None:
         self._ferma_voce.clear()
-        if self._la_carta_parla_ora():
+        if self._correzione_parla_ora():
+            racconto = self._racconta_dalla_correzione()
+        elif self._la_carta_parla_ora():
             racconto = self._racconta_dalla_carta()
         else:
             # Generare costa secondi, e in quei secondi lo schermo mostrava il
@@ -1756,6 +1862,85 @@ class Amelie:
         self.macchina.invia(Evento.CANDIDATO_SCELTO)
         return {"ok": True, "cartella": nome}
 
+    def apri_correzione(self) -> dict:
+        """Si apre l'editor: si ferma la voce e si tiene ferma la lettura.
+
+        La lettura - foto e righe dell'OCR - si copia ADESSO: se mentre si
+        scrive qualcuno cambia bottiglia, la correzione deve restare attaccata
+        alla bottiglia che si stava correggendo, non a quella nuova.
+        """
+        if self.macchina.stato not in (Stato.RACCONTO, Stato.CONCLUSO):
+            return {"ok": False}
+        if getattr(self, "_ultimo_scatto", None) is None:
+            return {"ok": False}
+        self._ferma_racconto()
+        self._correggendo = {"righe": list(self._righe_lette),
+                             "immagine": self._ultimo_scatto,
+                             "lingua": self.lingua, "quando": time.monotonic()}
+        c = self._correzione
+        t = (c.testo_in(self.lingua) or {}) if c is not None else {}
+        return {
+            "ok": True, "lingua": self.lingua,
+            "id": c.id if c is not None else None,
+            # Il titolo si propone anche da un'altra lingua: il nome di un vino
+            # di solito non si traduce.
+            "titolo": t.get("titolo") or (c.titolo() if c is not None else ""),
+            "descrizione": t.get("descrizione", ""),
+            # Se questa bottiglia somiglia a una gia' corretta ma non abbastanza
+            # da riconoscerla, si chiede a chi scrive se e' lei.
+            "vicine": [] if c is not None else [
+                {"id": v.id, "titolo": v.titolo()}
+                for v in self.correzioni.vicine(self._righe_lette)],
+        }
+
+    def salva_correzione(self, titolo: str, descrizione: str,
+                         ident: str | None = None) -> dict:
+        """Scrive la correzione e la racconta subito: e' la prova che ha funzionato."""
+        g = self._correggendo
+        if g is None:
+            return {"ok": False, "motivo": "editor chiuso"}
+        if not str(titolo or "").strip():
+            return {"ok": False, "campo": "titolo"}
+        if not str(descrizione or "").strip():
+            return {"ok": False, "campo": "descrizione"}
+        if ident is None and self._correzione is not None:
+            ident = self._correzione.id
+        try:
+            c = self.correzioni.salva(righe=g["righe"], immagine=g["immagine"],
+                                      titolo=titolo, descrizione=descrizione,
+                                      lingua=g["lingua"], ident=ident)
+        except (OSError, ValueError) as e:
+            log.warning("correzione non salvata: %s", e)
+            return {"ok": False, "motivo": str(e)}
+        self._correggendo = None
+        self._correzione = c
+        self._annota("corretta a mano")
+        # Si rientra nel racconto: titolo e descrizione nuovi a schermo, e a voce.
+        self.macchina.invia(Evento.RIPETI)
+        return {"ok": True, "id": c.id}
+
+    def chiudi_correzione(self) -> dict:
+        """Si esce dall'editor senza salvare: il racconto fermato si da' per finito."""
+        if self._correggendo is None:
+            return {"ok": True}
+        self._correggendo = None
+        if self.macchina.stato is Stato.RACCONTO:
+            self.macchina.invia(Evento.RACCONTO_FINITO)
+        return {"ok": True}
+
+    def foto_da_correggere(self) -> bytes | None:
+        """La foto della bottiglia che si sta correggendo, per mostrarla nell'editor."""
+        g = self._correggendo
+        if g is None or g["immagine"] is None:
+            return None
+        import cv2
+        im = g["immagine"]
+        k = 360 / im.shape[0]
+        piccola = cv2.resize(im, (max(1, round(im.shape[1] * k)), 360),
+                             interpolation=cv2.INTER_AREA)
+        ok, dati = cv2.imencode(".jpg", piccola, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        return dati.tobytes() if ok else None
+
     def scegli(self, indice: int) -> None:
         """L'ospite ha toccato uno dei candidati."""
         self._adotta_candidato(indice)
@@ -1815,6 +2000,16 @@ class Amelie:
 
     async def _un_battito(self) -> None:
         """Un giro solo: sbirciata, presenza, timer. Isolato per poterlo provare."""
+        if self._correggendo is not None:
+            # Mentre qualcuno scrive, il dispositivo non guarda il piatto: una
+            # bottiglia appoggiata o tolta sotto la tastiera farebbe partire un
+            # racconto dietro all'editor, a voce, mentre si digita. Con un tetto:
+            # un editor dimenticato aperto non deve spegnere il tavolo per la sera.
+            if time.monotonic() - self._correggendo["quando"] > CORREZIONE_TETTO_S:
+                log.info("editor della correzione dimenticato aperto: lo chiudo")
+                self.chiudi_correzione()
+                self._pubblica({"tipo": "correzione", "aperta": False})
+            return
         if self.mirino is not None and self.mirino.acceso:
             # Col mirino acceso il dispositivo guarda, non racconta: la camera
             # e' sua, e far scadere un timer qui vorrebbe dire far partire una
@@ -1963,7 +2158,8 @@ class Amelie:
         return self.macchina.stato in (
             Stato.ATTESA, Stato.ASSESTAMENTO, Stato.SCANSIONE,
             Stato.RIPOSIZIONA,
-        ) and not (self.mirino is not None and self.mirino.acceso)
+        ) and not (self.mirino is not None and self.mirino.acceso) \
+            and self._correggendo is None
 
     async def salute(self) -> None:
         while True:
@@ -2004,8 +2200,8 @@ class Amelie:
 def crea_app(amelie: Amelie):
     from contextlib import asynccontextmanager
 
-    from fastapi import FastAPI
-    from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+    from fastapi import FastAPI, Request
+    from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
     @asynccontextmanager
     async def ciclo_di_vita(app):
@@ -2116,6 +2312,41 @@ def crea_app(amelie: Amelie):
     @app.post("/segnala")
     async def segnala():
         return JSONResponse(amelie.segnala())
+
+    # --- La correzione a mano. Tre rotte e una foto: aprire (ferma il racconto e
+    # tiene ferma la lettura), salvare (scrive e racconta subito), chiudere. ---
+    @app.post("/correzione/apri")
+    async def correzione_apri():
+        return JSONResponse(amelie.apri_correzione())
+
+    @app.post("/correzione/salva")
+    async def correzione_salva(richiesta: Request):
+        try:
+            d = await richiesta.json()
+        except ValueError:
+            return JSONResponse({"ok": False, "motivo": "richiesta illeggibile"})
+        return JSONResponse(amelie.salva_correzione(
+            str(d.get("titolo", "")), str(d.get("descrizione", "")),
+            d.get("id") or None))
+
+    @app.post("/correzione/chiudi")
+    async def correzione_chiudi():
+        return JSONResponse(amelie.chiudi_correzione())
+
+    @app.get("/correzione/foto/{ident}")
+    async def correzione_foto(ident: str):
+        """«adesso» e' la bottiglia che si sta correggendo; un id, la prima foto
+        di una correzione salvata - per riconoscerla a occhio fra le vicine."""
+        if ident == "adesso":
+            dati = amelie.foto_da_correggere()
+            if dati is None:
+                return JSONResponse({"ok": False}, status_code=404)
+            return Response(dati, media_type="image/jpeg",
+                            headers={"Cache-Control": "no-store"})
+        percorso = amelie.correzioni.foto(ident)
+        if percorso is None:
+            return JSONResponse({"ok": False}, status_code=404)
+        return FileResponse(percorso, media_type="image/jpeg")
 
     @app.post("/scegli/{indice}")
     async def scegli(indice: int):
