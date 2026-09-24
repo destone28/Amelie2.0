@@ -447,8 +447,8 @@
       "en": "The descriptions hand-written in the file. Only the wines it contains, and for those it speaks with their author's words."
     },
     "mirino": {
-      "it": "Mirino",
-      "en": "Viewfinder"
+      "it": "Debug camera",
+      "en": "Debug camera"
     },
     "mirino_spiega": {
       "it": "Mostra cosa vede la camera e cosa riesce a leggere, per mettere a punto l'inquadratura. Finché è acceso il dispositivo non racconta.",
