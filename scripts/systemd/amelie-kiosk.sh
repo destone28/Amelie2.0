@@ -68,6 +68,14 @@ command -v "$browser" >/dev/null 2>&1 || { echo "nessun browser trovato" >&2; ex
 # origine - che e' esattamente cio' che fa la schermata d'avvio quando si sposta
 # sul server - puo' essere espulso in una finestra di browser normale, con la
 # barra degli indirizzi. In chiosco non c'e' nessuna interfaccia da nascondere.
+#
+# --disable-rgba-4444-textures: in modalita' «dispositivo modesto» Chromium
+# dipinge lo schermo a riquadri di quattro bit per colore, per risparmiare
+# memoria. Sedici livelli per canale: la sfumatura bordeaux del fondo andava a
+# gradini, l'oro del marchio si spostava, e riquadri vicini dello stesso nero
+# uscivano di due toni diversi - nell'editor della correzione si vedeva un
+# rettangolo. Misurato sulla UNO Q: stessi megabyte (GPU 156 contro 147,
+# pagina 119 contro 127), e i colori tornano a otto bit.
 exec "$browser" \
     --kiosk "$PARTENZA" \
     --noerrdialogs \
@@ -81,6 +89,7 @@ exec "$browser" \
     --disable-pinch \
     --overscroll-history-navigation=0 \
     --enable-low-end-device-mode \
+    --disable-rgba-4444-textures \
     --renderer-process-limit=1 \
     --disk-cache-size=16777216 \
     --user-data-dir=/home/arduino/.config/amelie-kiosk
