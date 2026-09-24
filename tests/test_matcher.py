@@ -154,6 +154,41 @@ class TestRobustezza:
             m.con.execute("DELETE FROM vino")
 
 
+class TestIlPiuGenerico:
+    """Con un riconoscimento dubbio non si chiede: si dice il meno specifico."""
+
+    def _dubbio(self, m, ambito, ident, riferimenti):
+        f = m.fatti_di(ambito, ident)
+        f.sicurezza = 80.0
+        f.annata = 2016
+        f.riferimenti = riferimenti
+        return f
+
+    def test_fra_un_vino_e_la_sua_denominazione_si_dice_la_denominazione(self, m):
+        f = self._dubbio(m, "vino", 510, [("tipologia", 470), ("denominazione", 36)])
+        g = m.il_piu_generico(f, ["CANNUBI", "BAROLO"])
+        assert g.livello is Livello.DENOMINAZIONE and g.denominazione == "Barolo"
+        # l'annata resta quella dell'etichetta, la sicurezza quella del dubbio
+        assert g.annata == 2016 and g.sicurezza == 80.0
+        assert not g.nome and not g.cantina
+
+    def test_a_parita_di_livello_resta_il_primo(self, m):
+        f = self._dubbio(m, "tipologia", 470, [("tipologia", 473)])
+        assert m.il_piu_generico(f, ["BAROLO"]) is f
+
+    def test_due_produttori_dello_stesso_vino_non_se_ne_nomina_nessuno(self, m):
+        """«Due produttori a pari evidenza»: il dubbio e' proprio la cantina."""
+        f = self._dubbio(m, "vino", 510, [("vino", 1393)])
+        assert f.cantina == "Marchesi di Barolo"
+        g = m.il_piu_generico(f, ["CANNUBI", "BAROLO"])
+        assert g.cantina is None
+        assert g.livello is not Livello.VINO or not g.cantina
+
+    def test_senza_alternative_non_cambia_niente(self, m):
+        f = self._dubbio(m, "vino", 510, [])
+        assert m.il_piu_generico(f, ["CANNUBI", "BAROLO"]) is f
+
+
 class TestCandidati:
     def test_propone_alternative_per_la_conferma(self, m):
         f = m.cerca(["Chianti"])

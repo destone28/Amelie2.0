@@ -6,7 +6,7 @@
 Prende `index.html`, sostituisce il flusso di eventi vero con uno finto che
 riproduce una sequenza di messaggi, e rende la pagina con Chromium senza
 finestra. Serve per le viste che dal vetro non si raggiungono a comando: il
-racconto col player, la schermata di conferma, il guasto, il caso in cui la
+racconto col player, il guasto, il caso in cui la
 lingua scelta non ha una voce.
 
 Il carattere e' quello vero: EB Garamond viaggia con la pagina, in
@@ -46,7 +46,6 @@ def _lingua(lingua: str) -> dict:
     return {"tipo": "lingua", "lingua": lingua, "disponibili": ["it", "en"],
             "invito": _scritta("appoggia_bottiglia", lingua),
             "motto": _scritta("motto", lingua),
-            "domanda": _scritta("quale_di_questi", lingua),
             "voce_muta": False, "avviso_muto": "",
             "annulla": _scritta("annulla", lingua),
             "sto_scrivendo": _scritta("sto_scrivendo", lingua),
@@ -143,12 +142,6 @@ SCENE: dict[str, list[dict]] = {
         {"tipo": "riproduzione", "frase": 0, "posizione": 1.0, "durata": 12.0,
          "quota": 0.08, "in_pausa": False}],
 
-    "conferma": [
-        LINGUA_IT, {"tipo": "stato", "vista": "conferma"},
-        {"tipo": "candidati", "nessuno": "Nessuno di questi", "voci": [
-            "Barolo Cannubi — Marchesi di Barolo",
-            "Cannubi Barolo — Réva",
-            "Barolo Bussia — Tenuta Rocca"]}],
 
     # La didascalia: si prova sulla schermata d'attesa, che è dove si tocca la
     # bandierina per sentire l'annuncio.

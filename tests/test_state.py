@@ -29,9 +29,6 @@ def porta_a(stato: Stato) -> Macchina:
         Stato.SCANSIONE: [Evento.BOTTIGLIA_PRESENTE, Evento.SCADENZA],
         Stato.RICONOSCIMENTO: [
             Evento.BOTTIGLIA_PRESENTE, Evento.SCADENZA, Evento.LETTURA_RIUSCITA],
-        Stato.CONFERMA: [
-            Evento.BOTTIGLIA_PRESENTE, Evento.SCADENZA, Evento.LETTURA_RIUSCITA,
-            Evento.MATCH_DUBBIO],
         Stato.RACCONTO: [
             Evento.BOTTIGLIA_PRESENTE, Evento.SCADENZA, Evento.LETTURA_RIUSCITA,
             Evento.MATCH_SICURO],
@@ -104,14 +101,13 @@ class TestDeviazioni:
         m = porta_a(Stato.RIPOSIZIONA)
         assert m.invia(Evento.SCADENZA).a is Stato.SCANSIONE
 
-    def test_match_dubbio_chiede_conferma(self):
-        m = porta_a(Stato.CONFERMA)
-        assert Effetto.MOSTRA_CANDIDATI in m.storia[-1].effetti
-
-    def test_conferma_senza_tocco_racconta_lo_stesso(self):
-        """Meglio il candidato più probabile che restare fermi."""
-        m = porta_a(Stato.CONFERMA)
-        assert m.invia(Evento.SCADENZA).a is Stato.RACCONTO
+    def test_non_c_e_piu_una_scelta_fra_candidati(self):
+        """Un riconoscimento dubbio non si chiede all'ospite: dal
+        riconoscimento si va solo al racconto, o a riposizionare."""
+        m = porta_a(Stato.RICONOSCIMENTO)
+        uscite = {s for (da, _e), s in TRANSIZIONI.items() if da is Stato.RICONOSCIMENTO}
+        assert uscite <= {Stato.RACCONTO, Stato.RIPOSIZIONA, Stato.GUASTO, Stato.ATTESA}
+        assert m.invia(Evento.MATCH_SICURO).a is Stato.RACCONTO
 
     def test_match_assente_racconta_comunque(self):
         """Il fallback onesto: denominazione, o vitigno, non silenzio."""
@@ -183,7 +179,6 @@ class TestOsservabilita:
             (Stato.SCANSIONE, True),
             (Stato.RICONOSCIMENTO, True),
             (Stato.RACCONTO, True),
-            (Stato.CONFERMA, False),
             (Stato.CONCLUSO, False),
         ],
     )

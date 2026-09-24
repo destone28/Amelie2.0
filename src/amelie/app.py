@@ -76,7 +76,6 @@ VISTA = {
     Stato.ASSESTAMENTO: "lavoro",
     Stato.SCANSIONE: "lavoro",
     Stato.RICONOSCIMENTO: "lavoro",
-    Stato.CONFERMA: "conferma",
     Stato.RACCONTO: "racconto",
     Stato.CONCLUSO: "racconto",
     Stato.RIPOSIZIONA: "avviso",
@@ -122,9 +121,6 @@ PERCORSO_MODO = RADICE / "var" / "modo"
 # spegne il modo di racconto: vedi `Amelie._accendi_il_modello`.
 SERVIZIO_MODELLO = "amelie-llm.service"
 PERCORSO_BATTERIA = RADICE / "var" / "batteria.json"
-# Dove finiscono le bottiglie che il dispositivo non ha saputo riconoscere,
-# quando qualcuno lo segnala toccando lo schermo. Vedi `segnala()`.
-CARTELLA_SEGNALAZIONI = RADICE / "var" / "segnalazioni"
 # Il piatto vuoto, com'e' quando non c'e' niente sopra. E' una proprieta'
 # dell'installazione, non del processo: senza ricordarlo, un dispositivo acceso
 # con la bottiglia gia' posata imparerebbe quella come sfondo e resterebbe
@@ -409,20 +405,9 @@ class Amelie:
                 # piatto puo' essere un'altra, e in attesa la si rilegge.
                 self._bottiglia_chiusa = not self._cambiata_durante_il_racconto
                 self._cambiata_durante_il_racconto = False
-            # Nessuno ha scelto, e i dodici secondi sono finiti: si prende il
-            # PRIMO CANDIDATO, cioe' la prima riga che l'ospite aveva davanti.
-            #
-            # Prima si raccontava il match primario, che e' un'altra cosa: lo
-            # schermo mostrava tre nomi, nessuno li toccava, e la voce ne
-            # diceva un quarto che non era in lista. Visto sul dispositivo con
-            # uno spumante rosa: tre candidati Metodo Classico Rose' a schermo,
-            # e il racconto del Moscato d'Asti.
-            if (t.da is Stato.CONFERMA and t.a is Stato.RACCONTO
-                    and t.evento is Evento.SCADENZA):
-                self._adotta_candidato(0)
             # Una scansione rimasta senza esito qui ha finito comunque, e va a
             # giornale con il modo in cui e' finita. Succede quando l'ospite
-            # chiude la scelta fra candidati, o toglie la bottiglia a meta':
+            # annulla, o toglie la bottiglia a meta':
             # senza questa riga, proprio i casi piu' interessanti sarebbero gli
             # unici a non lasciare traccia.
             if self._scansione and t.a in (Stato.ATTESA, Stato.CONCLUSO):
@@ -536,8 +521,6 @@ class Amelie:
             "disponibili": list(self.lex.lingue),
             "invito": self.lex.frase("schermo", "appoggia_bottiglia",
                                      lingua=self.lingua),
-            "domanda": self.lex.frase("schermo", "quale_di_questi",
-                                      lingua=self.lingua),
             "voce_muta": not self._voce_disponibile(),
             "avviso_muto": self.lex.frase("schermo", "voce_assente",
                                           lingua=self.lingua),
@@ -1226,10 +1209,6 @@ class Amelie:
                 # riproduttore, che e' esattamente cio' che apre la finestra
                 # descritta in `_racconta`. Una sola copia, un solo invariante.
                 self._ferma_racconto()
-            elif e is Effetto.MOSTRA_CANDIDATI:
-                self._pubblica({"tipo": "candidati", "voci": self._candidati,
-                                "nessuno": self.lex.frase("schermo", "nessuno_di_questi",
-                                                          lingua=self.lingua)})
         except Exception as ex:                             # noqa: BLE001
             # Un effetto che fallisce non deve MAI fermare la macchina a stati:
             # un errore dell'MCU deve costare un anello spento, non il
@@ -1334,8 +1313,8 @@ class Amelie:
 
         self._righe = [r.testo for r in lettura.righe]
         self._righe_lette = list(lettura.righe)
-        # Si tiene l'ultimo scatto: se l'ospite segnala che il vino non e' fra
-        # quelli proposti, e' l'unica cosa che permette di capire perche'.
+        # Si tiene l'ultimo scatto: e' la foto che una correzione a mano
+        # conserva, e l'unica cosa che permette di capire un errore dopo.
         self._ultimo_scatto = scatto.immagine
         log.info("scatto in %.2f s, lette %d righe in %.2f s (nitidezza %.0f)",
                  durata_scatto, len(self._righe), lettura.durata_s,
@@ -1427,10 +1406,15 @@ class Amelie:
             "colore": self._fatti.colore or "",
             "candidati": list(self._candidati),
         })
-        if self._fatti.certo:
+        if self._fatti.dubbio:
+            # Non si chiede piu' all'ospite di scegliere fra tre nomi quasi
+            # uguali: si dice il candidato meno specifico, che e' quello che si
+            # puo' sostenere. Vedi `Matcher.il_piu_generico`.
+            self._fatti = self.matcher.il_piu_generico(
+                self._fatti, getattr(self, "_righe", []))
+            self._scansione["scelto_il_piu_generico"] = self._fatti.livello.value
+        if self._fatti.certo or self._fatti.dubbio:
             self.macchina.invia(Evento.MATCH_SICURO)
-        elif self._fatti.dubbio and self._candidati:
-            self.macchina.invia(Evento.MATCH_DUBBIO)
         elif self._fatti.vuoto:
             self._annota("letto ma non riconosciuto")
             self._tentativo_fallito()
@@ -1775,19 +1759,16 @@ class Amelie:
 
         Quasi tutto lo spegne la macchina, e va lasciato fare a lei: uscendo da
         RACCONTO scatta FERMA_RACCONTO, entrando in ATTESA tornano l'anello in
-        respiro, la schermata d'invito e la lingua di casa, e la scadenza dei
-        dodici secondi della conferma si azzera da sola. Scrivere l'annullamento
+        respiro, la schermata d'invito e la lingua di casa. Scrivere l'annullamento
         fuori dalla macchina significa dimenticarsene meta': la voce tace e
         l'anello resta verde sopra la schermata d'invito.
 
         Restano due cose che la macchina non puo' sapere, ed e' per quelle che
         questo metodo esiste.
 
-        La PRIMA e' l'annuncio della lingua, che vive in un thread suo. Uscendo
-        da RACCONTO viene zittito di rimbalzo, perche' FERMA_RACCONTO svuota il
-        flusso; uscendo dalla CONFERMA no. Chi guarda i candidati, tocca una
-        bandierina e poi annulla si sentirebbe finire «English» sopra la
-        schermata d'invito.
+        La PRIMA e' l'annuncio della lingua, che vive in un thread suo: chi
+        tocca una bandierina e subito annulla non deve sentirsi finire
+        «English» sopra la schermata d'invito.
 
         La SECONDA e' il racconto non ancora cominciato. Fra la generazione del
         testo e l'avvio del riproduttore c'e' una finestra in cui `_lettore` e'
@@ -1823,55 +1804,6 @@ class Amelie:
         t = self.macchina.invia(Evento.ANNULLA)
         log.info("annullato da %s", stato.value)
         return {"ok": True, "stato": t.a.value}
-
-    def segnala(self) -> dict:
-        """«Nessuno di questi»: si mette da parte la bottiglia per capirla dopo.
-
-        È la sola cosa che il dispositivo non può risolvere da solo — un OCR che
-        legge male, un vino che non c'è nel database, un'etichetta con un
-        carattere che il modello non conosce — e senza questo bottone quel caso
-        sparisce: l'ospite tocca a caso o aspetta, e chi deve correggere non
-        sa nemmeno che è successo.
-
-        Si salva quello che serve a rifare il caso a tavolino: **lo scatto vero**
-        e le righe che l'OCR ne ha tirato fuori. Un rapporto senza l'immagine
-        vale poco: si saprebbe che ha sbagliato, non perché.
-        """
-        from datetime import datetime
-
-        quando = datetime.now()
-        nome = quando.strftime("%Y%m%d-%H%M%S")
-        cartella = CARTELLA_SEGNALAZIONI / nome
-        rapporto = {
-            "quando": quando.isoformat(timespec="seconds"),
-            "lingua": self.lingua,
-            "righe_lette": list(getattr(self, "_righe", [])),
-            "livello": self._fatti.livello.value,
-            "sicurezza": round(self._fatti.sicurezza),
-            "proposte": list(self._candidati),
-            "immagine": None,
-        }
-        try:
-            cartella.mkdir(parents=True, exist_ok=True)
-            scatto = getattr(self, "_ultimo_scatto", None)
-            if scatto is not None:
-                import cv2
-                percorso = cartella / "bottiglia.jpg"
-                if cv2.imwrite(str(percorso), scatto):
-                    rapporto["immagine"] = percorso.name
-            (cartella / "segnalazione.json").write_text(
-                json.dumps(rapporto, ensure_ascii=False, indent=2),
-                encoding="utf-8")
-        except OSError as e:
-            log.warning("segnalazione non salvata: %s", e)
-            return {"ok": False}
-
-        log.info("segnalata una bottiglia non riconosciuta in %s", cartella)
-        # Il tavolo non deve restare fermo su una schermata di scelta: si
-        # racconta comunque il piu' generico che si sa dire, che e' meglio di
-        # niente, e la segnalazione resta li' per chi la guardera'.
-        self.macchina.invia(Evento.CANDIDATO_SCELTO)
-        return {"ok": True, "cartella": nome}
 
     def apri_correzione(self) -> dict:
         """Si apre l'editor: si ferma la voce e si tiene ferma la lettura.
@@ -1952,27 +1884,6 @@ class Amelie:
                              interpolation=cv2.INTER_AREA)
         ok, dati = cv2.imencode(".jpg", piccola, [cv2.IMWRITE_JPEG_QUALITY, 85])
         return dati.tobytes() if ok else None
-
-    def scegli(self, indice: int) -> None:
-        """L'ospite ha toccato uno dei candidati."""
-        self._adotta_candidato(indice)
-        self.macchina.invia(Evento.CANDIDATO_SCELTO)
-
-    def _adotta_candidato(self, indice: int) -> bool:
-        """Prende per buono il candidato numero `indice`, se c'e'.
-
-        Si compone il record TOCCATO. Rifare la ricerca sul suo nome sarebbe
-        un secondo tiro di dadi: la stringa normalizzata di un candidato puo'
-        somigliare piu' a un altro record che a se stessa, e l'ospite si
-        vedrebbe raccontare un vino diverso da quello che ha scelto.
-        """
-        rif = self._fatti.riferimenti
-        if not 0 <= indice < len(rif):
-            return False
-        annata = self._fatti.annata
-        self._fatti = self.matcher.fatti_di(*rif[indice])
-        self._fatti.annata = annata         # l'annata viene dall'etichetta
-        return True
 
     def _genera(self, prompt: str, grammatica: str | None = None) -> str:
         from .llm import Modello
@@ -2321,10 +2232,6 @@ def crea_app(amelie: Amelie):
         # scadenza dei dodici secondi della conferma.
         return JSONResponse(amelie.annulla())
 
-    @app.post("/segnala")
-    async def segnala():
-        return JSONResponse(amelie.segnala())
-
     # --- La correzione a mano. Tre rotte e una foto: aprire (ferma il racconto e
     # tiene ferma la lettura), salvare (scrive e racconta subito), chiudere. ---
     @app.post("/correzione/apri")
@@ -2360,11 +2267,6 @@ def crea_app(amelie: Amelie):
         if percorso is None:
             return JSONResponse({"ok": False}, status_code=404)
         return FileResponse(percorso, media_type="image/jpeg")
-
-    @app.post("/scegli/{indice}")
-    async def scegli(indice: int):
-        amelie.scegli(indice)
-        return JSONResponse({"ok": True})
 
     @app.post("/racconto/{azione}")
     async def racconto(azione: str):

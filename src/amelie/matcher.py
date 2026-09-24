@@ -80,7 +80,9 @@ PERCORSO_DB = Path(__file__).resolve().parents[2] / "data" / "amelie.db"
 
 # Sopra questa somiglianza il match si considera certo e si racconta il vino.
 SOGLIA_CERTA = 88
-# Sotto SOGLIA_CERTA ma sopra questa, si mostrano i candidati e si chiede conferma.
+# Sotto SOGLIA_CERTA ma sopra questa il riconoscimento e' dubbio, e non si
+# chiede piu' all'ospite di scegliere: si dice il candidato meno specifico.
+# Vedi `Matcher.il_piu_generico`.
 SOGLIA_DUBBIA = 75
 # Di quanto il primo classificato deve staccare un vino di un ALTRO produttore
 # per potersi dire certo. Sotto questo margine non si sceglie: si chiede.
@@ -129,6 +131,16 @@ class Livello(str, Enum):
     # ogni parola detta viene dalla bottiglia. Vedi `Matcher._solo_l_etichetta`.
     GENERICO = "generico"
     NULLA = "nulla"
+
+
+# Dal piu' specifico al piu' generale. Un Barolo di un produttore dice piu' di
+# un Barolo, che dice piu' della denominazione Barolo, che dice piu' del
+# Nebbiolo: con un riconoscimento dubbio si prende il gradino piu' in basso.
+GENERALITA = {Livello.VINO: 0, Livello.TIPOLOGIA: 1, Livello.DENOMINAZIONE: 2,
+              Livello.VITIGNO: 3, Livello.GENERICO: 4}
+LIVELLO_DELL_AMBITO = {"vino": Livello.VINO, "tipologia": Livello.TIPOLOGIA,
+                       "denominazione": Livello.DENOMINAZIONE,
+                       "vitigno": Livello.VITIGNO}
 
 
 @dataclass
@@ -231,12 +243,11 @@ class Fatti:
     # dalla bottiglia: nessuna viene da noi.
     qualificatori: list[str] = field(default_factory=list)
 
-    # Per la schermata di conferma: `candidati` sono le righe LEGGIBILI che
-    # l'ospite vede, `riferimenti` i record a cui corrispondono, nello stesso
-    # ordine. Servono entrambi: il testo dell'indice di ricerca e' normalizzato
-    # (minuscolo, senza punteggiatura) e a un tavolo non si mostra
-    # "barolo cannubi marchesi di barolo"; e ricercare quel testo per risalire
-    # al record puo' riportare a un record DIVERSO da quello toccato.
+    # Le alternative al primo classificato: `candidati` sono le righe
+    # LEGGIBILI (per il giornale e per la debug camera), `riferimenti` i record
+    # a cui corrispondono, nello stesso ordine. Con un riconoscimento dubbio
+    # `il_piu_generico` sceglie fra queste per identificativo: ricercare il
+    # testo per risalire al record puo' riportare a un record DIVERSO.
     candidati: list[str] = field(default_factory=list)
     riferimenti: list[tuple[str, int]] = field(default_factory=list)
 
@@ -1530,16 +1541,73 @@ class Matcher:
     def fatti_di(self, ambito: str, ambito_id: int) -> Fatti:
         """I fatti di un record preciso, senza ripassare dalla ricerca.
 
-        È quello che serve quando l'ospite tocca un candidato: ha scelto UN
-        record, e va composto quello, non il piu' somigliante al suo nome.
+        E' quello che serve quando qualcuno sceglie un vino nell'editor delle
+        correzioni: ha scelto UN record, e va composto quello, non il piu'
+        somigliante al suo nome.
         """
         f = self._componi(Candidato(ambito=ambito, ambito_id=ambito_id,
                                     testo="", somiglianza=0.0, peso=0))
         # L'ha scelto una persona guardando la bottiglia: e' la conferma piu'
         # forte che il dispositivo possa ricevere.
         f.sicurezza = 100.0
+        f.origine = f.origine or (ambito, ambito_id)
         f.ripiego = self.catena_di_ripiego(f)
         return f
+
+    @sotto_lucchetto
+    def il_piu_generico(self, f: Fatti, righe: Sequence[str]) -> Fatti:
+        """Con un riconoscimento dubbio, il candidato meno specifico.
+
+        Prima si mostravano i candidati e si chiedeva all'ospite quale fosse:
+        una schermata con tre nomi quasi uguali, a un tavolo, a chi non ha
+        chiesto niente. Ora si sceglie da soli, e si sceglie cio' che si puo'
+        sostenere: fra il primo classificato e le alternative, quello piu' in
+        basso nella scala `GENERALITA` - una denominazione invece di un vino
+        preciso. A parita' di livello resta il primo classificato.
+
+        Un caso a parte: tutti vini, e di produttori diversi. Li' il dubbio e'
+        proprio il nome della cantina - «due produttori a pari evidenza» - e
+        il gradino piu' generico e' lo stesso vino senza produttore, come
+        quando la cantina non si legge (`_senza_produttore`).
+        """
+        livello, scelta = f.livello, None
+        for ambito, ident in f.riferimenti:
+            suo = LIVELLO_DELL_AMBITO.get(ambito)
+            if suo is not None and GENERALITA[suo] > GENERALITA.get(livello, -1):
+                livello, scelta = suo, (ambito, ident)
+        if scelta is not None:
+            g = self.fatti_di(*scelta)
+            # Scelto da noi, non da una persona: la sicurezza resta quella del
+            # riconoscimento, e l'annata viene comunque dall'etichetta.
+            g.sicurezza = f.sicurezza
+            g.annata = f.annata
+            g.candidati, g.riferimenti = f.candidati, f.riferimenti
+            log.info("dubbio: dico il meno specifico, %s invece di %s",
+                     g.livello.value, f.livello.value)
+            return g
+        if (f.livello is Livello.VINO and f.cantina and f.origine
+                and f.origine[0] == "vino" and self._altri_produttori(f)):
+            testo = " ".join(righe)
+            token = parole_utili(testo)
+            tetto = (TETTO_PER_PAROLE[len(token)] if len(token) < len(TETTO_PER_PAROLE)
+                     else math.inf)
+            g = self._senza_produttore(f, normalizza(testo), tetto)
+            g.annata = f.annata
+            g.produttore_letto_davvero = False
+            g.candidati, g.riferimenti = f.candidati, f.riferimenti
+            g.ripiego = self.catena_di_ripiego(g)
+            return g
+        return f
+
+    def _altri_produttori(self, f: Fatti) -> bool:
+        """Fra le alternative c'e' un vino di un'altra cantina?"""
+        vini = [i for a, i in f.riferimenti if a == "vino"]
+        if not vini:
+            return False
+        norme = self._norme_vino([f.origine[1], *vini])
+        mia = norme.get(f.origine[1], ("", "", ""))[1]
+        return bool(mia) and any(
+            norme.get(i, ("", "", ""))[1] not in ("", mia) for i in vini)
 
     @sotto_lucchetto
     def etichetta(self, ambito: str, ambito_id: int) -> str:

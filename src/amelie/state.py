@@ -3,8 +3,9 @@
 Il requisito guida del progetto è **attrito zero**: nessuna istruzione, nessun
 pulsante, nessun verso obbligato oltre quello naturale. Si appoggia la
 bottiglia e il dispositivo fa il resto. Tutto quello che succede è quindi
-guidato da due soli segnali fisici — la bottiglia c'è o non c'è — più il tocco
-sullo schermo quando serve una disambiguazione.
+guidato da due soli segnali fisici — la bottiglia c'è o non c'è. Un
+riconoscimento dubbio non si chiede all'ospite: si dice il candidato meno
+specifico, che e' quello che si puo' sostenere (vedi `Matcher.il_piu_generico`).
 
 Questo modulo non fa I/O. Non parla con la camera, con l'MCU, con l'LLM: riceve
 eventi e produce transizioni ed *effetti*, che qualcun altro esegue. È scritto
@@ -17,9 +18,8 @@ Il ciclo normale::
     ATTESA ──bottiglia──► ASSESTAMENTO ──stabile──► SCANSIONE ──letta──►
     RICONOSCIMENTO ──sicuro──► RACCONTO ──finito──► CONCLUSO ──tolta──► ATTESA
 
-e le due deviazioni che contano::
+e la deviazione che conta::
 
-    RICONOSCIMENTO ──dubbio──► CONFERMA ──tocco──► RACCONTO
     SCANSIONE ──illeggibile──► RIPOSIZIONA ──ritenta──► SCANSIONE
 """
 
@@ -37,7 +37,6 @@ class Stato(enum.Enum):
     ASSESTAMENTO = "assestamento"      # bottiglia appena posata, si aspetta che smetta di oscillare
     SCANSIONE = "scansione"            # luce, raffica, OCR
     RICONOSCIMENTO = "riconoscimento"  # interrogazione del database
-    CONFERMA = "conferma"              # match dubbio: si mostrano i candidati
     RACCONTO = "racconto"              # testo a schermo e voce
     CONCLUSO = "concluso"              # racconto finito, bottiglia ancora lì
     RIPOSIZIONA = "riposiziona"        # etichetta illeggibile, si chiede di girarla
@@ -53,9 +52,7 @@ class Evento(enum.Enum):
     LETTURA_RIUSCITA = "lettura_riuscita"
     LETTURA_FALLITA = "lettura_fallita"
     MATCH_SICURO = "match_sicuro"
-    MATCH_DUBBIO = "match_dubbio"
     MATCH_ASSENTE = "match_assente"
-    CANDIDATO_SCELTO = "candidato_scelto"
     RACCONTO_FINITO = "racconto_finito"
     RIPETI = "ripeti"                  # tocco sullo schermo a racconto concluso
     RINUNCIA = "rinuncia"              # troppi tentativi di lettura falliti
@@ -87,7 +84,6 @@ class Effetto(enum.Enum):
     INTERROGA_DATABASE = "interroga_database"
     AVVIA_RACCONTO = "avvia_racconto"
     FERMA_RACCONTO = "ferma_racconto"
-    MOSTRA_CANDIDATI = "mostra_candidati"
     MOSTRA_RIPOSIZIONA = "mostra_riposiziona"
     MOSTRA_GUASTO = "mostra_guasto"
     SCHERMO_ATTESA = "schermo_attesa"
@@ -122,9 +118,6 @@ DURATE_S: dict[Stato, float | None] = {
     # cambiata arriva a otto. Il tetto sta sopra la somma delle due.
     Stato.SCANSIONE: 50.0,
     Stato.RICONOSCIMENTO: 15.0,
-    # Se nessuno tocca lo schermo si prende il primo candidato: meglio
-    # raccontare il vino più probabile che restare fermi.
-    Stato.CONFERMA: 12.0,
     Stato.RACCONTO: None,
     Stato.RIPOSIZIONA: 4.0,
     Stato.GUASTO: 6.0,
@@ -145,7 +138,6 @@ EFFETTI_INGRESSO: dict[Stato, tuple[Effetto, ...]] = {
     Stato.ASSESTAMENTO: (Effetto.ANELLO_ACCESO,),
     Stato.SCANSIONE: (Effetto.ANELLO_LAVORO, Effetto.ILLUMINA_E_SCATTA),
     Stato.RICONOSCIMENTO: (Effetto.ANELLO_LAVORO, Effetto.INTERROGA_DATABASE),
-    Stato.CONFERMA: (Effetto.ANELLO_ATTENZIONE, Effetto.MOSTRA_CANDIDATI),
     Stato.RACCONTO: (Effetto.ANELLO_ACCESO, Effetto.AVVIA_RACCONTO),
     Stato.CONCLUSO: (Effetto.ANELLO_ACCESO,),
     Stato.RIPOSIZIONA: (Effetto.ANELLO_ATTENZIONE, Effetto.MOSTRA_RIPOSIZIONA),
@@ -171,7 +163,6 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
     (Stato.SCANSIONE, Evento.LETTURA_FALLITA): Stato.RIPOSIZIONA,
 
     (Stato.RICONOSCIMENTO, Evento.MATCH_SICURO): Stato.RACCONTO,
-    (Stato.RICONOSCIMENTO, Evento.MATCH_DUBBIO): Stato.CONFERMA,
     # Nessun match non è un fallimento: si racconta la denominazione, o il
     # vitigno, o si chiede di girare l'etichetta. Decide il narratore.
     (Stato.RICONOSCIMENTO, Evento.MATCH_ASSENTE): Stato.RACCONTO,
@@ -179,9 +170,6 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
     # transizione l'evento cadeva nel vuoto e la macchina restava a girare fino
     # allo scadere del tetto, per poi dichiarare guasto.
     (Stato.RICONOSCIMENTO, Evento.LETTURA_FALLITA): Stato.RIPOSIZIONA,
-
-    (Stato.CONFERMA, Evento.CANDIDATO_SCELTO): Stato.RACCONTO,
-    (Stato.CONFERMA, Evento.SCADENZA): Stato.RACCONTO,
 
     (Stato.RACCONTO, Evento.RACCONTO_FINITO): Stato.CONCLUSO,
 
@@ -217,13 +205,13 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
     # bottiglia sta sul piatto e nessuno vuole risollevarla per far tacere il
     # dispositivo.
     #
-    # Solo da questi tre stati, e sono esattamente i tre in cui c'e' un
-    # pulsante a schermo. CONCLUSO c'e' perche' la vista «racconto» resta
+    # Solo da questi due stati, e sono esattamente i due in cui c'e' un
+    # pulsante a schermo (la scelta fra candidati, che era il terzo, non c'e'
+    # piu'). CONCLUSO c'e' perche' la vista «racconto» resta
     # accesa anche nei due secondi che seguono la fine (VISTA[CONCLUSO] in
     # app.py): li' il pulsante si vede, quindi deve funzionare. Dagli stati di
     # lavoro NO: quelle schermate non hanno pulsanti, e annullare in SCANSIONE
     # lascerebbe l'OCR a girare.
-    (Stato.CONFERMA, Evento.ANNULLA): Stato.ATTESA,
     (Stato.RACCONTO, Evento.ANNULLA): Stato.ATTESA,
     (Stato.CONCLUSO, Evento.ANNULLA): Stato.ATTESA,
 }

@@ -285,17 +285,15 @@ class TestCicloCompleto:
         """Il test che mancava: nessun evento a mano dopo il primo."""
         a = amelie_con_etichetta
         a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
-        finale = self._attendi(a, {Stato.RACCONTO, Stato.CONCLUSO,
-                                   Stato.CONFERMA, Stato.GUASTO})
+        finale = self._attendi(a, {Stato.RACCONTO, Stato.CONCLUSO, Stato.GUASTO})
         assert finale is not Stato.GUASTO, (
             "il ciclo è finito in guasto su un'etichetta perfettamente leggibile")
-        assert finale in {Stato.RACCONTO, Stato.CONCLUSO, Stato.CONFERMA}
+        assert finale in {Stato.RACCONTO, Stato.CONCLUSO}
 
     def test_il_racconto_nomina_il_vino_letto(self, amelie_con_etichetta):
         a = amelie_con_etichetta
         a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
-        self._attendi(a, {Stato.RACCONTO, Stato.CONCLUSO, Stato.CONFERMA,
-                          Stato.GUASTO})
+        self._attendi(a, {Stato.RACCONTO, Stato.CONCLUSO, Stato.GUASTO})
         assert not a._fatti.vuoto, "l'OCR ha letto ma il riconoscimento non ha dato nulla"
         testo = " ".join(filter(None, [a._fatti.nome, a._fatti.tipologia,
                                        a._fatti.denominazione])).lower()
@@ -304,8 +302,7 @@ class TestCicloCompleto:
     def test_l_annata_dell_etichetta_arriva_ai_fatti(self, amelie_con_etichetta):
         a = amelie_con_etichetta
         a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
-        self._attendi(a, {Stato.RACCONTO, Stato.CONCLUSO, Stato.CONFERMA,
-                          Stato.GUASTO})
+        self._attendi(a, {Stato.RACCONTO, Stato.CONCLUSO, Stato.GUASTO})
         assert a._fatti.annata == 2016
 
     def test_un_etichetta_illeggibile_chiede_di_girarla(self, amelie_con_etichetta):
@@ -741,66 +738,6 @@ class TestLaSchermataNonResta:
             asyncio.run(amelie._un_battito())
         assert amelie.macchina.stato is not Stato.ATTESA, \
             "una bottiglia nuova deve far ripartire il giro"
-
-
-class TestSegnalazione:
-    """«Nessuno di questi»: l'unico caso che il dispositivo non risolve da solo.
-
-    Un OCR che legge male, un vino che nel database non c'è, un'etichetta con un
-    carattere che il modello non conosce. Senza un bottone, quel caso sparisce:
-    l'ospite tocca a caso o aspetta, e chi deve correggere non sa nemmeno che è
-    successo.
-    """
-
-    @pytest.fixture
-    def amelie(self, tmp_path, monkeypatch):
-        from amelie import app as modulo
-
-        monkeypatch.setattr(modulo, "CARTELLA_SEGNALAZIONI", tmp_path / "segn")
-        a = modulo.Amelie(modulo.Configurazione(
-            simula_mcu=True, senza_camera=True, senza_voce=True,
-            senza_modello=True))
-        yield a
-        a.matcher.chiudi()
-        a.narratore.chiudi()
-
-    def test_salva_cosa_serve_a_rifare_il_caso(self, amelie, tmp_path):
-        import json as j
-
-        amelie._righe = ["NERO D'AV", "SICILIA"]
-        amelie._candidati = ["Sicilia Nero d'Avola", "Nero d'Avola Spumante"]
-        amelie.macchina.stato = Stato.CONFERMA
-
-        esito = amelie.segnala()
-        assert esito["ok"]
-
-        cartella = (tmp_path / "segn") / esito["cartella"]
-        rapporto = j.loads((cartella / "segnalazione.json").read_text(encoding="utf-8"))
-        assert rapporto["righe_lette"] == ["NERO D'AV", "SICILIA"]
-        assert rapporto["proposte"] == ["Sicilia Nero d'Avola",
-                                        "Nero d'Avola Spumante"]
-        assert rapporto["quando"] and rapporto["lingua"] == "it"
-
-    def test_il_tavolo_non_resta_fermo(self, amelie):
-        """Segnalare non deve lasciare l'ospite su una schermata di scelta: si
-        racconta comunque il più generico che si sa dire."""
-        amelie.macchina.stato = Stato.CONFERMA
-        amelie.segnala()
-        assert amelie.macchina.stato is Stato.RACCONTO
-
-    def test_un_disco_pieno_non_blocca_il_racconto(self, amelie, monkeypatch):
-        """La segnalazione è un di più: se non si può scrivere, pazienza."""
-        from amelie import app as modulo
-
-        monkeypatch.setattr(modulo, "CARTELLA_SEGNALAZIONI",
-                            Path("/proc/non-si-puo-scrivere-qui"))
-        amelie.macchina.stato = Stato.CONFERMA
-        assert amelie.segnala() == {"ok": False}
-
-    def test_la_voce_e_nel_lessico_in_tutte_le_lingue(self, amelie):
-        for lingua in amelie.lex.lingue:
-            testo = amelie.lex.frase("schermo", "nessuno_di_questi", lingua=lingua)
-            assert testo and testo.strip()
 
 
 class TestIlCambioLinguaEImmediato:
@@ -1496,19 +1433,6 @@ class TestAnnullamento:
         amelie.annulla()
         assert amelie._ferma_voce.is_set()
 
-    def test_dalla_conferma_si_torna_all_invito(self, amelie):
-        """Da qui la macchina NON zittisce da sola: non si esce da RACCONTO.
-
-        E in conferma ci puo' essere un annuncio di lingua in bocca, perche'
-        guardando i candidati si tocca la bandierina.
-        """
-        amelie.macchina.stato = Stato.CONFERMA
-        amelie._lingua_da_annunciare = "en"
-        assert amelie.annulla()["ok"]
-        assert amelie.macchina.stato is Stato.ATTESA
-        assert amelie._lingua_da_annunciare is None, \
-            "l'annuncio finirebbe sopra la schermata d'invito"
-
     def test_anche_nei_due_secondi_dopo_la_fine(self, amelie):
         """La schermata del racconto resta accesa anche in CONCLUSO.
 
@@ -1530,18 +1454,6 @@ class TestAnnullamento:
         amelie.annulla()
         colori = [c for c in amelie.ponte.comandi if c[0] == "set_anello"]
         assert colori, "l'anello non e' stato rimesso"
-
-    def test_la_scadenza_della_conferma_si_spegne(self, amelie):
-        """Restava armata e scattava dopo, a invito gia' disegnato.
-
-        In conferma c'e' un tetto di dodici secondi che prende il primo
-        candidato: annullando non deve piu' scattare.
-        """
-        amelie.macchina.stato = Stato.RICONOSCIMENTO
-        amelie.macchina.invia(Evento.MATCH_DUBBIO)
-        assert amelie._scadenza is not None
-        amelie.annulla()
-        assert amelie._scadenza is None
 
     def test_negli_stati_di_lavoro_non_fa_nulla(self, amelie):
         """Quelle schermate non hanno pulsanti, e l'OCR resterebbe a girare."""
@@ -1700,77 +1612,54 @@ class TestAnnullamento:
         assert amelie.macchina.stato is not Stato.ATTESA
 
 
-class TestLaSceltaCheNessunoFa:
-    """Dodici secondi davanti a tre candidati, e nessuno tocca lo schermo.
+class TestIlDubbioNonSiChiede:
+    """Con un riconoscimento dubbio non c'e' piu' una schermata di scelta.
 
-    Succede quasi sempre: l'ospite guarda, non capisce che deve scegliere, o
-    sta versando. Allora si prende il PRIMO CANDIDATO, cioè la prima riga che
-    aveva davanti.
-
-    Prima si raccontava il match primario, che è un'altra cosa. Visto sul
-    dispositivo con uno spumante rosa: a schermo tre Metodo Classico Rosé,
-    nessuno li tocca, e la voce racconta il Moscato d'Asti — un quarto vino,
-    che in quella lista non c'era.
+    Prima si mostravano tre candidati e si aspettavano dodici secondi: quasi
+    sempre nessuno toccava niente. Ora si dice il candidato meno specifico
+    (vedi `Matcher.il_piu_generico`) e si racconta subito.
     """
 
-    def amelie(self):
-        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
-                                  senza_voce=True, senza_modello=True))
-        return a
+    def _amelie(self):
+        return Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                     senza_voce=True, senza_modello=True))
 
-    def test_scaduta_la_scelta_si_prende_il_primo_candidato(self, monkeypatch):
-        a = self.amelie()
+    def test_dal_dubbio_si_va_dritti_al_racconto(self, monkeypatch):
+        from amelie.matcher import Fatti, Livello
+        a = self._amelie()
         try:
-            adottati = []
-            monkeypatch.setattr(a, "_adotta_candidato",
-                                lambda i: adottati.append(i) or True)
+            dubbio = Fatti(livello=Livello.VINO, nome="Un vino", sicurezza=80.0,
+                           riferimenti=[("denominazione", 1)])
+            generico = Fatti(livello=Livello.DENOMINAZIONE, denominazione="Una DOC",
+                             sicurezza=80.0)
+            monkeypatch.setattr(a.matcher, "cerca", lambda righe: dubbio)
+            chiamate = []
+            monkeypatch.setattr(a.matcher, "il_piu_generico",
+                                lambda f, righe: chiamate.append(f) or generico)
             monkeypatch.setattr(a, "_avvia", lambda _f: None)
-            a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
-            a.macchina.invia(Evento.SCADENZA)          # assestamento -> scansione
-            a.macchina.invia(Evento.LETTURA_RIUSCITA)  # -> riconoscimento
-            a.macchina.invia(Evento.MATCH_DUBBIO)      # -> conferma
-            assert a.macchina.stato is Stato.CONFERMA
-            a.macchina.invia(Evento.SCADENZA)          # -> racconto
+            a._righe = ["UN VINO"]
+            a.macchina.stato = Stato.RICONOSCIMENTO
+            a._riconosci()
+            assert chiamate == [dubbio]
+            assert a._fatti is generico
             assert a.macchina.stato is Stato.RACCONTO
-            assert adottati == [0], (
-                "ha raccontato senza prendere il candidato che mostrava")
         finally:
             a.matcher.chiudi()
             a.narratore.chiudi()
 
-    def test_se_invece_si_sceglie_si_prende_quello_toccato(self, monkeypatch):
-        a = self.amelie()
+    def test_un_riconoscimento_sicuro_non_si_tocca(self, monkeypatch):
+        from amelie.matcher import Fatti, Livello
+        a = self._amelie()
         try:
-            adottati = []
-            monkeypatch.setattr(a, "_adotta_candidato",
-                                lambda i: adottati.append(i) or True)
+            certo = Fatti(livello=Livello.VINO, nome="Un vino", sicurezza=95.0,
+                          riferimenti=[("denominazione", 1)])
+            monkeypatch.setattr(a.matcher, "cerca", lambda righe: certo)
+            monkeypatch.setattr(a.matcher, "il_piu_generico",
+                                lambda f, righe: pytest.fail("non doveva scendere"))
             monkeypatch.setattr(a, "_avvia", lambda _f: None)
-            a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
-            a.macchina.invia(Evento.SCADENZA)
-            a.macchina.invia(Evento.LETTURA_RIUSCITA)
-            a.macchina.invia(Evento.MATCH_DUBBIO)
-            a.scegli(2)
-            assert a.macchina.stato is Stato.RACCONTO
-            assert adottati == [2]
-        finally:
-            a.matcher.chiudi()
-            a.narratore.chiudi()
-
-    def test_un_racconto_normale_non_adotta_niente(self, monkeypatch):
-        """Un match sicuro non passa dalla schermata di scelta, e non deve
-        trovarsi sostituito da un candidato che nessuno ha visto."""
-        a = self.amelie()
-        try:
-            adottati = []
-            monkeypatch.setattr(a, "_adotta_candidato",
-                                lambda i: adottati.append(i) or True)
-            monkeypatch.setattr(a, "_avvia", lambda _f: None)
-            a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
-            a.macchina.invia(Evento.SCADENZA)
-            a.macchina.invia(Evento.LETTURA_RIUSCITA)
-            a.macchina.invia(Evento.MATCH_SICURO)      # -> racconto, diretto
-            assert a.macchina.stato is Stato.RACCONTO
-            assert adottati == []
+            a.macchina.stato = Stato.RICONOSCIMENTO
+            a._riconosci()
+            assert a._fatti is certo and a.macchina.stato is Stato.RACCONTO
         finally:
             a.matcher.chiudi()
             a.narratore.chiudi()

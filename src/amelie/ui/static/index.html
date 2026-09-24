@@ -466,41 +466,6 @@ svg { display: block; }
 }
 
 /* ===========================================================================
-   CONFERMA — quando il riconoscimento è dubbio si chiede, non si indovina.
-   =========================================================================== */
-#conferma { justify-content: flex-start; padding-top: calc(var(--passo) * 3); }
-.domanda { font-size: var(--t-voce); color: var(--avorio-tenue); }
-.scelte {
-  display: flex; flex-direction: column;
-  /* Trenta pixel, cioe' due millimetri e mezzo sul vetro: con dodici erano un
-     decimo di dito, e toccare la riga sbagliata non si annulla. */
-  gap: calc(var(--passo) * 2.5);
-  width: 100%; max-width: 940px;
-}
-#c-scelte .scelta {
-  min-height: var(--tocco);
-  display: flex; align-items: center; justify-content: center;
-  padding: 0 calc(var(--passo) * 2);
-  font-size: var(--t-voce); color: var(--avorio); line-height: 1.15;
-  text-wrap: balance;
-  background: rgba(90,33,28,.55);
-  border: 2px solid var(--oro-scuro); border-radius: var(--raggio);
-  transition: transform var(--d-tocco) var(--curva), background-color var(--d-stato);
-}
-#c-scelte .scelta.premuto {
-  transform: scale(.985);
-  background: rgba(200,134,13,.2); border-color: var(--oro-chiaro);
-}
-/* «Nessuno di questi» non è una scelta come le altre: non è un vino. Si
-   distingue senza gridare — nessun fondo, un bordo appena accennato, il testo
-   piu' tenue — così l'occhio la trova quando serve e la scavalca quando no. */
-#c-scelte .scelta.nessuno {
-  background: transparent; border-color: rgba(138,107,48,.45);
-  color: var(--avorio-tenue); font-size: var(--t-sottotit);
-  min-height: calc(var(--tocco) * .82);
-}
-
-/* ===========================================================================
    AVVISO
    =========================================================================== */
 .simbolo { font-size: 110px; color: var(--invito-luce); line-height: 1; }
@@ -723,9 +688,8 @@ svg { display: block; }
    destra. Un ingresso nascosto basta e avanza: i tre secondi, con lo scarto
    che annulla, sono cio' che tiene fuori la mano dell'ospite.
 
-   Le righe hanno la stessa forma delle scelte della conferma: stesso bordo,
-   stesso raggio, stesso ritorno al tocco. Prima erano due famiglie di
-   pulsanti diverse per la stessa cosa.
+   Le righe hanno lo stesso bordo, lo stesso raggio e lo stesso ritorno al
+   tocco dei pulsanti del racconto: una famiglia sola per la stessa cosa.
    =========================================================================== */
 #impostazioni {
   position: absolute; inset: 0; z-index: 9; background: var(--carbone);
@@ -1123,12 +1087,6 @@ svg { display: block; }
     <div class="progresso"><div class="riempito" id="r-progresso"></div></div>
   </section>
 
-  <!-- CONFERMA -->
-  <section id="conferma" class="vista">
-    <div class="domanda" id="domanda">Quale di questi?</div>
-    <div class="scelte" id="c-scelte"></div>
-  </section>
-
   <!-- AVVISO -->
   <section id="avviso" class="vista">
     <div class="simbolo" id="a-simbolo">↻</div>
@@ -1224,7 +1182,7 @@ svg { display: block; }
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
-const viste = ["attesa", "lavoro", "racconto", "conferma", "avviso"];
+const viste = ["attesa", "lavoro", "racconto", "avviso"];
 /* Le scritte che arrivano dal server e servono a piu' di un posto. Stanno qui
    perche' il messaggio che le porta arriva a ogni cambio di lingua, e chi le
    usa puo' essere disegnato molto dopo. */
@@ -1252,11 +1210,11 @@ function adattaScena() {
 adattaScena();
 addEventListener("resize", adattaScena);
 
-/* Le due sole schermate in cui il dispositivo sta aspettando l'ospite, ed e'
-   quindi lecito chiudere: la scelta fra candidati e il racconto. Nelle altre
-   non c'e' niente da annullare - in attesa si e' gia' a casa, e durante la
-   lettura fermarsi a meta' lascerebbe l'OCR a girare. */
-const VISTE_ANNULLABILI = ["conferma", "racconto"];
+/* La sola schermata in cui e' lecito chiudere: il racconto. Nelle altre non
+   c'e' niente da annullare - in attesa si e' gia' a casa, e durante la
+   lettura fermarsi a meta' lascerebbe l'OCR a girare. (C'era anche la scelta
+   fra candidati, che non c'e' piu': col dubbio si dice il piu' generico.) */
+const VISTE_ANNULLABILI = ["racconto"];
 
 function mostra(nome) {
   viste.forEach(v => $(v).classList.toggle("attiva", v === nome));
@@ -1585,8 +1543,8 @@ function inviaVolume(valore, subito) {
 rendiToccabile($("v-apri"), alternaVolume);
 /* Rotta a se', non un'azione del racconto: `comanda()` parla con
    `/racconto/<azione>`, e quella rotta non fa NIENTE quando non c'e' un
-   riproduttore acceso - cioe' in tutta la schermata di conferma, nei due
-   secondi dopo la fine, e quando la lingua non ha voce. Il pulsante sarebbe
+   riproduttore acceso - cioe' nei secondi dopo la fine, e quando la lingua
+   non ha voce. Il pulsante sarebbe
    morto proprio nei casi in cui serve di piu'. */
 rendiToccabile($("annulla"), () => fetch("/annulla", { method: "POST" }).catch(() => {}));
 
@@ -1631,7 +1589,6 @@ function disegnaLingue(m) {
   document.documentElement.lang = m.lingua || "it";
   if (m.invito)  $("invito").textContent  = m.invito;
   if (m.motto)   $("motto").textContent   = m.motto;
-  if (m.domanda) $("domanda").textContent = m.domanda;
   if (m.avviso_muto) $("muto").textContent = m.avviso_muto;
   disegnaPassi(m.passi);
   /* Il nome del pulsante non e' scritto nella pagina: arriva tradotto come
@@ -1753,30 +1710,6 @@ eventi.onmessage = (e) => {
          numeratore e la barra tornava indietro a ogni frase nuova. */
       if (typeof m.quota === "number") avanzamento(m.quota);
       break;
-
-    case "candidati": {
-      const box = $("c-scelte");
-      box.innerHTML = "";
-      (m.voci || []).forEach((voce, i) => {
-        const b = document.createElement("div");
-        b.className = "scelta";
-        b.textContent = voce;
-        rendiToccabile(b, () => fetch("/scegli/" + i, { method: "POST" }).catch(() => {}));
-        box.appendChild(b);
-      });
-      /* «Nessuno di questi». È l'unico caso che il dispositivo non può
-         risolvere da solo — un'etichetta letta male, un vino che nel database
-         non c'è — e senza questo bottone quel caso sparisce: l'ospite tocca a
-         caso o aspetta, e chi deve correggere non sa nemmeno che è successo.
-         Toccandolo si mette da parte lo scatto per guardarlo dopo, e il
-         racconto va avanti lo stesso col più generico che si sa dire. */
-      const n = document.createElement("div");
-      n.className = "scelta nessuno";
-      n.textContent = m.nessuno || "Nessuno di questi";
-      rendiToccabile(n, () => fetch("/segnala", { method: "POST" }).catch(() => {}));
-      box.appendChild(n);
-      break;
-    }
 
     case "didascalia":
       didascalia(m.testo);
