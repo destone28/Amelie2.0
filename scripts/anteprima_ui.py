@@ -45,6 +45,7 @@ def _scritta(chiave: str, lingua: str) -> str:
 def _lingua(lingua: str) -> dict:
     return {"tipo": "lingua", "lingua": lingua, "disponibili": ["it", "en"],
             "invito": _scritta("appoggia_bottiglia", lingua),
+            "motto": _scritta("motto", lingua),
             "domanda": _scritta("quale_di_questi", lingua),
             "voce_muta": False, "avviso_muto": "",
             "annulla": _scritta("annulla", lingua),
@@ -108,6 +109,7 @@ RACCONTO_EN = [
 
 SCENE: dict[str, list[dict]] = {
     "attesa": [LINGUA_IT, {"tipo": "stato", "vista": "attesa"}],
+    "attesa_en": [LINGUA_EN, {"tipo": "stato", "vista": "attesa"}],
 
     "lavoro": [LINGUA_IT, {"tipo": "stato", "vista": "lavoro",
                            "frase": "Sto leggendo l'etichetta…"}],
@@ -186,7 +188,7 @@ SCENE: dict[str, list[dict]] = {
         {"tipo": "stato", "vista": "avviso", "simbolo": "⚠", "tono": "errore",
          "frase": "Qualcosa non ha funzionato. Riprovo fra un istante."}],
 
-    # Mentre il modello scrive: la goccia che respira al posto del testo.
+    # Mentre il modello scrive: il calicino che si riempie al posto del testo.
     "scrivendo": [
         LINGUA_IT,
         {"tipo": "stato", "vista": "racconto", "titolo": "Cannubi Barolo",

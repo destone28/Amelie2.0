@@ -551,7 +551,9 @@ class Amelie:
                                "correzione_spiega", "correzione_salvata",
                                "correzione_vicine", "tasto_spazio", "annulla")
             },
-            # Che cosa fa l'oggetto, in tre passi, sulla schermata d'attesa.
+            # La frase sotto il nome, e che cosa fa l'oggetto in tre passi,
+            # sulla schermata d'attesa.
+            "motto": self.lex.frase("schermo", "motto", lingua=self.lingua),
             "passi": [
                 {"titolo": self.lex.frase("schermo", f"passo_{p}", lingua=self.lingua),
                  "spiega": self.lex.frase("schermo", f"passo_{p}_spiega",

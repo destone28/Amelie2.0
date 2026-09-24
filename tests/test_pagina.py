@@ -82,3 +82,33 @@ def test_la_maiuscola_non_ricostruisce_la_tastiera():
     # e il ripetitore del cancella e' uno solo, fermato da qualunque dito che si alzi
     assert 'window.addEventListener(ev, fermaRipetizione, true)' in PAGINA
 
+
+def test_la_home_riceve_motto_e_tre_passi():
+    """Le scritte dell'attesa vengono dal lessico, in ogni lingua: la pagina
+    deve avere un posto per ciascuna, e il server deve mandarle tutte."""
+    for ident in ("motto", "invito", "p1-s", "p2-t", "p2-s", "p3-t", "p3-s"):
+        assert f'id="{ident}"' in PAGINA, ident
+    from amelie.app import Amelie, Configurazione
+    a = Amelie(Configurazione(simula_mcu=True, senza_camera=True, senza_voce=True,
+                              senza_modello=True))
+    try:
+        for lingua in a.lex.lingue:
+            a.lingua = lingua
+            detti = []
+            a._pubblica = detti.append
+            a._manda_lingua()
+            m = detti[-1]
+            assert m["motto"].strip(), lingua
+            assert len(m["passi"]) == 3
+            assert all(p["titolo"].strip() and p["spiega"].strip() for p in m["passi"]), lingua
+    finally:
+        a.matcher.chiudi()
+        a.narratore.chiudi()
+
+
+def test_nessuna_goccia_rimasta():
+    """La goccia rossa si leggeva come sangue: il motivo e' il calice. Il
+    colore della goccia non deve sopravvivere in nessuna delle due pagine."""
+    avvio = (RADICE / "src/amelie/ui/static/avvio.html").read_text(encoding="utf-8")
+    for testo in (PAGINA, avvio):
+        assert "--goccia" not in testo and 'class="goccia"' not in testo

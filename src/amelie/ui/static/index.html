@@ -57,11 +57,14 @@
   --avorio-fioco:    #8C7F74;   /* cio' che c'e' ma non chiama: 4,6:1, AA */
   --carbone:         #14100F;   /* nero caldo, mai #000 */
 
-  /* La goccia del marchio. E' il solo punto di colore che non sia oro o
-     avorio, e deve leggersi come vino anche sul fondo bordeaux: #A63A2C, il
-     vino del calice di prima, qui scendeva a 2,5:1 e in un segno di tre
-     millimetri spariva. Questo sta a 4,1:1. */
-  --goccia:       #D2553F;
+  /* Il vino dei calici: una sfumatura dal rubino al granato, e il pelo un
+     filo piu' chiaro, perche' il livello si legga. Da solo, sul fondo
+     bordeaux, questo rosso non porterebbe nessuna forma: sta sempre DENTRO un
+     calice disegnato in oro, che la porta per lui. Una goccia rossa da sola,
+     invece, si leggeva come sangue. */
+  --vino:         #A8323F;
+  --vino-fondo:   #5A1320;
+  --vino-pelo:    #E59A86;
 
   /* I toni degli avvisi, gli stessi che l'anello di luce accende (bridge.py):
      se il LED e' rosso, il simbolo a schermo non puo' essere dello stesso oro
@@ -87,7 +90,7 @@
 
   /* --- Tipografia. Sei corpi e basta: prima erano nove, e tre di loro -
      38, 40 e 42 - non facevano gerarchia, facevano rumore. ------------------ */
-  --t-marchio:  118px;     /* l'altezza del marchio, non un corpo */
+  --t-marchio:  104px;     /* l'altezza del marchio, non un corpo */
   --t-titolo:    60px;     /* il nome del vino */
   --t-corpo:     50px;     /* il racconto */
   --t-voce:      44px;     /* cio' che il dispositivo dice a schermo */
@@ -103,7 +106,7 @@
   --d-tocco:  .12s;        /* il ritorno sotto il dito */
   --d-stato:  .28s;        /* un comando che cambia, un pannello che si apre */
   --d-vista:  .45s;        /* una schermata che lascia il posto a un'altra */
-  --ciclo:    2.4s;        /* il respiro di tutto cio' che aspetta */
+  --ciclo:    3s;          /* il respiro di tutto cio' che aspetta */
   --curva: cubic-bezier(.22,.61,.36,1);
 }
 
@@ -193,97 +196,130 @@ svg { display: block; }
 }
 
 /* ===========================================================================
-   MARCHIO — il nome, e una goccia al posto del puntino della i.
+   MARCHIO — un calice, e il nome.
 
-   Prima erano quattro mirini, una bottiglia e una A dentro la bottiglia:
-   diceva bene COSA fa l'oggetto, ma diceva tre cose. Adesso ne dice una. Il
-   nome in EB Garamond e una goccia di vino: si legge da mezzo metro, sta in
-   un centimetro, e la goccia e' lo stesso segno che si anima quando il
-   dispositivo lavora (vedi STILLA).
+   Prima c'era una goccia rossa al posto del puntino della i: da sola, sul
+   fondo scuro, faceva pensare al sangue prima che al vino - l'ha detto chi
+   ha provato il dispositivo. Il calice non lascia dubbi: la coppa a
+   tulipano, il vino fino al punto piu' largo, dove lo si versa davvero, e un
+   riflesso. E' lo stesso calice di tutta l'interfaccia - l'icona del
+   racconto, la lettura, la scrittura, l'avvio - disegnato una volta in un
+   riquadro di 120x170 e cambiato solo di misura; la coppa che ritaglia il
+   vino e la sfumatura del vino stanno una volta sola, in `.definizioni`.
 
-   Il nome non e' TESTO: e' disegnato a tracciati, ricavati dal carattere.
-   Cosi' e' identico qui, nella schermata d'avvio - che si apre da file,
-   prima che esista un server da cui scaricare un carattere - e in qualunque
-   anteprima, senza dipendere da nessun font installato.
+   Il nome non e' TESTO: e' disegnato a tracciati, ricavati dal carattere (EB
+   Garamond a peso 440). Cosi' e' identico qui, nella schermata d'avvio - che
+   si apre da file, prima che esista un server da cui scaricare un carattere -
+   e in qualunque anteprima, senza dipendere da nessun font installato.
    =========================================================================== */
-.marchio { height: var(--t-marchio); width: auto; overflow: visible; }
+.definizioni { position: absolute; width: 0; height: 0; overflow: hidden; }
+#vino .alto  { stop-color: var(--vino); }
+#vino .basso { stop-color: var(--vino-fondo); }
+/* Disegni a filo, d'oro. Il tratto resta dello stesso spessore a ogni misura,
+   dal calice del marchio al calicino della scrittura: cambiando solo la
+   scala del disegno, il calice piccolo avrebbe avuto un filo di un pixel e il
+   grande uno di cinque. */
+.segno .linea {
+  fill: none; stroke: var(--oro-chiaro); stroke-width: 2.6px;
+  stroke-linecap: round; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.segno .sottile { stroke-width: 1.9px; }
+.segno .vino { fill: url(#vino); }
+.segno .pelo { fill: none; stroke: var(--vino-pelo); stroke-width: 1.4px;
+               vector-effect: non-scaling-stroke; opacity: .75; }
+.segno .riflesso { fill: none; stroke: var(--avorio); stroke-width: 1.8px;
+                   stroke-linecap: round; vector-effect: non-scaling-stroke;
+                   opacity: .28; }
+.marchio { display: flex; flex-direction: column; align-items: center;
+           gap: calc(var(--passo) * .8); }
+.marchio .calice { height: 118px; width: auto; overflow: visible; }
+/* Accanto al nome, che ha aste piene, il filo del calice e' un poco piu' deciso. */
+.marchio .calice .linea { stroke-width: 3px; }
+.marchio .nome { height: var(--t-marchio); width: auto; overflow: visible; }
 .marchio .parola { fill: var(--oro-chiaro); }
-.marchio .goccia { fill: var(--goccia); }
 
 /* ===========================================================================
-   ATTESA — il marchio, e che cosa fa l'oggetto in tre passi.
+   ATTESA — il marchio, una frase, e che cosa fa l'oggetto in tre passi.
 
-   Senza tecnica: appoggi, leggo, racconto. Tre colonne e non una frase,
-   perche' da un tavolo si guardano, non si leggono: il titolo di ogni passo
-   dice il gesto, la riga sotto lo finisce.
+   Senza tecnica: posi, leggo, racconto. Tre colonne e non un paragrafo,
+   perche' da un tavolo si guardano, non si leggono: l'icona dice la cosa, il
+   titolo il gesto, la riga sotto lo finisce. La frase sotto il nome e' in
+   corsivo, l'unico del progetto: e' la voce del locale, non un'istruzione.
    =========================================================================== */
 #attesa { gap: 0; padding-top: calc(var(--passo) * 2); }
-#attesa .marchio { margin-bottom: calc(var(--passo) * 3); }
+.motto {
+  font-style: italic; font-size: var(--t-sottotit); color: var(--avorio-tenue);
+  line-height: 1.3; margin-top: calc(var(--passo) * 1.2);
+}
 .filo {
   width: 220px; height: 2px; border: 0; flex: none;
+  margin-top: calc(var(--passo) * 2.2);
   background: linear-gradient(90deg, transparent, var(--oro-scuro), transparent);
 }
 .passi {
   display: flex; align-items: flex-start; justify-content: center;
   gap: calc(var(--passo) * 2);
-  margin-top: calc(var(--passo) * 4);
+  margin-top: calc(var(--passo) * 2.5);
   width: 100%;
 }
-.passo { flex: 0 0 340px; display: flex; flex-direction: column; gap: 4px; }
+.passo { flex: 0 0 370px; display: flex; flex-direction: column; align-items: center;
+         gap: 4px; }
+/* Le tre icone poggiano sulla stessa riga, in una fascia alta uguale. Alte
+   uguali no: una bottiglia e' alta e stretta, un calice largo e basso, e a
+   pari altezza la bottiglia sembrava la piu' piccola delle tre. */
+.passo .icone { height: 84px; display: flex; align-items: flex-end; justify-content: center;
+                margin-bottom: calc(var(--passo) * 1.1); }
+.passo .icona { width: auto; height: 72px; overflow: visible; }
+.passo .icona.alta { height: 84px; }
+.passo .icona.quadra { height: 66px; }
 .passo .p-titolo { font-size: var(--t-voce); color: var(--oro-chiaro); line-height: 1.15; }
 .passo .p-spiega { font-size: var(--t-piccolo); color: var(--avorio-tenue); line-height: 1.25; }
-/* Fra un passo e l'altro, la goccia piccola: e' la stessa del marchio, e dice
-   «poi» senza una freccia che sembrerebbe un'istruzione tecnica. */
-.passi .fra {
-  flex: none; width: 14px; height: 19px; margin-top: 20px;
-  fill: var(--oro); opacity: .7;
-}
 
 /* ===========================================================================
-   STILLA — il segnale che il dispositivo sta lavorando.
+   VERSA — il segnale che il dispositivo sta leggendo.
 
-   E' la goccia del marchio che cade in un calice e lo increspa. Un segno solo
-   per tutto cio' che aspetta - la lettura, la scrittura, l'avvio - con lo
-   stesso ciclo e la stessa curva: prima erano un calice che si riempiva, una
-   scritta che pulsava e una riga che scorreva, ognuno col suo tempo.
+   Una bottiglia si inclina e versa in un calice, che si riempie; poi si
+   raddrizza, il vino sfuma e si ricomincia. Prima era una goccia rossa che
+   cadeva e increspava: da sola, sul fondo scuro, sembrava sangue. Lo stesso
+   ciclo e la stessa curva per tutto cio' che aspetta: la lettura qui, la
+   scrittura col suo calicino, l'avvio col calice del marchio.
 
    Deve reggere sia sei decimi di secondo sia venticinque senza diventare
-   irritante: per questo il ciclo e' lento e non ha rimbalzi. Si muove SOLO per
-   trasformazione e opacita', le due cose che Chromium sposta sul compositor:
-   l'animazione non tocca il layout e non contende i quattro core all'OCR,
-   che qui e' il padrone.
+   irritante: il ciclo e' lento e senza rimbalzi. Si muove solo per
+   trasformazione e opacita', su un disegno piccolo: l'OCR, che qui e' il
+   padrone dei quattro core, non se ne accorge. La bottiglia ruota attorno
+   alla bocca, cosi' il getto parte sempre dallo stesso punto.
    =========================================================================== */
-.stilla { width: 240px; height: 250px; overflow: visible; }
-.stilla .cade { fill: var(--goccia); }
-.stilla .onda {
-  /* Tre unita' e non due: sul vetro, scalate, erano un pixel e mezzo. */
-  fill: none; stroke: var(--oro); stroke-width: 3; opacity: 0;
-  transform-box: fill-box; transform-origin: center;
+.versa { width: 260px; height: 250px; overflow: visible; }
+.versa .getto {
+  fill: var(--vino);
+  transform-box: fill-box; transform-origin: 50% 0%;
+  animation: getto var(--ciclo) linear infinite;
 }
-.stilla .cade {
-  transform-box: fill-box; transform-origin: center;
-  animation: cade var(--ciclo) cubic-bezier(.55,.06,.68,.19) infinite;
-  will-change: transform, opacity;
+.versa .bottiglia {
+  transform-box: fill-box; transform-origin: 50% 0%;
+  animation: inclina var(--ciclo) var(--curva) infinite;
 }
-.stilla .onda.uno { animation: increspa var(--ciclo) var(--curva) infinite; }
-.stilla .onda.due { animation: increspa var(--ciclo) var(--curva) infinite;
-                    animation-delay: calc(var(--ciclo) * .18); }
-@keyframes cade {
-  0%   { transform: translateY(-70px); opacity: 0; }
-  12%  { opacity: 1; }
-  52%  { transform: translateY(96px); opacity: 1; }
-  58%  { transform: translateY(104px); opacity: 0; }
-  100% { transform: translateY(104px); opacity: 0; }
+.versa .livello { animation: riempie var(--ciclo) var(--curva) infinite; }
+@keyframes inclina {
+  0%, 84%, 100% { transform: rotate(-12deg); }
+  18%, 66%      { transform: rotate(30deg); }
 }
-@keyframes increspa {
-  0%, 52% { transform: scale(.25); opacity: 0; }
-  56%     { opacity: .95; }
-  100%    { transform: scale(1.35); opacity: 0; }
+@keyframes getto {
+  0%, 16%   { transform: scaleY(0); opacity: 1; }
+  26%, 64%  { transform: scaleY(1); opacity: 1; }
+  72%, 100% { transform: scaleY(1); opacity: 0; }
+}
+@keyframes riempie {
+  0%, 22%  { transform: translateY(44px); opacity: 1; }
+  70%, 86% { transform: translateY(0); opacity: 1; }
+  100%     { transform: translateY(0); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .stilla .cade, .stilla .onda { animation: none; }
-  .stilla .cade { transform: translateY(40px); }
-  .stilla .onda.uno { opacity: .6; transform: scale(.8); }
+  .versa .getto, .versa .bottiglia, .versa .livello { animation: none; }
+  .versa .bottiglia { transform: rotate(30deg); }
+  .versa .livello { transform: translateY(20px); }
 }
 .frase { font-size: var(--t-voce); color: var(--avorio-tenue); }
 
@@ -415,16 +451,18 @@ svg { display: block; }
 
 /* Mentre il racconto si scrive. Non e' una decorazione: generare costa
    secondi, e in quei secondi lo schermo mostrava il titolo e sotto il vuoto -
-   cioe' sembrava rotto. La goccia e' quella della stilla, con lo stesso ciclo. */
+   cioe' sembrava rotto. Il calicino e' il calice del marchio, copiato dalla
+   pagina, che si riempie e si vuota col ciclo di tutto cio' che aspetta. */
 .scrivendo {
   display: flex; align-items: center; gap: calc(var(--passo) * 1.2);
   color: var(--oro-chiaro); font-size: var(--t-voce);
 }
-.scrivendo svg { width: 20px; height: 28px; flex: none; fill: var(--goccia);
-                 animation: respiro var(--ciclo) ease-in-out infinite; }
+.scrivendo .calicino { width: auto; height: 44px; flex: none; overflow: visible; }
+.scrivendo .calicino .livello { animation: sorso var(--ciclo) ease-in-out infinite; }
+@keyframes sorso { 0%, 100% { transform: translateY(34px); } 50% { transform: translateY(0); } }
 @keyframes respiro { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .scrivendo svg { animation: none; }
+  .scrivendo .calicino .livello { animation: none; }
 }
 
 /* ===========================================================================
@@ -962,6 +1000,16 @@ svg { display: block; }
 </head>
 <body>
 <div id="scena">
+  <!-- I disegni condivisi: la sfumatura del vino e la coppa del calice, che
+       ritaglia il vino in ogni calice della pagina. -->
+  <svg class="definizioni" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="vino" x1="0" y1="0" x2="0" y2="1">
+        <stop class="alto" offset="0"/><stop class="basso" offset="1"/>
+      </linearGradient>
+      <clipPath id="coppa"><path d="M34 14C24 34 20 62 36 82C44 93 52 100 60 100C68 100 76 93 84 82C100 62 96 34 86 14Z"/></clipPath>
+    </defs>
+  </svg>
 
   <div id="lingue"></div>
 
@@ -989,24 +1037,40 @@ svg { display: block; }
 
   <!-- ATTESA -->
   <section id="attesa" class="vista attiva">
-    <svg class="marchio" viewBox="-14 -710 2915 736" role="img" aria-label="Amelie">
-      <path class="parola" d="M26.3 5Q13.5 5 5.6 1.5Q-2.3 -2 -2.3 -8.5Q-2.3 -15.8 5.9 -21.2Q14.2 -26.6 29.4 -31.3Q55.8 -39.3 77.8 -55.5Q99.7 -71.6 115 -106.8Q142.6 -169.8 165.9 -225.6Q189.2 -281.3 210.2 -335.3Q231.2 -389.2 253.5 -447.3Q275.8 -505.3 300.2 -572.7Q306.6 -590.4 310.6 -605Q314.6 -619.7 315.8 -633.9Q326.1 -637.1 336 -640.3Q345.9 -643.5 356.3 -649.6Q366.5 -655.7 371.3 -667.6Q376 -679.4 379.5 -683.7Q381 -685 382.8 -685.1Q384.7 -685.2 386 -682.5Q388.2 -678.1 389.8 -672.1Q391.5 -666 393.5 -659.8Q417 -585 442.5 -507.3Q468 -429.7 492.2 -356.8Q516.4 -283.9 537.1 -224.2Q557.8 -164.5 571 -124.5Q584 -87.3 599.4 -68.2Q614.9 -49 632.2 -41Q649.6 -32.9 669.6 -28.7Q685.6 -25.7 693.5 -19.5Q701.3 -13.3 701.3 -5.9Q701.3 0.2 693.6 2.4Q685.9 4.7 673.5 4.7Q658.6 4.7 633.9 3.2Q609.1 1.8 581.7 0.3Q554.3 -1.1 531.3 -1.1Q512.2 -1.1 491.2 -1Q470.1 -0.9 451.6 -0.3Q433.1 0.3 419.9 0.3Q407.5 0.3 399.7 -2.8Q391.9 -5.9 391.9 -12Q391.9 -19.2 401.5 -24.3Q411.1 -29.3 423.6 -31.3Q457.2 -36.7 471.6 -48.8Q486.1 -60.9 485.2 -78.4Q484.6 -94 478.2 -121.4Q471.8 -148.8 463.3 -179.8Q454.8 -210.8 447.1 -235.1Q445.1 -243.1 439.9 -244.9Q434.7 -246.8 421.4 -246.8H234.1Q229.7 -246.8 225.3 -243.2Q220.9 -239.6 217.1 -228.9Q214 -218.3 207.3 -197.9Q200.6 -177.4 193.9 -154.8Q187.3 -132.2 182.4 -114Q177.5 -95.7 177 -89.6Q176 -66.4 192.4 -51.7Q208.8 -37 235.5 -30.5Q267.2 -21.9 267.2 -10.2Q267.2 -4.1 259.6 -1.5Q251.9 1.1 239.2 1.1Q223.8 1.1 198.8 0.1Q173.8 -1 145.6 -1Q113.1 -1 82.6 2Q52.1 5 26.3 5ZM261.2 -282.7H412.8Q426.9 -282.7 426.9 -287.9Q426.9 -290.2 426.4 -292.5Q425.9 -294.9 424.9 -298L348.5 -539.4Q342.8 -556.4 339.8 -556.4Q337.8 -556.4 332.1 -540.3L242.7 -298Q240.7 -292.3 240.7 -290Q240.7 -285 246.2 -283.9Q251.7 -282.7 261.2 -282.7ZM769.5 3Q761.8 3 755.7 0.8Q749.5 -1.5 749.5 -8.5Q749.5 -15.6 756.2 -18.8Q762.8 -22 772.5 -25Q786.7 -30 800.7 -36.5Q814.8 -43 814.8 -63V-280Q814.8 -306.2 808.8 -326Q802.8 -345.8 777.9 -349.7Q773.9 -350.7 771.2 -353.8Q768.5 -356.9 768.5 -363.4Q768.5 -374 776.9 -376.1Q803.5 -383 821.2 -390.6Q838.8 -398.2 853.1 -407.8Q867.5 -417.3 885.6 -428.2Q887.8 -429.3 890 -430.9Q892.1 -432.4 895.1 -432.4Q901.5 -432.4 901.5 -424.9Q901.5 -417.7 899 -396.6Q896.5 -375.4 896.5 -361.4Q896.5 -351.4 898.5 -349.4H900.5Q924.6 -372.6 961.9 -394.6Q999.2 -416.6 1055.5 -416.6Q1090.8 -416.6 1115.1 -400.2Q1139.4 -383.8 1154.9 -346.4H1158.1Q1189.8 -376.4 1230.3 -396.5Q1270.9 -416.6 1319.5 -416.6Q1352.3 -416.6 1374.7 -396.9Q1397.1 -377.2 1409.1 -345.2Q1421 -313.2 1421 -277V-62.9Q1421 -42.9 1434.7 -36.5Q1448.3 -30 1463.3 -25Q1473.1 -22 1479.5 -18.8Q1486 -15.6 1486 -8.5Q1486 -2.3 1481.4 0.3Q1476.8 3 1466.3 3Q1446.3 3 1434.4 1.5Q1422.5 0 1412 -1Q1401.5 -2 1383.5 -2Q1366.5 -2 1355 -1Q1343.5 0 1331 1.5Q1318.5 3 1298.5 3Q1289.9 3 1284.4 0.3Q1279 -2.3 1279 -8.5Q1279 -16.5 1285.4 -19.7Q1291.8 -22.9 1301.5 -25Q1317.2 -29 1329.8 -35.9Q1342.3 -42.8 1342.3 -62.1V-271.4Q1342.3 -295.5 1331.9 -316.6Q1321.5 -337.6 1304.2 -351.1Q1287 -364.6 1265.8 -364.6Q1242.6 -364.6 1221.9 -358.6Q1201.3 -352.7 1182.9 -338Q1156.8 -317.4 1156.8 -270.3V-62.9Q1156.8 -42.9 1170.8 -36Q1184.8 -29.2 1199.8 -25Q1209.5 -22.9 1216 -19.3Q1222.4 -15.6 1222.4 -8.5Q1222.4 -2.3 1217.3 0.3Q1212.3 3 1202.8 3Q1182.8 3 1170.7 1.5Q1158.6 0 1147.5 -1Q1136.4 -2 1118.4 -2Q1101.4 -2 1089.9 -1Q1078.4 0 1065.9 1.5Q1053.5 3 1033.5 3Q1025.7 3 1019.8 0.3Q1013.9 -2.3 1013.9 -8.5Q1013.9 -16.5 1021.2 -19.3Q1028.5 -22 1036.5 -25Q1051.2 -29.9 1064.7 -36.4Q1078.1 -42.8 1078.1 -62.1V-271.4Q1078.1 -295.5 1067.7 -316.5Q1057.3 -337.5 1040.1 -351Q1022.9 -364.4 1001.7 -364.4Q978.5 -364.4 957.8 -358.6Q937.2 -352.7 918.6 -338.1Q893.5 -319.7 893.5 -270.8V-62.9Q893.5 -43.3 906.4 -36.7Q919.3 -30 934.3 -25Q942.3 -22 949.6 -19.3Q956.9 -16.5 956.9 -8.5Q956.9 -2.5 951.4 0.3Q946 3 937.3 3Q917.3 3 905.3 1.5Q893.2 0 882.6 -1Q872 -2 854 -2Q837 -2 825.6 -1Q814.3 0 801.9 1.5Q789.5 3 769.5 3ZM1750.8 14.9Q1695.9 14.9 1654.7 -12.3Q1613.4 -39.6 1590.2 -89.1Q1567 -138.6 1567 -203.2Q1567 -261.9 1593.9 -310Q1620.8 -358.1 1665.6 -387.3Q1710.4 -416.6 1763.6 -416.6Q1803.9 -416.6 1835.4 -400.2Q1866.8 -383.9 1884.7 -355Q1902.6 -326.2 1902.6 -288.8Q1902.6 -256.9 1872.5 -256.9H1663Q1649 -256.9 1643.4 -249.3Q1637.8 -241.8 1637.8 -220.1Q1637.8 -173.5 1658.2 -135.2Q1678.6 -96.8 1712.8 -74.1Q1747 -51.3 1788.4 -51.3Q1818.3 -51.3 1842.8 -62.8Q1867.3 -74.2 1887 -95.9Q1890.9 -100.5 1893.1 -102.1Q1895.4 -103.8 1898.4 -103.8Q1906.7 -103.8 1906.7 -93.4Q1906.7 -75.6 1890.1 -53.1Q1875.8 -33.2 1854.5 -17.8Q1833.1 -2.3 1806.7 6.3Q1780.2 14.9 1750.8 14.9ZM1664.8 -289.4H1751.4Q1776 -289.4 1792.1 -290.4Q1808.2 -291.4 1823.3 -294.4Q1828.3 -295.5 1830 -301.4Q1831.7 -307.3 1831.7 -317.3Q1831.7 -346 1807.2 -366Q1782.7 -386 1748.8 -386Q1726.1 -386 1703.8 -372.8Q1681.4 -359.5 1666.9 -339.7Q1652.3 -320 1652.5 -300Q1652.5 -289.4 1664.8 -289.4ZM2000.5 3Q1995 3 1987.7 1.2Q1980.5 -0.6 1980.5 -6.7Q1980.5 -14.7 1987.9 -18.3Q1995.2 -21.9 2003.5 -25Q2018.5 -30 2032.2 -36.4Q2045.8 -42.8 2045.8 -63V-563.7Q2045.8 -592.4 2035.8 -612Q2025.8 -631.6 2000.8 -636.6Q1992.4 -638.6 1992.4 -649.9Q1992.4 -660.3 1999.8 -662.3Q2025.7 -668.1 2046.2 -675.1Q2066.8 -682.1 2084.8 -689.5Q2102.8 -697 2118.7 -702.9Q2123.3 -705 2125.6 -705Q2128.2 -705 2129.7 -702.3Q2131.3 -699.7 2131.3 -697.3Q2131.3 -688.5 2128 -660.5Q2124.7 -632.6 2124.5 -570.8V-63.3Q2124.5 -43 2138.2 -36.7Q2151.8 -30.3 2166.8 -25.3Q2175.2 -22.2 2182.5 -18.5Q2189.8 -14.9 2189.8 -6.9Q2189.8 -0.8 2182.6 1Q2175.4 2.8 2169.8 2.8Q2150.7 2.8 2138.2 1.3Q2125.8 -0.1 2114.3 -1.1Q2102.8 -2 2084.8 -2Q2067.8 -2 2056 -1Q2044.3 0 2032.4 1.5Q2020.5 3 2000.5 3ZM2281.1 3Q2272.4 3 2267 0.3Q2261.5 -2.3 2261.5 -8.3Q2261.5 -16.3 2268.7 -19.6Q2275.8 -22.8 2283.8 -24.8Q2305.5 -30 2316.5 -37.5Q2327.4 -44.9 2327.4 -62.7V-279.6Q2327.4 -307.6 2317.8 -327.6Q2308.2 -347.7 2282.7 -351.5Q2277.5 -352.5 2275 -355.8Q2272.4 -359.1 2272.4 -365.2Q2272.4 -376.8 2281.8 -377.9Q2323.4 -387.2 2351.5 -403Q2379.6 -418.9 2393.7 -428.9Q2403.8 -436 2408.7 -436Q2415.6 -436 2415.6 -429.9Q2415.5 -420.7 2412.8 -396.9Q2410.2 -373.2 2408.2 -344.9Q2406.1 -316.5 2406.1 -293.3V-62.8Q2406.1 -46.3 2417.4 -38.3Q2428.8 -30.3 2449.7 -24.8Q2457.7 -22.7 2464.9 -19.6Q2472.1 -16.5 2472.1 -8.5Q2472.1 2.9 2452.7 2.9Q2433.7 2.9 2420.9 1.4Q2408.1 0 2396.4 -1Q2384.6 -2 2366.6 -2Q2349.6 -2 2337.5 -1Q2325.4 0 2313.2 1.5Q2301.1 3 2281.1 3ZM2732.8 14.9Q2677.9 14.9 2636.7 -12.3Q2595.4 -39.6 2572.2 -89.1Q2549 -138.6 2549 -203.2Q2549 -261.9 2575.9 -310Q2602.8 -358.1 2647.6 -387.3Q2692.4 -416.6 2745.6 -416.6Q2785.9 -416.6 2817.4 -400.2Q2848.8 -383.9 2866.7 -355Q2884.6 -326.2 2884.6 -288.8Q2884.6 -256.9 2854.5 -256.9H2645Q2631 -256.9 2625.4 -249.3Q2619.8 -241.8 2619.8 -220.1Q2619.8 -173.5 2640.2 -135.2Q2660.6 -96.8 2694.8 -74.1Q2729 -51.3 2770.4 -51.3Q2800.3 -51.3 2824.8 -62.8Q2849.3 -74.2 2869 -95.9Q2872.9 -100.5 2875.1 -102.1Q2877.4 -103.8 2880.4 -103.8Q2888.7 -103.8 2888.7 -93.4Q2888.7 -75.6 2872.1 -53.1Q2857.8 -33.2 2836.5 -17.8Q2815.1 -2.3 2788.7 6.3Q2762.2 14.9 2732.8 14.9ZM2646.8 -289.4H2733.4Q2758 -289.4 2774.1 -290.4Q2790.2 -291.4 2805.3 -294.4Q2810.3 -295.5 2812 -301.4Q2813.7 -307.3 2813.7 -317.3Q2813.7 -346 2789.2 -366Q2764.7 -386 2730.8 -386Q2708.1 -386 2685.8 -372.8Q2663.4 -359.5 2648.9 -339.7Q2634.3 -320 2634.5 -300Q2634.5 -289.4 2646.8 -289.4Z"/>
-      <path class="goccia" d="M2369.0 -697.5C2381.5 -667.5 2419.0 -630.0 2419.0 -597.5A50 50 0 0 1 2319.0 -597.5C2319.0 -630.0 2356.5 -667.5 2369.0 -697.5Z"/>
-    </svg>
+    <div class="marchio" role="img" aria-label="Amelie">
+      <svg class="calice segno" viewBox="0 0 120 170" aria-hidden="true">
+        <g clip-path="url(#coppa)"><g class="livello"><rect class="vino" x="-10" y="62" width="140" height="120"/><path class="pelo" d="M-10 62H130"/></g></g>
+        <path class="linea" d="M34 14C24 34 20 62 36 82C44 93 52 100 60 100C68 100 76 93 84 82C100 62 96 34 86 14Z"/>
+        <path class="linea" d="M60 100V148"/>
+        <path class="linea" d="M36 156C46 150 52 149 60 149C68 149 74 150 84 156"/>
+        <path class="riflesso" d="M40 30C35 44 35 58 40 68"/>
+      </svg>
+      <svg class="nome" viewBox="-14 -717 2915 744" aria-hidden="true">
+        <path class="parola" d="M26.3 5Q13.5 5 5.6 1.5Q-2.3 -2 -2.3 -8.5Q-2.3 -15.8 5.9 -21.2Q14.2 -26.6 29.4 -31.3Q55.8 -39.3 77.8 -55.5Q99.7 -71.6 115 -106.8Q142.6 -169.8 165.9 -225.6Q189.2 -281.3 210.2 -335.3Q231.2 -389.2 253.5 -447.3Q275.8 -505.3 300.2 -572.7Q306.6 -590.4 310.6 -605Q314.6 -619.7 315.8 -633.9Q326.1 -637.1 336 -640.3Q345.9 -643.5 356.3 -649.6Q366.5 -655.7 371.3 -667.6Q376 -679.4 379.5 -683.7Q381 -685 382.8 -685.1Q384.7 -685.2 386 -682.5Q388.2 -678.1 389.8 -672.1Q391.5 -666 393.5 -659.8Q417 -585 442.5 -507.3Q468 -429.7 492.2 -356.8Q516.4 -283.9 537.1 -224.2Q557.8 -164.5 571 -124.5Q584 -87.3 599.4 -68.2Q614.9 -49 632.2 -41Q649.6 -32.9 669.6 -28.7Q685.6 -25.7 693.5 -19.5Q701.3 -13.3 701.3 -5.9Q701.3 0.2 693.6 2.4Q685.9 4.7 673.5 4.7Q658.6 4.7 633.9 3.2Q609.1 1.8 581.7 0.3Q554.3 -1.1 531.3 -1.1Q512.2 -1.1 491.2 -1Q470.1 -0.9 451.6 -0.3Q433.1 0.3 419.9 0.3Q407.5 0.3 399.7 -2.8Q391.9 -5.9 391.9 -12Q391.9 -19.2 401.5 -24.3Q411.1 -29.3 423.6 -31.3Q457.2 -36.7 471.6 -48.8Q486.1 -60.9 485.2 -78.4Q484.6 -94 478.2 -121.4Q471.8 -148.8 463.3 -179.8Q454.8 -210.8 447.1 -235.1Q445.1 -243.1 439.9 -244.9Q434.7 -246.8 421.4 -246.8H234.1Q229.7 -246.8 225.3 -243.2Q220.9 -239.6 217.1 -228.9Q214 -218.3 207.3 -197.9Q200.6 -177.4 193.9 -154.8Q187.3 -132.2 182.4 -114Q177.5 -95.7 177 -89.6Q176 -66.4 192.4 -51.7Q208.8 -37 235.5 -30.5Q267.2 -21.9 267.2 -10.2Q267.2 -4.1 259.6 -1.5Q251.9 1.1 239.2 1.1Q223.8 1.1 198.8 0.1Q173.8 -1 145.6 -1Q113.1 -1 82.6 2Q52.1 5 26.3 5ZM261.2 -282.7H412.8Q426.9 -282.7 426.9 -287.9Q426.9 -290.2 426.4 -292.5Q425.9 -294.9 424.9 -298L348.5 -539.4Q342.8 -556.4 339.8 -556.4Q337.8 -556.4 332.1 -540.3L242.7 -298Q240.7 -292.3 240.7 -290Q240.7 -285 246.2 -283.9Q251.7 -282.7 261.2 -282.7ZM769.5 3Q761.8 3 755.7 0.8Q749.5 -1.5 749.5 -8.5Q749.5 -15.6 756.2 -18.8Q762.8 -22 772.5 -25Q786.7 -30 800.7 -36.5Q814.8 -43 814.8 -63V-280Q814.8 -306.2 808.8 -326Q802.8 -345.8 777.9 -349.7Q773.9 -350.7 771.2 -353.8Q768.5 -356.9 768.5 -363.4Q768.5 -374 776.9 -376.1Q803.5 -383 821.2 -390.6Q838.8 -398.2 853.1 -407.8Q867.5 -417.3 885.6 -428.2Q887.8 -429.3 890 -430.9Q892.1 -432.4 895.1 -432.4Q901.5 -432.4 901.5 -424.9Q901.5 -417.7 899 -396.6Q896.5 -375.4 896.5 -361.4Q896.5 -351.4 898.5 -349.4H900.5Q924.6 -372.6 961.9 -394.6Q999.2 -416.6 1055.5 -416.6Q1090.8 -416.6 1115.1 -400.2Q1139.4 -383.8 1154.9 -346.4H1158.1Q1189.8 -376.4 1230.3 -396.5Q1270.9 -416.6 1319.5 -416.6Q1352.3 -416.6 1374.7 -396.9Q1397.1 -377.2 1409.1 -345.2Q1421 -313.2 1421 -277V-62.9Q1421 -42.9 1434.7 -36.5Q1448.3 -30 1463.3 -25Q1473.1 -22 1479.5 -18.8Q1486 -15.6 1486 -8.5Q1486 -2.3 1481.4 0.3Q1476.8 3 1466.3 3Q1446.3 3 1434.4 1.5Q1422.5 0 1412 -1Q1401.5 -2 1383.5 -2Q1366.5 -2 1355 -1Q1343.5 0 1331 1.5Q1318.5 3 1298.5 3Q1289.9 3 1284.4 0.3Q1279 -2.3 1279 -8.5Q1279 -16.5 1285.4 -19.7Q1291.8 -22.9 1301.5 -25Q1317.2 -29 1329.8 -35.9Q1342.3 -42.8 1342.3 -62.1V-271.4Q1342.3 -295.5 1331.9 -316.6Q1321.5 -337.6 1304.2 -351.1Q1287 -364.6 1265.8 -364.6Q1242.6 -364.6 1221.9 -358.6Q1201.3 -352.7 1182.9 -338Q1156.8 -317.4 1156.8 -270.3V-62.9Q1156.8 -42.9 1170.8 -36Q1184.8 -29.2 1199.8 -25Q1209.5 -22.9 1216 -19.3Q1222.4 -15.6 1222.4 -8.5Q1222.4 -2.3 1217.3 0.3Q1212.3 3 1202.8 3Q1182.8 3 1170.7 1.5Q1158.6 0 1147.5 -1Q1136.4 -2 1118.4 -2Q1101.4 -2 1089.9 -1Q1078.4 0 1065.9 1.5Q1053.5 3 1033.5 3Q1025.7 3 1019.8 0.3Q1013.9 -2.3 1013.9 -8.5Q1013.9 -16.5 1021.2 -19.3Q1028.5 -22 1036.5 -25Q1051.2 -29.9 1064.7 -36.4Q1078.1 -42.8 1078.1 -62.1V-271.4Q1078.1 -295.5 1067.7 -316.5Q1057.3 -337.5 1040.1 -351Q1022.9 -364.4 1001.7 -364.4Q978.5 -364.4 957.8 -358.6Q937.2 -352.7 918.6 -338.1Q893.5 -319.7 893.5 -270.8V-62.9Q893.5 -43.3 906.4 -36.7Q919.3 -30 934.3 -25Q942.3 -22 949.6 -19.3Q956.9 -16.5 956.9 -8.5Q956.9 -2.5 951.4 0.3Q946 3 937.3 3Q917.3 3 905.3 1.5Q893.2 0 882.6 -1Q872 -2 854 -2Q837 -2 825.6 -1Q814.3 0 801.9 1.5Q789.5 3 769.5 3ZM1750.8 14.9Q1695.9 14.9 1654.7 -12.3Q1613.4 -39.6 1590.2 -89.1Q1567 -138.6 1567 -203.2Q1567 -261.9 1593.9 -310Q1620.8 -358.1 1665.6 -387.3Q1710.4 -416.6 1763.6 -416.6Q1803.9 -416.6 1835.4 -400.2Q1866.8 -383.9 1884.7 -355Q1902.6 -326.2 1902.6 -288.8Q1902.6 -256.9 1872.5 -256.9H1663Q1649 -256.9 1643.4 -249.3Q1637.8 -241.8 1637.8 -220.1Q1637.8 -173.5 1658.2 -135.2Q1678.6 -96.8 1712.8 -74.1Q1747 -51.3 1788.4 -51.3Q1818.3 -51.3 1842.8 -62.8Q1867.3 -74.2 1887 -95.9Q1890.9 -100.5 1893.1 -102.1Q1895.4 -103.8 1898.4 -103.8Q1906.7 -103.8 1906.7 -93.4Q1906.7 -75.6 1890.1 -53.1Q1875.8 -33.2 1854.5 -17.8Q1833.1 -2.3 1806.7 6.3Q1780.2 14.9 1750.8 14.9ZM1664.8 -289.4H1751.4Q1776 -289.4 1792.1 -290.4Q1808.2 -291.4 1823.3 -294.4Q1828.3 -295.5 1830 -301.4Q1831.7 -307.3 1831.7 -317.3Q1831.7 -346 1807.2 -366Q1782.7 -386 1748.8 -386Q1726.1 -386 1703.8 -372.8Q1681.4 -359.5 1666.9 -339.7Q1652.3 -320 1652.5 -300Q1652.5 -289.4 1664.8 -289.4ZM2000.5 3Q1995 3 1987.7 1.2Q1980.5 -0.6 1980.5 -6.7Q1980.5 -14.7 1987.9 -18.3Q1995.2 -21.9 2003.5 -25Q2018.5 -30 2032.2 -36.4Q2045.8 -42.8 2045.8 -63V-563.7Q2045.8 -592.4 2035.8 -612Q2025.8 -631.6 2000.8 -636.6Q1992.4 -638.6 1992.4 -649.9Q1992.4 -660.3 1999.8 -662.3Q2025.7 -668.1 2046.2 -675.1Q2066.8 -682.1 2084.8 -689.5Q2102.8 -697 2118.7 -702.9Q2123.3 -705 2125.6 -705Q2128.2 -705 2129.7 -702.3Q2131.3 -699.7 2131.3 -697.3Q2131.3 -688.5 2128 -660.5Q2124.7 -632.6 2124.5 -570.8V-63.3Q2124.5 -43 2138.2 -36.7Q2151.8 -30.3 2166.8 -25.3Q2175.2 -22.2 2182.5 -18.5Q2189.8 -14.9 2189.8 -6.9Q2189.8 -0.8 2182.6 1Q2175.4 2.8 2169.8 2.8Q2150.7 2.8 2138.2 1.3Q2125.8 -0.1 2114.3 -1.1Q2102.8 -2 2084.8 -2Q2067.8 -2 2056 -1Q2044.3 0 2032.4 1.5Q2020.5 3 2000.5 3ZM2281.1 3Q2272.4 3 2267 0.3Q2261.5 -2.3 2261.5 -8.3Q2261.5 -16.3 2268.7 -19.6Q2275.8 -22.8 2283.8 -24.8Q2305.5 -30 2316.5 -37.5Q2327.4 -44.9 2327.4 -62.7V-279.6Q2327.4 -307.6 2317.8 -327.6Q2308.2 -347.7 2282.7 -351.5Q2277.5 -352.5 2275 -355.8Q2272.4 -359.1 2272.4 -365.2Q2272.4 -376.8 2281.8 -377.9Q2323.4 -387.2 2351.5 -403Q2379.6 -418.9 2393.7 -428.9Q2403.8 -436 2408.7 -436Q2415.6 -436 2415.6 -429.9Q2415.5 -420.7 2412.8 -396.9Q2410.2 -373.2 2408.2 -344.9Q2406.1 -316.5 2406.1 -293.3V-62.8Q2406.1 -46.3 2417.4 -38.3Q2428.8 -30.3 2449.7 -24.8Q2457.7 -22.7 2464.9 -19.6Q2472.1 -16.5 2472.1 -8.5Q2472.1 2.9 2452.7 2.9Q2433.7 2.9 2420.9 1.4Q2408.1 0 2396.4 -1Q2384.6 -2 2366.6 -2Q2349.6 -2 2337.5 -1Q2325.4 0 2313.2 1.5Q2301.1 3 2281.1 3ZM2365.2 -512.8Q2342.7 -512.8 2327 -528.5Q2311.3 -544.2 2311.3 -566.7Q2311.3 -590.4 2327 -606.2Q2342.7 -621.9 2365.2 -621.9Q2389 -621.9 2404.7 -606.2Q2420.4 -590.4 2420.4 -566.7Q2420.4 -544.2 2404.7 -528.5Q2389 -512.8 2365.2 -512.8ZM2732.8 14.9Q2677.9 14.9 2636.7 -12.3Q2595.4 -39.6 2572.2 -89.1Q2549 -138.6 2549 -203.2Q2549 -261.9 2575.9 -310Q2602.8 -358.1 2647.6 -387.3Q2692.4 -416.6 2745.6 -416.6Q2785.9 -416.6 2817.4 -400.2Q2848.8 -383.9 2866.7 -355Q2884.6 -326.2 2884.6 -288.8Q2884.6 -256.9 2854.5 -256.9H2645Q2631 -256.9 2625.4 -249.3Q2619.8 -241.8 2619.8 -220.1Q2619.8 -173.5 2640.2 -135.2Q2660.6 -96.8 2694.8 -74.1Q2729 -51.3 2770.4 -51.3Q2800.3 -51.3 2824.8 -62.8Q2849.3 -74.2 2869 -95.9Q2872.9 -100.5 2875.1 -102.1Q2877.4 -103.8 2880.4 -103.8Q2888.7 -103.8 2888.7 -93.4Q2888.7 -75.6 2872.1 -53.1Q2857.8 -33.2 2836.5 -17.8Q2815.1 -2.3 2788.7 6.3Q2762.2 14.9 2732.8 14.9ZM2646.8 -289.4H2733.4Q2758 -289.4 2774.1 -290.4Q2790.2 -291.4 2805.3 -294.4Q2810.3 -295.5 2812 -301.4Q2813.7 -307.3 2813.7 -317.3Q2813.7 -346 2789.2 -366Q2764.7 -386 2730.8 -386Q2708.1 -386 2685.8 -372.8Q2663.4 -359.5 2648.9 -339.7Q2634.3 -320 2634.5 -300Q2634.5 -289.4 2646.8 -289.4Z"/>
+      </svg>
+    </div>
+    <div class="motto" id="motto">Ogni bottiglia ha una storia.</div>
     <div class="filo"></div>
     <div class="passi">
       <div class="passo">
-        <div class="p-titolo" id="invito">Appoggi</div>
-        <div class="p-spiega" id="p1-s">una bottiglia qui davanti</div>
+        <div class="icone"><svg class="icona alta segno" viewBox="0 0 60 160" aria-hidden="true"><path class="linea" d="M25 6H35V13H34V42C34 52 46 57 46 70V148C46 152.5 43.5 155 39 155H21C16.5 155 14 152.5 14 148V70C14 57 26 52 26 42V13H25Z"/><path class="linea sottile" d="M18 94H42V126H18Z"/></svg></div>
+        <div class="p-titolo" id="invito">Posi la bottiglia</div>
+        <div class="p-spiega" id="p1-s">qui davanti, con l'etichetta verso di me</div>
       </div>
-      <svg class="fra" viewBox="0 0 12 16" aria-hidden="true"><path d="M6 .8C7.25 3.75 11 7.5 11 10.75A5 5 0 0 1 1 10.75C1 7.5 4.75 3.75 6 .8Z"/></svg>
       <div class="passo">
-        <div class="p-titolo" id="p2-t">Riconosco</div>
-        <div class="p-spiega" id="p2-s">il vino dall'etichetta</div>
+        <div class="icone"><svg class="icona quadra segno" viewBox="0 0 120 120" aria-hidden="true"><path class="linea" d="M14 34V14H34M86 14H106V34M106 86V106H86M34 106H14V86"/><rect class="linea sottile" x="34" y="30" width="52" height="60" rx="3"/><path class="linea sottile" d="M44 48H76M44 60H70M44 72H74"/></svg></div>
+        <div class="p-titolo" id="p2-t">Ne leggo l'etichetta</div>
+        <div class="p-spiega" id="p2-s">e riconosco il vino in pochi secondi</div>
       </div>
-      <svg class="fra" viewBox="0 0 12 16" aria-hidden="true"><path d="M6 .8C7.25 3.75 11 7.5 11 10.75A5 5 0 0 1 1 10.75C1 7.5 4.75 3.75 6 .8Z"/></svg>
       <div class="passo">
-        <div class="p-titolo" id="p3-t">Racconto</div>
+        <div class="icone"><svg class="icona segno" viewBox="0 0 190 170" aria-hidden="true">
+          <g clip-path="url(#coppa)"><g class="livello"><rect class="vino" x="-10" y="56" width="140" height="120"/><path class="pelo" d="M-10 56H130"/></g></g>
+          <path class="linea" d="M34 14C24 34 20 62 36 82C44 93 52 100 60 100C68 100 76 93 84 82C100 62 96 34 86 14Z"/>
+          <path class="linea" d="M60 100V148"/>
+          <path class="linea" d="M36 156C46 150 52 149 60 149C68 149 74 150 84 156"/>
+          <path class="riflesso" d="M40 30C35 44 35 58 40 68"/>
+          <path class="linea sottile" d="M136 58C146 68 146 88 136 98M152 44C168 60 168 96 152 112"/></svg></div>
+        <div class="p-titolo" id="p3-t">Ne racconto la storia</div>
         <div class="p-spiega" id="p3-s">a voce e per iscritto</div>
       </div>
     </div>
@@ -1014,14 +1078,20 @@ svg { display: block; }
 
   <!-- LAVORO -->
   <section id="lavoro" class="vista">
-    <!-- La goccia del marchio cade e increspa il vino: e' il marchio che si
-         muove. Non c'e' un orlo fermo sotto di lei - visto a riposo sembrava
-         un sorriso, non un calice: la superficie la disegnano le onde. -->
-    <svg class="stilla" viewBox="0 0 240 250" aria-hidden="true">
-      <ellipse class="onda uno" cx="120" cy="196" rx="84" ry="16"/>
-      <ellipse class="onda due" cx="120" cy="196" rx="84" ry="16"/>
-      <path class="cade" d="M120 29.3C126.5 44.9 146 64.4 146 81.3A26 26 0 0 1 94 81.3
-                            C94 64.4 113.5 44.9 120 29.3Z"/>
+    <!-- Una bottiglia versa in un calice, che si riempie; poi si raddrizza e il
+         vino sfuma. Il calice e' quello del marchio, nel suo riquadro. -->
+    <svg class="versa segno" viewBox="0 0 260 250" aria-hidden="true">
+      <rect class="getto" x="148.5" y="66" width="3" height="114" rx="1.5"/>
+      <svg x="100" y="80" width="120" height="170" viewBox="0 0 120 170" overflow="visible">
+        <g clip-path="url(#coppa)"><g class="livello"><rect class="vino" x="-10" y="56" width="140" height="120"/><path class="pelo" d="M-10 56H130"/></g></g>
+        <path class="linea" d="M34 14C24 34 20 62 36 82C44 93 52 100 60 100C68 100 76 93 84 82C100 62 96 34 86 14Z"/>
+        <path class="linea" d="M60 100V148"/>
+        <path class="linea" d="M36 156C46 150 52 149 60 149C68 149 74 150 84 156"/>
+        <path class="riflesso" d="M40 30C35 44 35 58 40 68"/>
+      </svg>
+      <g transform="translate(150 66) rotate(90) scale(.7) translate(-30 -6)">
+        <g class="bottiglia"><path class="linea" d="M25 6H35V13H34V42C34 52 46 57 46 70V148C46 152.5 43.5 155 39 155H21C16.5 155 14 152.5 14 148V70C14 57 26 52 26 42V13H25Z"/><path class="linea sottile" d="M18 94H42V126H18Z"/></g>
+      </g>
     </svg>
     <div class="frase" id="frase-lavoro">Sto leggendo l'etichetta…</div>
   </section>
@@ -1560,6 +1630,7 @@ function disegnaPassi(passi) {
 function disegnaLingue(m) {
   document.documentElement.lang = m.lingua || "it";
   if (m.invito)  $("invito").textContent  = m.invito;
+  if (m.motto)   $("motto").textContent   = m.motto;
   if (m.domanda) $("domanda").textContent = m.domanda;
   if (m.avviso_muto) $("muto").textContent = m.avviso_muto;
   disegnaPassi(m.passi);
@@ -1654,9 +1725,12 @@ eventi.onmessage = (e) => {
       t.innerHTML = "";
       const s = document.createElement("div");
       s.className = "scrivendo";
-      s.innerHTML = '<svg viewBox="0 0 20 28" aria-hidden="true"><path d="M10 1.2' +
-        'C12 6 18 12 18 17.4A8 8 0 0 1 2 17.4C2 12 8 6 10 1.2Z"/></svg><span></span>';
-      s.lastChild.textContent = parole.sto_scrivendo || "…";
+      /* Il calice del marchio, copiato: un disegno solo per tutta la pagina. */
+      const c = document.querySelector("#attesa .marchio .calice").cloneNode(true);
+      c.setAttribute("class", "calicino segno");
+      const scritta = document.createElement("span");
+      scritta.textContent = parole.sto_scrivendo || "…";
+      s.append(c, scritta);
       t.appendChild(s);
       frasi = []; viva = -1; avanzamento(0);
       segnaCorrezione();

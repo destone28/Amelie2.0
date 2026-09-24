@@ -403,8 +403,8 @@
       "en": "None of these"
     },
     "appoggia_bottiglia": {
-      "it": "Appoggi una bottiglia",
-      "en": "Place a bottle"
+      "it": "Posi la bottiglia qui davanti",
+      "en": "Set your bottle down here"
     },
     "voce_assente": {
       "it": "In questa lingua il racconto si legge, non si ascolta.",
@@ -502,24 +502,28 @@
       "it": "Tocca dopo aver ricaricato: la stima riparte da piena.",
       "en": "Tap after charging: the estimate restarts from full."
     },
+    "motto": {
+      "it": "Ogni bottiglia ha una storia.",
+      "en": "Every bottle has a story."
+    },
     "passo_appoggia": {
-      "it": "Appoggi",
-      "en": "Place"
+      "it": "Posi la bottiglia",
+      "en": "Set down your bottle"
     },
     "passo_appoggia_spiega": {
-      "it": "una bottiglia qui davanti",
-      "en": "a bottle right here"
+      "it": "qui davanti, con l'etichetta verso di me",
+      "en": "right here, with the label facing me"
     },
     "passo_riconosce": {
-      "it": "Riconosco",
-      "en": "I recognise"
+      "it": "Ne leggo l'etichetta",
+      "en": "I read its label"
     },
     "passo_riconosce_spiega": {
-      "it": "il vino dall'etichetta",
-      "en": "the wine from its label"
+      "it": "e riconosco il vino in pochi secondi",
+      "en": "and recognise the wine in seconds"
     },
     "passo_racconta": {
-      "it": "Racconto",
+      "it": "Ne racconto la storia",
       "en": "I tell its story"
     },
     "passo_racconta_spiega": {

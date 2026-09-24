@@ -405,6 +405,10 @@ class TestUnSoloColore:
         tracce = [re.search(r'<path class="parola" d="([^"]+)"', t).group(1)
                   for t in (index, avvio)]
         assert tracce[0] == tracce[1], "il marchio dell'avvio non e' quello dell'attesa"
+        # E il calice sopra il nome, con la coppa che ne ritaglia il vino.
+        coppe = [re.search(r'<clipPath id="coppa"><path d="([^"]+)"', t).group(1)
+                 for t in (index, avvio)]
+        assert coppe[0] == coppe[1], "il calice dell'avvio non e' quello dell'attesa"
 
     def test_lo_stesso_bordeaux_dappertutto(self):
         for nome, testo in self._testo(
