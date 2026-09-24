@@ -258,7 +258,8 @@ class TestLeScritte:
     def test_tutte_le_scritte_dell_editor_in_tutte_le_lingue(self, amelie):
         chiavi = ("correggi_descrizione", "modifica_descrizione", "campo_titolo",
                   "campo_descrizione", "salva", "titolo_vuoto", "descrizione_vuota",
-                  "correzione_spiega", "correzione_salvata", "tasto_spazio")
+                  "correzione_spiega", "correzione_salvata", "correzione_vicine",
+                  "tasto_spazio")
         for lingua in amelie.lex.lingue:
             for k in chiavi:
                 assert amelie.lex.frase("schermo", k, lingua=lingua).strip(), (lingua, k)

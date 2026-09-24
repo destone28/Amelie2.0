@@ -56,6 +56,26 @@ def _lingua(lingua: str) -> dict:
 
 LINGUA_IT = _lingua("it")
 LINGUA_EN = _lingua("en")
+_CHIAVI_CORREZIONE = ("correggi_descrizione", "modifica_descrizione", "campo_titolo",
+                      "campo_descrizione", "salva", "titolo_vuoto", "descrizione_vuota",
+                      "correzione_spiega", "correzione_salvata", "correzione_vicine",
+                      "tasto_spazio", "annulla")
+for _l, _m in (("it", LINGUA_IT), ("en", LINGUA_EN)):
+    _m["correzione"] = {k: _scritta(k, _l) for k in _CHIAVI_CORREZIONE}
+
+
+def _frase_corpo(chiave: str, lingua: str) -> str:
+    v = _LESSICO["corpo"][chiave][lingua]
+    return v if isinstance(v, str) else v[0]
+
+
+# Una bottiglia al posto della foto vera, che qui non c'e': la sagoma basta a
+# vedere dove sta e quanto occupa.
+_FOTO = ("data:image/svg+xml;utf8," +
+         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 216'>"
+         "<rect width='120' height='216' fill='%23241a17'/>"
+         "<path d='M50 14h20v40c0 8 22 16 22 36v112H28V90c0-20 22-28 22-36z' fill='%235a211c'/>"
+         "<rect x='32' y='112' width='56' height='50' rx='4' fill='%23e8dcc8'/></svg>")
 
 # Le scritte del pannello delle impostazioni, come le manda il server.
 _CHIAVI_IMPOSTAZIONI = (
@@ -181,6 +201,50 @@ SCENE: dict[str, list[dict]] = {
         {"tipo": "mirino", "acceso": False, "disponibile": True},
         {"tipo": "salute", "tutto_bene": True, "batteria": {"tacche": 3}}],
 
+    # La bottiglia che non e' in archivio: il racconto dice di aver fatto da se',
+    # e sotto c'e' il pulsante per correggerlo.
+    "fuori_archivio": [
+        LINGUA_IT,
+        {"tipo": "stato", "vista": "racconto", "titolo": "spumante rosato metodo classico, brut",
+         "sottotitolo": "", "voce_muta": False, "correzione": "correggi"},
+        {"tipo": "racconto", "origine": "template", "frasi": [
+            "Si tratta di uno spumante rosato metodo classico, brut.",
+            "Va servito fra 6 e 8 gradi.",
+            _frase_corpo("generico_limite", "it")]},
+        {"tipo": "riproduzione", "frase": 2, "posizione": 9.0, "durata": 12.0,
+         "quota": 0.75, "in_pausa": False}],
+
+    # Il caso piu' alto dell'intestazione: titolo su due righe, la cantina letta
+    # sull'etichetta, e il pulsante.
+    "fuori_archivio_cantina": [
+        LINGUA_IT,
+        {"tipo": "stato", "vista": "racconto", "titolo": "spumante rosato metodo classico, brut",
+         "sottotitolo": "Palamà · 2021", "voce_muta": False, "correzione": "correggi"},
+        {"tipo": "racconto", "origine": "template", "frasi": [
+            "Si tratta di uno spumante rosato metodo classico, brut, di Palamà.",
+            "Va servito fra 6 e 8 gradi.",
+            _frase_corpo("generico_limite", "it")]},
+        {"tipo": "riproduzione", "frase": 0, "posizione": 1.0, "durata": 12.0,
+         "quota": 0.1, "in_pausa": False}],
+
+    # Una bottiglia gia' corretta: il racconto e' quello scritto, e si puo' modificare.
+    "corretta": [
+        LINGUA_IT,
+        {"tipo": "stato", "vista": "racconto", "titolo": "Albarossa Negroamaro Rosato",
+         "sottotitolo": "", "voce_muta": False, "correzione": "modifica"},
+        {"tipo": "racconto", "origine": "correzione", "frasi": [
+            "Questo è l'Albarossa Negroamaro Rosato.",
+            "Un rosato del Salento da uve Negroamaro, di Palamà.",
+            "Fresco e sapido, con note di fragola e melograno: da aperitivo e da pesce."]},
+        {"tipo": "riproduzione", "frase": 1, "posizione": 3.0, "durata": 11.0,
+         "quota": 0.3, "in_pausa": False}],
+
+    # L'editor: si apre col tocco, e la risposta del server si finge.
+    "editor": [LINGUA_IT, {"tipo": "stato", "vista": "racconto", "titolo": "x",
+                           "correzione": "correggi"}],
+    "editor_vicine": [LINGUA_IT, {"tipo": "stato", "vista": "racconto", "titolo": "x",
+                                  "correzione": "correggi"}],
+
     "senza_voce": [
         {**LINGUA_EN, "voce_muta": True,
          "avviso_muto": "In this language the story is written, not spoken."},
@@ -199,6 +263,20 @@ DOPO = {
     "volume_muto": "alternaVolume()",
     "volume_sul_racconto": "alternaVolume()",
     "impostazioni": "apriImpostazioni()",
+    "editor": "apriEditor()",
+    "editor_vicine": "apriEditor()",
+}
+
+# Che cosa risponde il server finto, per le scene che gli chiedono qualcosa.
+RISPOSTE = {
+    "editor": {"/correzione/apri": {
+        "ok": True, "id": None, "lingua": "it", "titolo": "Albarossa Negroamaro",
+        "descrizione": "Un rosato del Salento da uve Negroamaro, di Palamà. "
+                       "Fresco e sapido, con note di fragola", "vicine": []}},
+    "editor_vicine": {"/correzione/apri": {
+        "ok": True, "id": None, "lingua": "it", "titolo": "", "descrizione": "",
+        "vicine": [{"id": "a", "titolo": "Albarossa Negroamaro Rosato", "descrizione": ""},
+                   {"id": "b", "titolo": "Metiusco Salento Rosato", "descrizione": ""}]}},
 }
 
 # Sostituisce EventSource e fetch: la pagina crede di parlare col server.
@@ -211,7 +289,9 @@ class EventSource {
   }), 30); }
   close() {}
 }
-window.fetch = () => Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+const RISPOSTE = __RISPOSTE__;
+window.fetch = (url) => Promise.resolve({ json: () => Promise.resolve(
+  RISPOSTE[String(url).split("?")[0]] || { ok: true }) });
 const MESSAGGI = __MESSAGGI__;
 setTimeout(() => { try { __DOPO__; } catch (e) { console.error(e); } }, 300);
 </script>
@@ -270,11 +350,15 @@ def main() -> None:
 
     for nome in [n for n in (args.solo or SCENE) if n != "avvio"]:
         pagina = sorgente.replace(
+            '"/correzione/foto/adesso?" + Date.now()', json.dumps(_FOTO)).replace(
+            '"/correzione/foto/" + encodeURIComponent(v.id)', json.dumps(_FOTO)).replace(
             'url("/fonts/', f'url("file://{PAGINA.parent}/fonts/').replace(
             '<script>\n"use strict";',
             FINTA.replace("__MESSAGGI__",
                           json.dumps(SCENE[nome], ensure_ascii=False))
                  .replace("__DOPO__", DOPO.get(nome, "0"))
+                 .replace("__RISPOSTE__", json.dumps(RISPOSTE.get(nome, {}),
+                                                     ensure_ascii=False))
             + '<script>\n"use strict";')
         ritrai(browser, pagina, fuori / f"{nome}.png", args)
 

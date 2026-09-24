@@ -540,7 +540,7 @@ class Amelie:
                                "campo_titolo", "campo_descrizione", "salva",
                                "titolo_vuoto", "descrizione_vuota",
                                "correzione_spiega", "correzione_salvata",
-                               "tasto_spazio", "annulla")
+                               "correzione_vicine", "tasto_spazio", "annulla")
             },
             # Che cosa fa l'oggetto, in tre passi, sulla schermata d'attesa.
             "passi": [
@@ -1889,7 +1889,8 @@ class Amelie:
             # Se questa bottiglia somiglia a una gia' corretta ma non abbastanza
             # da riconoscerla, si chiede a chi scrive se e' lei.
             "vicine": [] if c is not None else [
-                {"id": v.id, "titolo": v.titolo()}
+                {"id": v.id, "titolo": v.titolo(),
+                 "descrizione": (v.testo_in(self.lingua) or {}).get("descrizione", "")}
                 for v in self.correzioni.vicine(self._righe_lette)],
         }
 

@@ -817,6 +817,138 @@ svg { display: block; }
   border: 2px solid var(--oro); border-radius: var(--raggio);
 }
 #d-chiudi.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
+
+/* ===========================================================================
+   CORREGGERE — la bottiglia che non e' in archivio, descritta da chi la conosce.
+
+   Il pulsante sta nell'intestazione, sotto il titolo generico che corregge.
+   In coda al racconto finiva sotto la sfumatura del testo, o fuori dal
+   riquadro finche' il testo non scorreva fino in fondo: un pulsante che si
+   vede solo a volte non c'e'. Compare insieme al testo e non prima, perche'
+   prima non c'e' niente da correggere; ha il filetto e l'oro dei comandi,
+   perche' e' un comando.
+   =========================================================================== */
+/* La scatola e' alta un bersaglio, 108 pixel, e la pillola che si vede ne
+   occupa 60 al centro: i margini negativi le restituiscono lo spazio che ha
+   in piu'. Il bersaglio deve essere la SCATOLA, non uno pseudo-elemento
+   allargato: `rendiToccabile` agisce solo se il dito si alza dentro il
+   riquadro dell'elemento, e un tocco sull'alone di un ::before partiva e poi
+   non faceva niente. */
+.correggi {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: var(--tocco); padding: 0 var(--passo);
+  margin: calc(var(--passo) * 1.25 - (var(--tocco) - 60px) / 2) 0
+          calc((60px - var(--tocco)) / 2);
+  animation: affiora var(--d-vista) var(--curva);
+}
+.correggi[hidden] { display: none; }
+.correggi .pillola {
+  display: inline-flex; align-items: center; gap: var(--passo);
+  height: 60px; padding: 0 calc(var(--passo) * 2.25);
+  border: 2px solid var(--oro-scuro); border-radius: 30px;
+  font-size: var(--t-piccolo); color: var(--oro-chiaro);
+  background: rgba(200,134,13,.08);
+  transition: transform var(--d-tocco) var(--curva), background-color var(--d-stato),
+              border-color var(--d-stato);
+}
+.correggi svg { width: 24px; height: 24px; fill: currentColor; flex: none; }
+.correggi.premuto .pillola { transform: scale(.97); background: rgba(200,134,13,.22);
+                             border-color: var(--oro); }
+@keyframes affiora { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .correggi { animation: none; } }
+
+/* L'editor copre tutto, anche lingue e volume: mentre si scrive il
+   dispositivo non racconta, non ascolta il piatto e non cambia lingua. */
+#correzione {
+  position: absolute; inset: 0; z-index: 11; background: var(--carbone);
+  display: flex; flex-direction: column;
+}
+#correzione[hidden] { display: none; }
+#k-barra {
+  flex: none; height: 88px; display: flex; align-items: center;
+  gap: calc(var(--passo) * 2); padding: 0 var(--margine);
+}
+#k-barra .cmd { width: 72px; height: 72px; }
+#k-titolo-editor { flex: 1; font-size: var(--t-sottotit); color: var(--oro-chiaro);
+                   text-align: center; white-space: nowrap; overflow: hidden;
+                   text-overflow: ellipsis; }
+#k-salva {
+  flex: none; height: 72px; min-width: 180px; padding: 0 calc(var(--passo) * 2.5);
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--t-piccolo); color: var(--carbone); background: var(--oro-chiaro);
+  border-radius: 36px; font-weight: 500;
+  transition: transform var(--d-tocco) var(--curva), background-color var(--d-stato);
+}
+#k-salva.premuto { transform: scale(.96); background: var(--oro); }
+/* Mentre scrive - foto, parole, punti dell'etichetta - non si ripreme. */
+#k-salva.in-corso { opacity: .55; }
+/* Una riga sola sotto la barra: di norma spiega che cosa resta sul
+   dispositivo; se la bottiglia somiglia a una gia' corretta, propone quella. */
+#k-nota {
+  flex: none; min-height: 60px; display: flex; align-items: center;
+  justify-content: center; text-align: center;
+  gap: var(--passo); padding: 0 var(--margine);
+  font-size: var(--t-minuto); color: var(--avorio-tenue); line-height: 1.25;
+}
+#k-nota.errore { color: var(--errore-luce); }
+#k-nota.fatto { color: var(--oro-chiaro); }
+.k-vicina {
+  display: flex; align-items: center; gap: 10px; height: 56px;
+  padding: 0 18px 0 6px; border: 2px solid var(--oro-scuro); border-radius: 28px;
+  color: var(--avorio); font-size: var(--t-minuto); white-space: nowrap;
+}
+.k-vicina img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+.k-vicina.scelta { border-color: var(--oro); background: rgba(200,134,13,.18); }
+#k-campi {
+  flex: 1 1 auto; min-height: 0; display: flex; gap: calc(var(--passo) * 1.5);
+  padding: 0 var(--margine) var(--passo);
+}
+#k-foto {
+  flex: none; width: 120px; border-radius: var(--raggio); background: #000;
+  object-fit: cover;
+}
+#k-colonna { flex: 1; min-width: 0; display: flex; flex-direction: column;
+             gap: var(--passo); }
+.k-campo {
+  width: 100%; font: inherit; color: var(--avorio); line-height: 1.3;
+  background: rgba(90,33,28,.35); border: 2px solid var(--oro-scuro);
+  border-radius: var(--raggio); padding: 10px 18px;
+  /* Qui si seleziona e si sposta il cursore col dito: e' l'unico posto
+     dell'interfaccia in cui il testo si puo' toccare. */
+  -webkit-user-select: text; user-select: text; caret-color: var(--oro-chiaro);
+  resize: none; outline: none;
+}
+.k-campo::placeholder { color: var(--avorio-fioco); }
+.k-campo.attivo { border-color: var(--oro); background: rgba(90,33,28,.6); }
+.k-campo.vuoto { border-color: var(--errore-luce); }
+#k-titolo { font-size: var(--t-sottotit); height: 64px; flex: none; }
+#k-descrizione { font-size: var(--t-piccolo); flex: 1; min-height: 0; overflow-y: auto; }
+#k-descrizione::-webkit-scrollbar { display: none; }
+
+/* La tastiera. Undici tasti per riga: larghi quanto un polpastrello (104 px,
+   8,8 mm sul vetro) e alti un po' meno (80 px, 6,8 mm), come su un telefono -
+   quattro righe alte nove millimetri non lascerebbero spazio ai campi. */
+#tastiera {
+  flex: none; display: flex; flex-direction: column; gap: 8px;
+  padding: 12px var(--margine) 16px; background: #1B1412;
+  border-top: 1px solid rgba(138,107,48,.35);
+}
+.t-riga { display: flex; gap: 8px; justify-content: center; }
+.tasto {
+  flex: 1 1 0; height: 80px; display: flex; align-items: center; justify-content: center;
+  font-size: 34px; color: var(--avorio);
+  background: rgba(244,237,227,.08); border: 1px solid rgba(200,134,13,.22);
+  border-radius: 12px;
+  transition: background-color var(--d-tocco);
+}
+.tasto.servizio { background: rgba(200,134,13,.12); color: var(--oro-chiaro);
+                  font-size: var(--t-minuto); }
+/* Lo spazio vale cinque tasti piu' i quattro intervalli che ci starebbero in
+   mezzo: cosi' le colonne restano in fila da una riga all'altra. */
+.tasto.largo { flex: 5 1 32px; font-size: var(--t-minuto); color: var(--avorio-tenue); }
+.tasto.acceso { background: rgba(200,134,13,.35); color: var(--avorio); }
+.tasto.premuto { background: rgba(200,134,13,.45); }
+.tasto svg { width: 34px; height: 34px; fill: currentColor; }
 </style>
 </head>
 <body>
@@ -890,6 +1022,9 @@ svg { display: block; }
     <header class="intestazione">
       <div class="titolo"   id="r-titolo"></div>
       <div class="sottotit" id="r-sottotitolo"></div>
+      <div class="correggi" id="r-correggi" role="button" hidden>
+        <span class="pillola"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg><span class="scritta"></span></span>
+      </div>
     </header>
     <div class="testo" id="r-testo"></div>
     <div class="comandi" id="r-comandi">
@@ -982,6 +1117,29 @@ svg { display: block; }
     <pre id="d-corpo"></pre>
     <div id="d-chiudi">chiudi</div>
   </section>
+
+  <!-- CORREGGERE: titolo e descrizione di una bottiglia, dalla tastiera a schermo. -->
+  <section id="correzione" hidden>
+    <div id="k-barra">
+      <button class="cmd spento" id="k-chiudi" aria-label="Annulla">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+      <div id="k-titolo-editor">Correggi la descrizione</div>
+      <div id="k-salva" role="button">Salva</div>
+    </div>
+    <div id="k-nota"></div>
+    <div id="k-campi">
+      <!-- La foto che resta sul dispositivo: si vede che cosa si sta correggendo. -->
+      <img id="k-foto" alt="">
+      <div id="k-colonna">
+        <input id="k-titolo" class="k-campo" inputmode="none" autocomplete="off"
+               spellcheck="false" maxlength="120">
+        <textarea id="k-descrizione" class="k-campo" inputmode="none"
+                  spellcheck="false" maxlength="2000"></textarea>
+      </div>
+    </div>
+    <div id="tastiera"></div>
+  </section>
 </div>
 
 <script>
@@ -997,7 +1155,11 @@ const parole = {};
    tocco lungo, niente trascinamento, niente ingrandimento a due dita. Sono
    difetti che si vedono solo con un dito vero su un tavolo vero. */
 for (const evento of ["contextmenu", "dragstart", "gesturestart", "selectstart"]) {
-  document.addEventListener(evento, (e) => e.preventDefault(), { passive: false });
+  document.addEventListener(evento, (e) => {
+    /* Nei campi dell'editor il cursore si sposta col dito: e' l'unico posto. */
+    if (evento === "selectstart" && e.target.closest && e.target.closest(".k-campo")) return;
+    e.preventDefault();
+  }, { passive: false });
 }
 
 /* La scena è disegnata per 1280x720 e ci resta: qui si calcola di quanto va
@@ -1062,6 +1224,7 @@ function componiRacconto(elenco) {
   viva = -1;
   t.scrollTop = 0;
   avanzamento(0);
+  segnaCorrezione();
 }
 
 function illumina(i) {
@@ -1354,6 +1517,7 @@ eventi.onmessage = (e) => {
   switch (m.tipo) {
     case "stato":
       if (m.vista === "racconto") {
+        azioneCorrezione = m.correzione || null;
         const titolo = m.titolo || "";
         $("r-titolo").textContent = titolo;
         /* I gradini contano le lettere: trentaquattro stanno su una riga al
@@ -1371,7 +1535,10 @@ eventi.onmessage = (e) => {
            ascoltato. Svuotandola, l'ospite guardava due secondi di schermo
            vuoto ogni volta che una storia finiva. */
         if (!m.stesso_racconto) componiRacconto([]);
+        segnaCorrezione();
       }
+      /* L'editor vive dentro al racconto: se il dispositivo va altrove, si chiude. */
+      if (m.vista !== "racconto" && !$("correzione").hidden) chiudiEditor(false);
       if (m.vista === "lavoro" && m.frase) $("frase-lavoro").textContent = m.frase;
       if (m.vista === "avviso") {
         $("a-frase").textContent = m.frase || "";
@@ -1403,6 +1570,7 @@ eventi.onmessage = (e) => {
       s.lastChild.textContent = parole.sto_scrivendo || "…";
       t.appendChild(s);
       frasi = []; viva = -1; avanzamento(0);
+      segnaCorrezione();
       break;
     }
 
@@ -1453,6 +1621,8 @@ eventi.onmessage = (e) => {
     case "lingua":
       disegnaLingue(m);
       parole.sto_scrivendo = m.sto_scrivendo || "";
+      parole.correzione = m.correzione || {};
+      segnaCorrezione();
       if (m.impostazioni) {
         $("i-titolo").textContent = m.impostazioni.impostazioni;
         $("i-modo-titolo").textContent = m.impostazioni.modo_titolo;
@@ -1493,6 +1663,11 @@ eventi.onmessage = (e) => {
 
     case "mirino":
       disegnaMirino(m);
+      break;
+
+    case "correzione":
+      /* Il server chiude l'editor quando e' rimasto aperto troppo a lungo. */
+      if (m.aperta === false) chiudiEditor(false);
       break;
 
     case "salute":
@@ -1686,6 +1861,316 @@ function aggiornaLettura() {
   /* Si torna alle impostazioni, non allo schermo del tavolo: chi e' entrato
      per guardare lo stato di solito vuole anche l'interruttore. */
   rendiToccabile($("d-chiudi"), () => { $("diagnostica").hidden = true; });
+})();
+
+/* ------------------------------------------------------------- correzione */
+
+/* Quale pulsante offrire. Lo decide il server - «correggi» sulla bottiglia
+   fuori archivio, «modifica» su una gia' corretta - e arriva col messaggio di
+   stato; si accende quando arriva il testo, e resta acceso a racconto finito. */
+let azioneCorrezione = null;
+
+function segnaCorrezione() {
+  const b = $("r-correggi");
+  const c = parole.correzione || {};
+  b.hidden = !azioneCorrezione || !frasi.length;
+  b.querySelector(".scritta").textContent = azioneCorrezione === "modifica"
+    ? (c.modifica_descrizione || "Modifica la descrizione")
+    : (c.correggi_descrizione || "Correggi la descrizione");
+}
+
+/* --- L'editor ------------------------------------------------------------ */
+
+let campoAttivo = "titolo";
+let idScelto = null;            /* la correzione a cui si aggiunge, se c'e' */
+
+function scritte() { return parole.correzione || {}; }
+
+function nota(testo, errore) {
+  const n = $("k-nota");
+  n.innerHTML = "";
+  n.textContent = testo || "";
+  n.classList.toggle("errore", !!errore);
+  n.classList.remove("fatto");
+}
+
+function apriEditor() {
+  fetch("/correzione/apri", { method: "POST" })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) return;
+      const s = scritte();
+      idScelto = d.id || null;
+      $("k-titolo-editor").textContent = d.id
+        ? (s.modifica_descrizione || "Modifica la descrizione")
+        : (s.correggi_descrizione || "Correggi la descrizione");
+      $("k-salva").textContent = s.salva || "Salva";
+      if (s.annulla) $("k-chiudi").setAttribute("aria-label", s.annulla);
+      $("k-titolo").placeholder = s.campo_titolo || "Titolo";
+      $("k-descrizione").placeholder = s.campo_descrizione || "Descrizione";
+      $("k-titolo").value = d.titolo || "";
+      $("k-descrizione").value = d.descrizione || "";
+      $("k-foto").src = "/correzione/foto/adesso?" + Date.now();
+      for (const c of document.querySelectorAll(".k-campo")) c.classList.remove("vuoto");
+      if (Array.isArray(d.vicine) && d.vicine.length) disegnaVicine(d.vicine);
+      else nota(s.correzione_spiega || "");
+      $("correzione").hidden = false;
+      /* Si riparte dalle lettere: chi aveva lasciato i numeri o le maiuscole
+         fisse la volta prima non se lo ricorda. */
+      strato = LETTERE; maiuscola = false; maiuscoleFisse = false;
+      disegnaTastiera();
+      attiva(d.titolo ? "descrizione" : "titolo");
+    })
+    .catch(() => {});
+}
+
+/* Una bottiglia gia' corretta che stavolta non si e' riconosciuta: si propone,
+   con la sua foto, e toccarla vuol dire «e' lei». */
+function disegnaVicine(vicine) {
+  const n = $("k-nota");
+  n.innerHTML = "";
+  n.classList.remove("errore", "fatto");
+  const d = document.createElement("span");
+  d.textContent = scritte().correzione_vicine || "";
+  n.appendChild(d);
+  for (const v of vicine) {
+    const b = document.createElement("div");
+    b.className = "k-vicina";
+    const f = document.createElement("img");
+    f.src = "/correzione/foto/" + encodeURIComponent(v.id);
+    f.alt = "";
+    const t = document.createElement("span");
+    t.textContent = v.titolo;
+    b.append(f, t);
+    rendiToccabile(b, () => {
+      const scelta = !b.classList.contains("scelta");
+      document.querySelectorAll(".k-vicina").forEach(x => x.classList.remove("scelta"));
+      b.classList.toggle("scelta", scelta);
+      idScelto = scelta ? v.id : null;
+      if (scelta) {
+        $("k-titolo").value = v.titolo || "";
+        if (v.descrizione) $("k-descrizione").value = v.descrizione;
+        attiva("descrizione");
+      }
+    });
+    n.appendChild(b);
+  }
+}
+
+function chiudiEditor(avvisa) {
+  $("correzione").hidden = true;
+  document.activeElement && document.activeElement.blur();
+  if (avvisa) fetch("/correzione/chiudi", { method: "POST" }).catch(() => {});
+}
+
+let salvando = false;
+
+function salvaEditor() {
+  if (salvando) return;
+  const s = scritte();
+  const titolo = $("k-titolo").value.trim();
+  const descrizione = $("k-descrizione").value.trim();
+  $("k-titolo").classList.toggle("vuoto", !titolo);
+  $("k-descrizione").classList.toggle("vuoto", !descrizione);
+  if (!titolo) { nota(s.titolo_vuoto || "", true); attiva("titolo"); return; }
+  if (!descrizione) { nota(s.descrizione_vuota || "", true); attiva("descrizione"); return; }
+  salvando = true;
+  $("k-salva").classList.add("in-corso");
+  const libera = () => { salvando = false; $("k-salva").classList.remove("in-corso"); };
+  fetch("/correzione/salva", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ titolo, descrizione, id: idScelto }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        /* Si dice che e' fatto prima di chiudere: dietro, intanto, la voce
+           ha gia' cominciato a leggere la descrizione nuova. */
+        nota(s.correzione_salvata || "");
+        $("k-nota").classList.add("fatto");
+        setTimeout(() => { chiudiEditor(false); libera(); }, 900);
+        return;
+      }
+      libera();
+      if (d.campo) {
+        $("k-" + d.campo).classList.add("vuoto");
+        nota(d.campo === "titolo" ? s.titolo_vuoto : s.descrizione_vuota, true);
+        attiva(d.campo);
+      } else {
+        nota(d.motivo || "", true);
+      }
+    })
+    .catch(libera);
+}
+
+function attiva(nome, alFondo = true) {
+  campoAttivo = nome;
+  for (const c of document.querySelectorAll(".k-campo")) {
+    c.classList.toggle("attivo", c.id === "k-" + nome);
+  }
+  const campo = $("k-" + nome);
+  /* Il fuoco serve al cursore: la tastiera del sistema non c'e' (inputmode
+     none), ma senza fuoco non si vedrebbe dove si sta scrivendo. */
+  campo.focus({ preventScroll: true });
+  /* Aprendo, o passando al campo dopo, il cursore va in fondo. Sotto il dito
+     no: li' lo mette il browser dove si e' toccato. */
+  if (alFondo) campo.setSelectionRange(campo.value.length, campo.value.length);
+  aggiornaMaiuscola();
+}
+
+/* --- La tastiera --------------------------------------------------------- */
+
+/* Italiana: le accentate stanno sui tasti, non dietro una pressione lunga che
+   su un tavolo nessuno scoprirebbe. L'apostrofo e' in prima fila - in
+   italiano si scrive ogni tre parole - e il punto e la virgola accanto allo
+   spazio. */
+const LETTERE = [
+  ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "è"],
+  ["a", "s", "d", "f", "g", "h", "j", "k", "l", "ò", "à"],
+  ["⇧", "z", "x", "c", "v", "b", "n", "m", "ù", "ì", "⌫"],
+  ["?123", ",", "'", "␣", ".", "é", "↵"],
+];
+const SIMBOLI = [
+  ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "°"],
+  ["-", "/", ":", ";", "(", ")", "€", "%", "&", "«", "»"],
+  ["+", "=", "\"", "!", "?", "@", "#", "*", "·", "–", "⌫"],
+  ["ABC", ",", "'", "␣", ".", "…", "↵"],
+];
+const CANCELLA = '<svg viewBox="0 0 24 24"><path d="M22 3H7c-.69 0-1.23.35-1.59.88' +
+  'L0 12l5.41 8.11c.36.53.9.89 1.59.89h15c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-3 12.59' +
+  'L17.59 17 14 13.41 10.41 17 9 15.59 12.59 12 9 8.41 10.41 7 14 10.59 17.59 7 19 ' +
+  '8.41 15.41 12 19 15.59z"/></svg>';
+/* Come su ogni telefono: la freccia vuota scrive minuscolo, piena scrive la
+   prossima lettera maiuscola, piena e sottolineata le scrive tutte. Era il
+   carattere ⇧, che il Garamond non ha: usciva da un altro carattere, sottile
+   e piu' piccolo delle due icone accanto. */
+const MAIUSCOLA = {
+  spenta: '<svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2.5 21.5 12.5H16V20H8' +
+    'v-7.5H2.5L12 2.5zm0 3L7 10.5h3V18h4v-7.5h3L12 5.5z"/></svg>',
+  accesa: '<svg viewBox="0 0 24 24"><path d="M12 2.5 21.5 12.5H16V20H8v-7.5H2.5z"/></svg>',
+  fissa: '<svg viewBox="0 0 24 24"><path d="M12 1 21.5 11H16v6H8v-6H2.5zM8 19h8v2.5H8z"/></svg>',
+};
+const A_CAPO = '<svg viewBox="0 0 24 24"><path d="M19 7v4H5.83l3.58-3.59L8 6l-6 6 6 6 ' +
+  '1.41-1.41L5.83 13H21V7z"/></svg>';
+
+let strato = LETTERE;
+let maiuscola = false;          /* la prossima lettera, e basta */
+let maiuscoleFisse = false;     /* doppio tocco sul tasto delle maiuscole */
+let ultimoShift = 0;
+
+function disegnaTastiera() {
+  const box = $("tastiera");
+  box.innerHTML = "";
+  for (const riga of strato) {
+    const r = document.createElement("div");
+    r.className = "t-riga";
+    for (const t of riga) {
+      const k = document.createElement("div");
+      k.className = "tasto";
+      k.dataset.tasto = t;
+      if (t === "⌫") { k.classList.add("servizio"); k.innerHTML = CANCELLA; }
+      else if (t === "↵") { k.classList.add("servizio"); k.innerHTML = A_CAPO; }
+      else if (t === "⇧") {
+        k.classList.add("servizio");
+        k.innerHTML = MAIUSCOLA[maiuscoleFisse ? "fissa" : maiuscola ? "accesa" : "spenta"];
+      }
+      else if (t === "?123" || t === "ABC") { k.classList.add("servizio"); k.textContent = t; }
+      else if (t === "␣") {
+        k.classList.add("largo");
+        k.textContent = scritte().tasto_spazio || "spazio";
+      } else {
+        k.textContent = maiuscola || maiuscoleFisse ? t.toUpperCase() : t;
+      }
+      premiTasto(k, t);
+      r.appendChild(k);
+    }
+    box.appendChild(r);
+  }
+  const s = box.querySelector('[data-tasto="⇧"]');
+  if (s) s.classList.toggle("acceso", maiuscola || maiuscoleFisse);
+}
+
+/* Un tasto agisce alla PRESSIONE, non al rilascio come i pulsanti: su una
+   tastiera il rilascio aggiunge un ritardo che si sente a ogni lettera. Il
+   dito che scivola via non annulla niente - come su ogni tastiera. Il tasto
+   che cancella, tenuto premuto, continua a cancellare. */
+function premiTasto(k, t) {
+  let ripeti = null;
+  const ferma = () => { clearTimeout(ripeti); clearInterval(ripeti); ripeti = null;
+                        k.classList.remove("premuto"); };
+  k.addEventListener("pointerdown", (e) => {
+    e.preventDefault();          /* il fuoco resta nel campo */
+    k.classList.add("premuto");
+    batti(t);
+    if (t === "⌫") {
+      ripeti = setTimeout(() => { ripeti = setInterval(() => batti("⌫"), 70); }, 450);
+    }
+  });
+  for (const ev of ["pointerup", "pointercancel", "pointerleave"]) {
+    k.addEventListener(ev, ferma);
+  }
+}
+
+function batti(t) {
+  const campo = $("k-" + campoAttivo);
+  if (t === "⇧") {
+    const ora = performance.now();
+    if (ora - ultimoShift < 350) { maiuscoleFisse = !maiuscoleFisse; maiuscola = false; }
+    else { maiuscola = !maiuscola; if (maiuscoleFisse) { maiuscoleFisse = false; maiuscola = false; } }
+    ultimoShift = ora;
+    disegnaTastiera();
+    return;
+  }
+  if (t === "?123") { strato = SIMBOLI; disegnaTastiera(); return; }
+  if (t === "ABC") { strato = LETTERE; disegnaTastiera(); return; }
+  if (t === "↵") {
+    if (campoAttivo === "titolo") { attiva("descrizione"); return; }
+    inserisci(campo, "\n");
+  } else if (t === "⌫") {
+    const a = campo.selectionStart, b = campo.selectionEnd;
+    if (a !== b) campo.setRangeText("", a, b, "end");
+    else if (a > 0) campo.setRangeText("", a - 1, a, "end");
+  } else if (t === "␣") {
+    inserisci(campo, " ");
+  } else {
+    inserisci(campo, maiuscola || maiuscoleFisse ? t.toUpperCase() : t);
+    if (maiuscola) { maiuscola = false; disegnaTastiera(); }
+  }
+  campo.classList.remove("vuoto");
+  aggiornaMaiuscola();
+}
+
+function inserisci(campo, testo) {
+  const massimo = campo.id === "k-titolo" ? 120 : 2000;
+  if (campo.value.length + testo.length > massimo) return;
+  campo.setRangeText(testo, campo.selectionStart, campo.selectionEnd, "end");
+  /* Scrivendo in fondo, il cursore resta in vista anche quando la descrizione
+     supera il riquadro. */
+  if (campo.tagName === "TEXTAREA" && campo.selectionEnd === campo.value.length) {
+    campo.scrollTop = campo.scrollHeight;
+  }
+}
+
+/* La maiuscola si accende da sola dove la si userebbe: all'inizio del campo
+   e dopo la fine di una frase. Chi non la vuole la spegne con un tocco. */
+function aggiornaMaiuscola() {
+  if (maiuscoleFisse || strato !== LETTERE) return;
+  const campo = $("k-" + campoAttivo);
+  const prima = campo.value.slice(0, campo.selectionStart);
+  const vuole = prima.trim() === "" || /[.!?…]\s+$/.test(prima) || /\n\s*$/.test(prima);
+  if (vuole !== maiuscola) { maiuscola = vuole; disegnaTastiera(); }
+}
+
+(function preparaEditor() {
+  disegnaTastiera();
+  rendiToccabile($("k-chiudi"), () => chiudiEditor(true));
+  rendiToccabile($("k-salva"), salvaEditor);
+  rendiToccabile($("r-correggi"), apriEditor);
+  for (const nome of ["titolo", "descrizione"]) {
+    const campo = $("k-" + nome);
+    campo.addEventListener("pointerdown", () => attiva(nome, false));
+    campo.addEventListener("click", aggiornaMaiuscola);
+  }
 })();
 </script>
 </body>

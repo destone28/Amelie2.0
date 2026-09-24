@@ -562,6 +562,10 @@
       "it": "Salvata. La riconoscerò.",
       "en": "Saved. I will recognise it."
     },
+    "correzione_vicine": {
+      "it": "È una di queste?",
+      "en": "Is it one of these?"
+    },
     "tasto_spazio": {
       "it": "spazio",
       "en": "space"
