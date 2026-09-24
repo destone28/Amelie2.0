@@ -2201,7 +2201,7 @@ class Amelie:
 def crea_app(amelie: Amelie):
     from contextlib import asynccontextmanager
 
-    from fastapi import FastAPI, Request
+    from fastapi import Body, FastAPI
     from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
     @asynccontextmanager
@@ -2320,12 +2320,13 @@ def crea_app(amelie: Amelie):
     async def correzione_apri():
         return JSONResponse(amelie.apri_correzione())
 
+    # Il corpo come `dict` e non come `Request`: con le annotazioni rimandate
+    # (`from __future__ import annotations`) FastAPI risolve «Request» fra i
+    # nomi del modulo, dove non c'e' - e' importato qui dentro - e lo prendeva
+    # per un parametro della query. Ogni salvataggio tornava 422, e sul
+    # dispositivo «Salva» non faceva niente.
     @app.post("/correzione/salva")
-    async def correzione_salva(richiesta: Request):
-        try:
-            d = await richiesta.json()
-        except ValueError:
-            return JSONResponse({"ok": False, "motivo": "richiesta illeggibile"})
+    async def correzione_salva(d: dict = Body(...)):
         return JSONResponse(amelie.salva_correzione(
             str(d.get("titolo", "")), str(d.get("descrizione", "")),
             d.get("id") or None))

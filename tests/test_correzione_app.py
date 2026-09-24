@@ -254,6 +254,52 @@ class TestLEditor:
         assert {"tipo": "correzione", "aperta": False} in pubblicati
 
 
+class TestLeRotte:
+    """Le stesse cose, passando dalle rotte HTTP come fa la pagina.
+
+    Chiamare i metodi non bastava: la rotta del salvataggio prendeva il corpo
+    come `Request`, FastAPI - con le annotazioni rimandate - non lo
+    riconosceva e rispondeva 422 a ogni richiesta. I test dei metodi
+    passavano tutti, e sul dispositivo «Salva» non salvava.
+    """
+
+    @pytest.fixture
+    def client(self, amelie):
+        from fastapi.testclient import TestClient
+
+        from amelie.app import crea_app
+        return TestClient(crea_app(amelie))
+
+    def test_aprire_salvare_e_ritrovare(self, amelie, client):
+        _appoggia(amelie)
+        amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato")
+        amelie.macchina.stato = Stato.RACCONTO
+        aperto = client.post("/correzione/apri").json()
+        assert aperto["ok"] and aperto["id"] is None
+        foto = client.get("/correzione/foto/adesso")
+        assert foto.status_code == 200 and foto.headers["content-type"] == "image/jpeg"
+        esito = client.post("/correzione/salva",
+                            json={"titolo": "Albarossa", "descrizione": "Un rosato.",
+                                  "id": None}).json()
+        assert esito["ok"], esito
+        assert client.get(f"/correzione/foto/{esito['id']}").status_code == 200
+        assert len(amelie.correzioni.tutte()) == 1
+
+    def test_un_campo_vuoto_torna_indietro_col_suo_nome(self, amelie, client):
+        _appoggia(amelie)
+        amelie.macchina.stato = Stato.RACCONTO
+        client.post("/correzione/apri")
+        esito = client.post("/correzione/salva", json={"titolo": "", "descrizione": "x"})
+        assert esito.json() == {"ok": False, "campo": "titolo"}
+
+    def test_chiudere(self, amelie, client):
+        _appoggia(amelie)
+        amelie.macchina.stato = Stato.RACCONTO
+        client.post("/correzione/apri")
+        assert client.post("/correzione/chiudi").json() == {"ok": True}
+        assert client.get("/correzione/foto/adesso").status_code == 404
+
+
 class TestLeScritte:
     def test_tutte_le_scritte_dell_editor_in_tutte_le_lingue(self, amelie):
         chiavi = ("correggi_descrizione", "modifica_descrizione", "campo_titolo",
