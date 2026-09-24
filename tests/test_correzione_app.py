@@ -433,6 +433,16 @@ class TestIlCollegamento:
         assert amelie._fatti.cantina == "Marchesi di Barolo"
         assert amelie.macchina.stato is Stato.RACCONTO
 
+    def test_salvando_si_racconta_subito_il_vino_collegato(self, amelie):
+        """Il racconto che riparte dopo «Salva» e' gia' quello del vino scelto."""
+        self._in_racconto(amelie)
+        amelie._fatti = amelie.matcher.fatti_di("tipologia", 470)     # un Barolo
+        amelie.apri_correzione()
+        amelie.salva_correzione("Cannubi Barolo", "",
+                                riferimento={"tipo": "archivio", "ambito": "vino", "id": 510})
+        assert amelie._fatti.nome == "Cannubi Barolo"
+        assert amelie._fatti.cantina == "Marchesi di Barolo"
+
     def test_con_la_descrizione_parla_la_descrizione(self, amelie):
         self._in_racconto(amelie)
         amelie.apri_correzione()

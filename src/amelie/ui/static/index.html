@@ -916,6 +916,11 @@ svg { display: block; }
    di pillole che non va a capo: se ne vedono quante ci stanno, e ogni lettera
    in piu' le restringe. */
 #k-nota { overflow: hidden; }
+/* Centrate come la spiegazione, le pillole uscivano dai due lati quando non ci
+   stavano, e la prima - la piu' pertinente - era tagliata a sinistra. Si
+   parte dal bordo sinistro dei campi: quelle che non ci stanno escono a
+   destra, dove sono le meno pertinenti. */
+#k-nota.proposte { justify-content: flex-start; padding-left: 162px; }
 .k-proposta {
   flex: none; max-width: 420px; height: 56px; padding: 0 18px;
   display: flex; flex-direction: column; justify-content: center;
@@ -2090,6 +2095,7 @@ function apriEditor() {
 function disegnaVicine(vicine) {
   proposteInVista = false;
   const n = $("k-nota");
+  n.classList.remove("proposte");
   n.innerHTML = "";
   n.classList.remove("errore", "fatto");
   const d = document.createElement("span");
@@ -2123,6 +2129,7 @@ function disegnaVicine(vicine) {
    collegato, con la crocetta per toglierlo, o la spiegazione. */
 function notaDiRiposo() {
   proposteInVista = false;
+  $("k-nota").classList.remove("proposte");
   const s = scritte();
   if (!rifScelto) { nota(s.correzione_spiega || ""); return; }
   const n = $("k-nota");
@@ -2180,6 +2187,7 @@ function disegnaProposte(proposte) {
   if (!proposte.length) { notaDiRiposo(); return; }
   proposteInVista = true;
   const n = $("k-nota");
+  n.classList.add("proposte");
   n.innerHTML = "";
   n.classList.remove("errore", "fatto");
   for (const p of proposte) {

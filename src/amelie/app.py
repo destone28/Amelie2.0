@@ -1473,11 +1473,12 @@ class Amelie:
         self._scansione["perche_correzione"] = r.perche
         return r.correzione
 
-    def _della_correzione(self, c):
+    def _della_correzione(self, c, righe=None):
         """I fatti, e la voce della carta, della bottiglia a cui una correzione
         e' collegata. Senza collegamento, quelli che l'archivio trova da se'."""
         from .text import estrai_annata
-        righe = getattr(self, "_righe", [])
+        if righe is None:
+            righe = getattr(self, "_righe", [])
         rif = c.riferimento or {}
         if rif.get("tipo") == "archivio":
             try:
@@ -1949,6 +1950,13 @@ class Amelie:
             return {"ok": False, "motivo": str(e)}
         self._correggendo = None
         self._correzione = c
+        # Il racconto che riparte deve essere gia' quello della bottiglia
+        # corretta: collegata a un altro vino, si racconta quello. Senza questa
+        # riga ripartiva la scheda di prima - visto sul dispositivo, un Asti
+        # collegato al Moscato d'Asti della carta raccontato come Asti.
+        if c.riferimento or not self._correzione_parla_ora():
+            self._fatti, self._voce = self._della_correzione(
+                c, [getattr(r, "testo", r) for r in g["righe"]])
         self._annota("corretta a mano")
         # Si rientra nel racconto: titolo e descrizione nuovi a schermo, e a voce.
         self.macchina.invia(Evento.RIPETI)
