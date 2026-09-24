@@ -501,6 +501,70 @@
     "batteria_spiega": {
       "it": "Tocca dopo aver ricaricato: la stima riparte da piena.",
       "en": "Tap after charging: the estimate restarts from full."
+    },
+    "passo_appoggia": {
+      "it": "Appoggi",
+      "en": "Place"
+    },
+    "passo_appoggia_spiega": {
+      "it": "una bottiglia qui davanti",
+      "en": "a bottle right here"
+    },
+    "passo_riconosce": {
+      "it": "Riconosco",
+      "en": "I recognise"
+    },
+    "passo_riconosce_spiega": {
+      "it": "il vino dall'etichetta",
+      "en": "the wine from its label"
+    },
+    "passo_racconta": {
+      "it": "Racconto",
+      "en": "I tell its story"
+    },
+    "passo_racconta_spiega": {
+      "it": "a voce e per iscritto",
+      "en": "aloud and in writing"
+    },
+    "correggi_descrizione": {
+      "it": "Correggi la descrizione",
+      "en": "Correct the description"
+    },
+    "modifica_descrizione": {
+      "it": "Modifica la descrizione",
+      "en": "Edit the description"
+    },
+    "campo_titolo": {
+      "it": "Titolo",
+      "en": "Title"
+    },
+    "campo_descrizione": {
+      "it": "Descrizione",
+      "en": "Description"
+    },
+    "salva": {
+      "it": "Salva",
+      "en": "Save"
+    },
+    "titolo_vuoto": {
+      "it": "Scriva un titolo",
+      "en": "Please write a title"
+    },
+    "descrizione_vuota": {
+      "it": "Scriva una descrizione",
+      "en": "Please write a description"
+    },
+    "correzione_spiega": {
+      "it": "Foto, titolo e descrizione restano su questo dispositivo: la prossima volta riconoscerò la bottiglia.",
+      "en": "The photo, title and description stay on this device: next time I will recognise the bottle."
+    },
+    "correzione_salvata": {
+      "it": "Salvata. La riconoscerò.",
+      "en": "Saved. I will recognise it."
+    },
+    "tasto_spazio": {
+      "it": "spazio",
+      "en": "space"
     }
   },
   "sigle": {

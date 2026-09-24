@@ -9,10 +9,11 @@ finestra. Serve per le viste che dal vetro non si raggiungono a comando: il
 racconto col player, la schermata di conferma, il guasto, il caso in cui la
 lingua scelta non ha una voce.
 
-**Un limite da ricordare**: rende col font di ripiego se `fonts-ebgaramond` non
-è installato sulla macchina che lo esegue. Un Garamond ha l'occhio medio molto
-più piccolo di un Noto Serif, quindi a parità di corpo cambia la misura
-apparente del testo e dove va a capo. La prova che conta si fa sulla board.
+Il carattere e' quello vero: EB Garamond viaggia con la pagina, in
+`ui/static/fonts`, e qui lo si carica da li'. Prima l'anteprima usciva col font
+di ripiego della macchina che la eseguiva - e il dispositivo col suo, un altro
+ancora - quindi nessuna delle due mostrava il disegno. Adesso sono la stessa
+cosa, e la prova sulla board serve per la luce e per il dito, non per il testo.
 """
 from __future__ import annotations
 
@@ -30,12 +31,41 @@ PAGINA = RADICE / "src" / "amelie" / "ui" / "static" / "index.html"
 # Le scritte fisse arrivano dal server, quindi vanno finte anche qui.
 VOLUME = {"tipo": "volume", "valore": 60, "passo": 10, "attivo": True}
 
-LINGUA_IT = {"tipo": "lingua", "lingua": "it", "disponibili": ["it", "en"],
-             "invito": "Appoggi una bottiglia", "domanda": "Quale di questi?",
-             "voce_muta": False, "avviso_muto": "", "annulla": "Annulla"}
-LINGUA_EN = {"tipo": "lingua", "lingua": "en", "disponibili": ["it", "en"],
-             "invito": "Place a bottle", "domanda": "Which one is it?",
-             "voce_muta": False, "avviso_muto": "", "annulla": "Cancel"}
+# Le scritte fisse si leggono dal lessico vero, non si ricopiano: cosi'
+# l'anteprima mostra quello che il dispositivo dira', e cambiare una frase non
+# lascia qui una copia vecchia.
+_LESSICO = json.loads((RADICE / "data" / "lessico" / "frasi.json").read_text(encoding="utf-8"))
+
+
+def _scritta(chiave: str, lingua: str) -> str:
+    v = _LESSICO["schermo"][chiave][lingua]
+    return v if isinstance(v, str) else v[0]
+
+
+def _lingua(lingua: str) -> dict:
+    return {"tipo": "lingua", "lingua": lingua, "disponibili": ["it", "en"],
+            "invito": _scritta("appoggia_bottiglia", lingua),
+            "domanda": _scritta("quale_di_questi", lingua),
+            "voce_muta": False, "avviso_muto": "",
+            "annulla": _scritta("annulla", lingua),
+            "sto_scrivendo": _scritta("sto_scrivendo", lingua),
+            "passi": [{"titolo": _scritta(f"passo_{p}", lingua),
+                       "spiega": _scritta(f"passo_{p}_spiega", lingua)}
+                      for p in ("appoggia", "riconosce", "racconta")]}
+
+
+LINGUA_IT = _lingua("it")
+LINGUA_EN = _lingua("en")
+
+# Le scritte del pannello delle impostazioni, come le manda il server.
+_CHIAVI_IMPOSTAZIONI = (
+    "impostazioni", "stato_tecnico", "chiudi", "mirino", "mirino_spiega",
+    "mirino_torna", "mirino_legge", "mirino_trova", "mirino_niente", "modo_titolo",
+    "modo_archivio", "modo_archivio_spiega", "modo_generativa",
+    "modo_generativa_spiega", "modo_carta", "modo_carta_spiega",
+    "batteria_ricaricata", "batteria_spiega")
+LINGUA_IT_PIENA = {**LINGUA_IT, "impostazioni": {
+    k: _scritta(k, "it") for k in _CHIAVI_IMPOSTAZIONI}}
 
 RACCONTO_IT = [
     "Questo è il «Cannubi Barolo» di Marchesi di Barolo annata 2016.",
@@ -136,6 +166,21 @@ SCENE: dict[str, list[dict]] = {
         {"tipo": "stato", "vista": "avviso", "simbolo": "⚠", "tono": "errore",
          "frase": "Qualcosa non ha funzionato. Riprovo fra un istante."}],
 
+    # Mentre il modello scrive: la goccia che respira al posto del testo.
+    "scrivendo": [
+        LINGUA_IT,
+        {"tipo": "stato", "vista": "racconto", "titolo": "Cannubi Barolo",
+         "sottotitolo": "Marchesi di Barolo · 2016", "voce_muta": False},
+        {"tipo": "scrivendo"}],
+
+    # Il pannello si apre col gesto da tre secondi, quindi anche qui si finge.
+    "impostazioni": [
+        LINGUA_IT_PIENA, {"tipo": "stato", "vista": "attesa"},
+        {"tipo": "impostazioni", "modo": "archivio",
+         "modi": ["archivio", "generativa", "carta"]},
+        {"tipo": "mirino", "acceso": False, "disponibile": True},
+        {"tipo": "salute", "tutto_bene": True, "batteria": {"tacche": 3}}],
+
     "senza_voce": [
         {**LINGUA_EN, "voce_muta": True,
          "avviso_muto": "In this language the story is written, not spoken."},
@@ -153,6 +198,7 @@ DOPO = {
     "volume": "alternaVolume()",
     "volume_muto": "alternaVolume()",
     "volume_sul_racconto": "alternaVolume()",
+    "impostazioni": "apriImpostazioni()",
 }
 
 # Sostituisce EventSource e fetch: la pagina crede di parlare col server.
@@ -188,6 +234,9 @@ def ritrai(browser: str, pagina: str, uscita: Path, args) -> None:
         temporaneo = f.name
     subprocess.run([
         browser, "--headless=new", "--disable-gpu", "--hide-scrollbars",
+        # Il carattere sta accanto alla pagina ma la pagina e' un file: senza,
+        # Chromium rifiuta di caricarlo e l'anteprima esce col font di ripiego.
+        "--allow-file-access-from-files",
         "--force-device-scale-factor=1", "--no-sandbox",
         f"--window-size={args.larghezza},{args.altezza}",
         # Il tempo virtuale deve coprire la dissolvenza fra le viste (0,4 s) e i
@@ -221,6 +270,7 @@ def main() -> None:
 
     for nome in [n for n in (args.solo or SCENE) if n != "avvio"]:
         pagina = sorgente.replace(
+            'url("/fonts/', f'url("file://{PAGINA.parent}/fonts/').replace(
             '<script>\n"use strict";',
             FINTA.replace("__MESSAGGI__",
                           json.dumps(SCENE[nome], ensure_ascii=False))

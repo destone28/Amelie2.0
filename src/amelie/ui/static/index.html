@@ -15,44 +15,69 @@
      · ogni misura scritta qui viene ridotta di 0,625 sul vetro
      · 5" su 800x480 fa 108,9 x 65,3 mm, cioè 7,35 pixel fisici per millimetro
      · un bersaglio tattile onesto è 9 mm  ->  66 px fisici  ->  106 px QUI
-     · il testo si legge a mezzo metro: 3,5-4 mm  ->  26-29 fisici  ->  42-47 QUI
+
+   Il testo si misura sull'OCCHIO MEDIO, non sul corpo. Fino a qui i corpi
+   erano tarati su un carattere che sul vetro non c'era: il foglio chiedeva EB
+   Garamond, la prima unità non l'aveva installato, e usciva DejaVu Serif, con
+   l'occhio a 0,52 em. EB Garamond ce l'ha a 0,40: a parità di corpo le
+   minuscole sarebbero diventate un quarto più piccole. Adesso il carattere
+   viaggia con la pagina (/fonts) e i corpi sono ricalcolati su di lui:
+
+     · il racconto si legge a mezzo metro con un occhio di 1,7 mm  ->  50 px
+     · una scritta che si guarda di passaggio, 1,5 mm              ->  44 px
 
    È per questo che i numeri sotto sembrano enormi. Non lo sono: sul vetro un
    pulsante da 108 px è un quadrato di nove millimetri, che è il minimo perché
    un dito lo centri al primo colpo senza guardare.
    =========================================================================== */
 
+/* Il carattere sta DENTRO il dispositivo, servito dall'applicazione: non si
+   dipende da cosa sia installato sulla board. `block` e non `swap`: il file è
+   locale e arriva in pochi millesimi, e per quei millesimi è meglio non vedere
+   niente che vedere il testo cambiare forma sotto gli occhi. */
+@font-face {
+  font-family: "EB Garamond"; font-style: normal; font-weight: 400 800;
+  font-display: block; src: url("/fonts/EBGaramond.woff2") format("woff2");
+}
+@font-face {
+  font-family: "EB Garamond"; font-style: italic; font-weight: 400 800;
+  font-display: block; src: url("/fonts/EBGaramond-Italic.woff2") format("woff2");
+}
+
 :root {
   /* --- Brand. Bordeaux, oro, avorio, carbone: i colori del marchio. ------- */
   --bordeaux-scuro:  #3D1512;   /* il fondo di tutto */
-  --bordeaux:        #5A211C;   /* il bordo del marchio, le superfici */
+  --bordeaux:        #5A211C;   /* le superfici */
   --bordeaux-chiaro: #7D2B24;   /* stati, bordi accesi */
   --oro-scuro:       #8A6B30;   /* filetti, cose spente */
   --oro:             #C8860D;   /* l'oro del marchio */
   --oro-chiaro:      #E3B457;   /* testo d'accento, ciò che si tocca */
   --avorio:          #F4EDE3;   /* il testo principale */
-  --avorio-tenue:    #B9A99A;   /* il testo secondario */
+  --avorio-tenue:    #BFB0A2;   /* il testo secondario: 7,4:1 sul fondo */
   --avorio-fioco:    #8C7F74;   /* cio' che c'e' ma non chiama: 4,6:1, AA */
   --carbone:         #14100F;   /* nero caldo, mai #000 */
 
+  /* La goccia del marchio. E' il solo punto di colore che non sia oro o
+     avorio, e deve leggersi come vino anche sul fondo bordeaux: #A63A2C, il
+     vino del calice di prima, qui scendeva a 2,5:1 e in un segno di tre
+     millimetri spariva. Questo sta a 4,1:1. */
+  --goccia:       #D2553F;
+
   /* I toni degli avvisi, gli stessi che l'anello di luce accende (bridge.py):
      se il LED e' rosso, il simbolo a schermo non puo' essere dello stesso oro
-     dell'invito. Prima lo erano tutti, e un guasto aveva l'aria di un invito. */
+     dell'invito. */
   --invito-luce:  #FF9628;      /* AMBRA — si chiede qualcosa */
   --errore-luce:  #EE5F4F;      /* ROSSO — qualcosa non ha funzionato */
   --neutro-luce:  #B9A99A;
-  /* Il vino nel calice. Non e' --bordeaux-chiaro: su questo fondo darebbe
-     1,71:1, cioe' un liquido che non si vede salire. Questo sta a 3,1:1, che
-     per una forma piena e' abbastanza. */
-  --vino:         #A63A2C;
 
   /* Il fondo è una tavola in penombra: più chiaro al centro, dove sta la
      bottiglia, più scuro ai bordi. */
   --fondo: radial-gradient(ellipse at 50% 118%,
              #2E100D 0%, var(--bordeaux-scuro) 46%, var(--carbone) 100%);
 
-  /* --- Ritmo. Un solo passo, i suoi multipli. ---------------------------- */
+  /* --- Ritmo. Un solo passo, i suoi multipli, e nient'altro. -------------- */
   --passo: 12px;
+  --margine: calc(var(--passo) * 2);   /* dal bordo del vetro ai comandi */
   --raggio: 18px;
   --raggio-grande: 30px;
 
@@ -60,15 +85,25 @@
   --tocco: 108px;          /*  9,2 mm sul vetro */
   --tocco-grande: 140px;   /* 11,9 mm — il pulsante che si cerca senza guardare */
 
-  /* --- Tipografia, in px CSS (fra parentesi i millimetri sul vetro). ------ */
-  --t-marchio:  132px;     /* 11,2 mm */
-  --t-titolo:    64px;     /*  5,4 mm */
-  --t-sottotit:  34px;     /*  2,9 mm */
-  --t-corpo:     42px;     /*  3,6 mm — il racconto */
-  --t-invito:    40px;     /*  3,4 mm */
-  --t-scelta:    38px;     /*  3,2 mm */
-  --t-minuto:    26px;     /*  2,2 mm — solo cose di servizio */
+  /* --- Tipografia. Sei corpi e basta: prima erano nove, e tre di loro -
+     38, 40 e 42 - non facevano gerarchia, facevano rumore. ------------------ */
+  --t-marchio:  118px;     /* l'altezza del marchio, non un corpo */
+  --t-titolo:    60px;     /* il nome del vino */
+  --t-corpo:     50px;     /* il racconto */
+  --t-voce:      44px;     /* cio' che il dispositivo dice a schermo */
+  --t-sottotit:  34px;     /* il produttore, le scelte secondarie */
+  --t-piccolo:   30px;     /* le spiegazioni */
+  --t-minuto:    24px;     /* solo cose di servizio */
+  /* Una sola spaziatura fra le lettere, per le sole scritte maiuscole. Prima
+     erano tre - 0,22, 0,16 e 0,05 em - e nessuna diceva perche'. */
+  --crenatura-maiuscole: .14em;
 
+  /* --- Movimento. Quattro durate e una curva, per tutto. Prima erano undici
+     durate diverse, da 0,12 a 4,2 secondi, scelte una per volta. ------------ */
+  --d-tocco:  .12s;        /* il ritorno sotto il dito */
+  --d-stato:  .28s;        /* un comando che cambia, un pannello che si apre */
+  --d-vista:  .45s;        /* una schermata che lascia il posto a un'altra */
+  --ciclo:    2.4s;        /* il respiro di tutto cio' che aspetta */
   --curva: cubic-bezier(.22,.61,.36,1);
 }
 
@@ -85,9 +120,6 @@
   -webkit-touch-callout: none;
   -webkit-user-select: none; user-select: none;
   -webkit-user-drag: none;
-  /* Il contorno di messa a fuoco disegnava un riquadro attorno all'ultima
-     cosa toccata e ci restava: qui non c'e' tastiera, e quel riquadro non
-     significa niente per nessuno. */
   -webkit-appearance: none; appearance: none;
 }
 html, body {
@@ -97,33 +129,44 @@ html, body {
   touch-action: manipulation;          /* niente ingrandimento al doppio tocco */
   background: var(--fondo);
   color: var(--avorio);
-  font-family: "EB Garamond", Garamond, "Times New Roman", serif;
+  font-family: "EB Garamond", Garamond, serif;
   font-size: var(--t-corpo);
-  line-height: 1.45;
+  line-height: 1.4;
+  /* Le cifre allineate, non quelle all'antica: EB Garamond di suo scrive
+     «2016» con l'1 piccolo e il 6 che scende sotto la riga, bello in un
+     libro e sbagliato in un'annata letta di sbieco da mezzo metro. */
+  font-variant-numeric: lining-nums;
+  font-kerning: normal;
   -webkit-font-smoothing: antialiased;
 }
 svg { display: block; }
 /* Il contorno di messa a fuoco va tolto QUI e non nel selettore universale:
    la regola dell'agente utente e' `:focus-visible { outline: auto }`, che ha
-   specificita' maggiore di `*` e vinceva. Si vedeva come un riquadro d'oro
-   attorno all'ultima cosa toccata, che ci restava. Qui non c'e' tastiera: non
+   specificita' maggiore di `*` e vinceva. Qui non c'e' tastiera fisica: non
    esiste un "elemento in evidenza" da mostrare a nessuno. */
 :focus, :focus-visible, :focus-within { outline: none !important; }
 
+/* ALLINEAMENTO — una regola sola, e vale ovunque.
+   · Cio' che si GUARDA - un titolo, un invito, una domanda, un avviso - sta
+     al centro, e va a capo bilanciato: mai piu' una parola sola sulla seconda
+     riga, come «Provi a girarla verso di / me?».
+   · Cio' che si LEGGE - il racconto, i campi dell'editor - sta a sinistra,
+     a bandiera, e va a capo evitando le righe corte in fondo. Giustificato
+     no: su una colonna di quaranta caratteri, senza sillabazione (che offline
+     Chromium non ha), la giustificazione apre fiumi di bianco fra le parole. */
+.al-centro { text-align: center; text-wrap: balance; }
+.a-sinistra { text-align: left; text-wrap: pretty; }
+
 /* Il disegno e' scritto per 1280x720 e ci resta: la scena e' un rettangolo di
    quella misura, scalato per stare nel pannello qualunque risoluzione gli
-   venga data. Senza, a 800x480 l'intestazione e i comandi si prendevano tutti
-   i 480 px e al racconto ne restavano DODICI: due decimi di riga. Non un
-   difetto di stile - il dispositivo spariva.
-   Si scala sul minore dei due rapporti perche' 800x480 e' 5:3 e 1280x720 e'
-   16:9: scalando sulla sola larghezza il fondo del racconto finirebbe fuori. */
+   venga data. Si scala sul minore dei due rapporti perche' 800x480 e' 5:3 e
+   1280x720 e' 16:9: scalando sulla sola larghezza il fondo del racconto
+   finirebbe fuori. */
 #scena {
   position: absolute; left: 50%; top: 50%;
   width: 1280px; height: 720px; margin: -360px 0 0 -640px;
-  /* Il fattore lo calcola il JavaScript e lo scrive in --scala. In CSS non si
-     puo': `min(100vw / 1280, 100vh / 720)` sembra giusto ma una divisione fra
-     lunghezze resta una lunghezza, e `scale()` vuole un numero puro - la regola
-     veniva scartata in silenzio e la scena restava fuori centro. */
+  /* Il fattore lo calcola il JavaScript e lo scrive in --scala: in CSS una
+     divisione fra lunghezze resta una lunghezza, e `scale()` vuole un numero. */
   transform: scale(var(--scala, 1));
   transform-origin: center center;
   display: flex; align-items: center; justify-content: center;
@@ -134,99 +177,115 @@ svg { display: block; }
 .vista {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center; text-align: center;
+  align-items: center; justify-content: center;
+  text-align: center; text-wrap: balance;
   padding: calc(var(--passo) * 3) calc(var(--passo) * 5);
   gap: calc(var(--passo) * 2);
   opacity: 0; visibility: hidden; pointer-events: none;
-  /* La visibilita' cambia a dissolvenza FINITA in uscita e subito in entrata.
-     Prima era interpolata: per quattro decimi di secondo dopo una scelta i
-     pulsanti del racconto restavano coperti da pulsanti di scelta invisibili e
-     ancora vivi. `pointer-events` non si anima, quindi non esiste piu' nessuna
-     finestra in cui due viste sono toccabili insieme. */
-  transition: opacity .4s var(--curva), visibility 0s linear .4s;
+  /* La visibilita' cambia a dissolvenza FINITA in uscita e subito in entrata:
+     `pointer-events` non si anima, quindi non esiste nessuna finestra in cui
+     due viste sono toccabili insieme. */
+  transition: opacity var(--d-vista) var(--curva), visibility 0s linear var(--d-vista);
 }
 .vista.attiva {
   opacity: 1; visibility: visible; pointer-events: auto;
-  transition: opacity .4s var(--curva), visibility 0s;
+  transition: opacity var(--d-vista) var(--curva), visibility 0s;
 }
 
 /* ===========================================================================
-   MARCHIO — la semplificazione del logo.
+   MARCHIO — il nome, e una goccia al posto del puntino della i.
 
-   Tre segni e nient'altro: i QUATTRO MIRINI agli angoli, la BOTTIGLIA al
-   centro, la A dentro la bottiglia. Letto tutto insieme dice esattamente cosa
-   fa l'oggetto — inquadra una bottiglia e la legge — e il nome ci sta dentro.
+   Prima erano quattro mirini, una bottiglia e una A dentro la bottiglia:
+   diceva bene COSA fa l'oggetto, ma diceva tre cose. Adesso ne dice una. Il
+   nome in EB Garamond e una goccia di vino: si legge da mezzo metro, sta in
+   un centimetro, e la goccia e' lo stesso segno che si anima quando il
+   dispositivo lavora (vedi STILLA).
 
-   La sagoma animale dell'originale è stata tolta: sotto il centimetro
-   diventava una macchia. Tutto è costruito con tratti, non con contorni
-   pieni, così resta nitido a ogni misura e non dipende da nessun font
-   installato.
+   Il nome non e' TESTO: e' disegnato a tracciati, ricavati dal carattere.
+   Cosi' e' identico qui, nella schermata d'avvio - che si apre da file,
+   prima che esista un server da cui scaricare un carattere - e in qualunque
+   anteprima, senza dipendere da nessun font installato.
    =========================================================================== */
-.marchio { width: var(--t-marchio); height: var(--t-marchio); }
-.marchio .mirino {
-  fill: none; stroke: var(--oro); stroke-width: 5.5;
-  stroke-linecap: round; stroke-linejoin: round;
-}
-.marchio .bottiglia {
-  fill: none; stroke: var(--oro); stroke-width: 4.5;
-  stroke-linecap: round; stroke-linejoin: round;
-}
-.marchio .lettera {
-  fill: none; stroke: var(--avorio); stroke-width: 5.4;
-  stroke-linecap: butt; stroke-linejoin: miter;
-}
+.marchio { height: var(--t-marchio); width: auto; overflow: visible; }
+.marchio .parola { fill: var(--oro-chiaro); }
+.marchio .goccia { fill: var(--goccia); }
 
-.nome {
-  font-size: var(--t-titolo); letter-spacing: .22em;
-  color: var(--oro-chiaro); text-transform: uppercase;
-  margin-top: calc(var(--passo) * 1.5);
-}
+/* ===========================================================================
+   ATTESA — il marchio, e che cosa fa l'oggetto in tre passi.
+
+   Senza tecnica: appoggi, leggo, racconto. Tre colonne e non una frase,
+   perche' da un tavolo si guardano, non si leggono: il titolo di ogni passo
+   dice il gesto, la riga sotto lo finisce.
+   =========================================================================== */
+#attesa { gap: 0; padding-top: calc(var(--passo) * 2); }
+#attesa .marchio { margin-bottom: calc(var(--passo) * 3); }
 .filo {
-  width: 220px; height: 2px; border: 0;
+  width: 220px; height: 2px; border: 0; flex: none;
   background: linear-gradient(90deg, transparent, var(--oro-scuro), transparent);
 }
-.invito { font-size: var(--t-invito); color: var(--avorio-tenue); }
+.passi {
+  display: flex; align-items: flex-start; justify-content: center;
+  gap: calc(var(--passo) * 2);
+  margin-top: calc(var(--passo) * 4);
+  width: 100%;
+}
+.passo { flex: 0 0 340px; display: flex; flex-direction: column; gap: 4px; }
+.passo .p-titolo { font-size: var(--t-voce); color: var(--oro-chiaro); line-height: 1.15; }
+.passo .p-spiega { font-size: var(--t-piccolo); color: var(--avorio-tenue); line-height: 1.25; }
+/* Fra un passo e l'altro, la goccia piccola: e' la stessa del marchio, e dice
+   «poi» senza una freccia che sembrerebbe un'istruzione tecnica. */
+.passi .fra {
+  flex: none; width: 14px; height: 19px; margin-top: 20px;
+  fill: var(--oro); opacity: .7;
+}
 
 /* ===========================================================================
-   CALICE — il segnale che il dispositivo sta lavorando.
+   STILLA — il segnale che il dispositivo sta lavorando.
 
-   Deve reggere sia sei decimi di secondo (l'assestamento) sia venticinque
-   (la scansione con l'OCR), senza diventare irritante: per questo il ciclo è
-   lento e non ha rimbalzi. Si muove SOLO per trasformazione e opacità, che
-   sono le due cose che Chromium sposta sul compositor: l'animazione non tocca
-   il layout e non contende i quattro core all'OCR, che qui è il padrone.
+   E' la goccia del marchio che cade in un calice e lo increspa. Un segno solo
+   per tutto cio' che aspetta - la lettura, la scrittura, l'avvio - con lo
+   stesso ciclo e la stessa curva: prima erano un calice che si riempiva, una
+   scritta che pulsava e una riga che scorreva, ognuno col suo tempo.
+
+   Deve reggere sia sei decimi di secondo sia venticinque senza diventare
+   irritante: per questo il ciclo e' lento e non ha rimbalzi. Si muove SOLO per
+   trasformazione e opacita', le due cose che Chromium sposta sul compositor:
+   l'animazione non tocca il layout e non contende i quattro core all'OCR,
+   che qui e' il padrone.
    =========================================================================== */
-.calice { width: 254px; height: 314px; }
-.calice .vetro {
-  fill: none; stroke: var(--oro); stroke-width: 3;
-  stroke-linecap: round; stroke-linejoin: round;
+.stilla { width: 240px; height: 250px; overflow: visible; }
+.stilla .cade { fill: var(--goccia); }
+.stilla .onda {
+  /* Tre unita' e non due: sul vetro, scalate, erano un pixel e mezzo. */
+  fill: none; stroke: var(--oro); stroke-width: 3; opacity: 0;
+  transform-box: fill-box; transform-origin: center;
 }
-.calice .vino { fill: var(--vino); }
-.calice .pelo { fill: var(--oro-chiaro); opacity: .7; }
-.calice .livello {
-  animation: versa 4.2s var(--curva) infinite;
-  will-change: transform;
+.stilla .cade {
+  transform-box: fill-box; transform-origin: center;
+  animation: cade var(--ciclo) cubic-bezier(.55,.06,.68,.19) infinite;
+  will-change: transform, opacity;
 }
-@keyframes versa {
-  0%   { transform: translateY(46px); }   /* vuoto: il livello e' sotto la coppa */
-  /* Un terzo scarso di coppa: e' la misura in cui si versa un rosso, e riempirlo
-     fino all'orlo faceva sembrare il calice un bicchiere da osteria. */
-  44%  { transform: translateY(19px); }
-  60%  { transform: translateY(19px); }
-  100% { transform: translateY(46px); }
+.stilla .onda.uno { animation: increspa var(--ciclo) var(--curva) infinite; }
+.stilla .onda.due { animation: increspa var(--ciclo) var(--curva) infinite;
+                    animation-delay: calc(var(--ciclo) * .18); }
+@keyframes cade {
+  0%   { transform: translateY(-70px); opacity: 0; }
+  12%  { opacity: 1; }
+  52%  { transform: translateY(96px); opacity: 1; }
+  58%  { transform: translateY(104px); opacity: 0; }
+  100% { transform: translateY(104px); opacity: 0; }
 }
-/* Il pelo del vino ondeggia appena: senza, il livello sembra un cursore che
-   sale, non un liquido. */
-.calice .pelo { animation: respira 2.6s ease-in-out infinite; will-change: transform; }
-@keyframes respira {
-  0%, 100% { transform: translateY(0)   scaleY(1);    }
-  50%      { transform: translateY(-1px) scaleY(.82); }
+@keyframes increspa {
+  0%, 52% { transform: scale(.25); opacity: 0; }
+  56%     { opacity: .95; }
+  100%    { transform: scale(1.35); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .calice .livello, .calice .pelo { animation: none; }
-  .calice .livello { transform: translateY(24px); }
+  .stilla .cade, .stilla .onda { animation: none; }
+  .stilla .cade { transform: translateY(40px); }
+  .stilla .onda.uno { opacity: .6; transform: scale(.8); }
 }
-.frase { font-size: var(--t-invito); color: var(--avorio-tenue); }
+.frase { font-size: var(--t-voce); color: var(--avorio-tenue); }
 
 /* ===========================================================================
    RACCONTO
@@ -239,8 +298,7 @@ svg { display: block; }
   padding-top: calc(var(--passo) * 2); padding-bottom: 0;
 }
 /* I comandi galleggiano sopra la coda del testo invece di rubargli centocinquanta
-   pixel: la sfumatura in fondo al racconto li stacca gia' da sola. Cosi' il
-   racconto passa da quattro righe a sette e mezza. */
+   pixel: la sfumatura in fondo al racconto li stacca gia' da sola. */
 #racconto .comandi {
   position: absolute; left: 0; right: 0; bottom: calc(var(--passo) * 2.8);
   justify-content: center; padding-bottom: 0;
@@ -250,18 +308,24 @@ svg { display: block; }
   bottom: calc(var(--passo) * 1.6);
 }
 #racconto .testo { padding-bottom: 176px; }
-/* Il titolo lascia il posto alle linguette della lingua: senza, un nome lungo
-   ci finisce sotto - e sono 1.751 nomi su 19.358 a superare la riga. */
-.intestazione { flex: 0 0 auto; padding: 0 268px; width: 100%; }
+/* Il titolo lascia il posto ai comandi d'angolo, e lo stesso posto a sinistra
+   e a destra: centrato sul vetro, non sullo spazio che avanza. */
+.intestazione { flex: 0 0 auto; padding: 0 256px; width: 100%; }
 .titolo {
-  font-size: var(--t-titolo); color: var(--oro-chiaro); line-height: 1.15;
-  /* Un nome lungo non deve spingere il racconto fuori dallo schermo. */
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  font-size: var(--t-titolo); color: var(--oro-chiaro); line-height: 1.12;
+  text-wrap: balance;
+  max-width: 100%; overflow: hidden;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
+/* Un nome lungo non si tronca: si rimpicciolisce. Prima finiva in «Valpolicella
+   Classico..», cioe' si perdeva proprio la parte che distingue quel vino da un
+   altro. Il gradino lo sceglie il JavaScript contando le lettere - 1.751 nomi su
+   19.358 superano la riga - e i due corpi stanno nella scala. */
+.titolo[data-misura="lungo"]       { font-size: 50px; }
+.titolo[data-misura="lunghissimo"] { font-size: 42px; }
 .sottotit {
   font-size: var(--t-sottotit); color: var(--avorio-tenue);
-  letter-spacing: .05em; margin-top: calc(var(--passo) * .5);
+  margin-top: calc(var(--passo) * .5);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
 
@@ -271,21 +335,18 @@ svg { display: block; }
   flex: 1 1 auto; width: 100%;
   margin: calc(var(--passo) * 1.5) 0;
   overflow-y: auto; scrollbar-width: none;
-  text-align: left; padding: 0 calc(var(--passo) * 2);
-  /* Una riga di sessanta caratteri stanca l'occhio, e a mezzo metro il ritorno
-     a capo si sbaglia. Sotto i cinquanta si legge senza perdere il segno. */
+  text-align: left; text-wrap: pretty;
+  padding: 0 calc(var(--passo) * 2);
+  /* Sotto i cinquanta caratteri a riga l'occhio non perde il segno tornando a
+     capo da mezzo metro; col corpo nuovo, mille pixel sono quarantadue. */
   max-width: 1000px;
-  /* Il dito non lo trascina: c'e' il pulsante indietro. Chi tornasse a rileggere
-     verrebbe strappato via dalla frase parlata al primo evento successivo, con
-     un'animazione morbida che gli litiga contro. */
+  /* Il dito non lo trascina: c'e' il pulsante indietro. */
   touch-action: none;
+  line-height: 1.38;
 }
 /* La sfumatura in testa e in coda dice che il testo continua oltre il bordo.
-   Sta sul testo, come maschera, e NON come due strisce di gradiente sopra la
-   vista: il fondo è radiale, non una tinta piatta, e due rettangoli di colore
-   fisso ci si vedevano sopra come bande. Il costo di ri-generare il livello
-   c'è, ma si paga a ogni FRASE - una volta ogni pochi secondi - non a ogni
-   fotogramma. */
+   Sta sul testo, come maschera: il fondo è radiale, e due strisce di colore
+   fisso ci si vedevano sopra come bande. */
 .testo {
   mask-image: linear-gradient(to bottom, transparent 0, #000 34px,
                               #000 calc(100% - 210px), transparent calc(100% - 176px));
@@ -293,11 +354,10 @@ svg { display: block; }
 .testo::-webkit-scrollbar { display: none; }
 .testo .frase {
   font-size: var(--t-corpo); color: var(--avorio-tenue);
-  transition: color .35s var(--curva);
+  transition: color var(--d-stato) var(--curva);
 }
 /* La frase in ascolto si accende. È l'unico legame fra ciò che si sente e ciò
-   che si legge, e adesso è ancorato alla POSIZIONE nell'audio, non a una
-   stima: con un pulsante di pausa una stima divergerebbe al primo tocco. */
+   che si legge, ed e' ancorato alla POSIZIONE nell'audio, non a una stima. */
 .testo .frase.viva { color: var(--avorio); }
 
 /* --- I comandi. Solo questi reagiscono: il resto dello schermo è inerte. --- */
@@ -306,19 +366,20 @@ svg { display: block; }
   gap: calc(var(--passo) * 2); padding-bottom: var(--passo);
 }
 .cmd {
-  width: var(--tocco); height: var(--tocco);
+  width: var(--tocco); height: var(--tocco); flex: none;
   display: flex; align-items: center; justify-content: center;
   background: transparent; border: 2px solid var(--oro-scuro);
   border-radius: 50%; color: var(--oro-chiaro);
   font: inherit;
-  transition: transform .12s var(--curva), background-color .2s, border-color .2s;
+  transition: transform var(--d-tocco) var(--curva),
+              background-color var(--d-stato), border-color var(--d-stato);
 }
-.cmd svg { width: 46%; height: 46%; fill: currentColor; }
+.cmd svg { width: 44%; height: 44%; fill: currentColor; }
 .cmd.grande {
   width: var(--tocco-grande); height: var(--tocco-grande);
   border-color: var(--oro); border-width: 3px;
 }
-.cmd.grande svg { width: 42%; height: 42%; }
+.cmd.grande svg { width: 40%; height: 40%; }
 /* Il ritorno al tocco è immediato e piccolo: su un tavolo serve la conferma
    che il dito è arrivato, non un effetto. */
 .cmd.premuto {
@@ -327,6 +388,9 @@ svg { display: block; }
   border-color: var(--oro-chiaro);
 }
 .cmd[disabled] { opacity: .28; }
+/* Le vie d'uscita - chiudere, annullare - hanno il tono spento di «Nessuno di
+   questi»: non devono pesare quanto la pausa. */
+.cmd.spento { border-color: rgba(138,107,48,.45); color: var(--avorio-tenue); }
 
 /* La barra di avanzamento si muove per scaleX, non per width: la larghezza
    costa un ricalcolo di layout a ogni fotogramma, la trasformazione no. */
@@ -340,28 +404,41 @@ svg { display: block; }
   transition: transform .25s linear; will-change: transform;
 }
 
+/* Mentre il racconto si scrive. Non e' una decorazione: generare costa
+   secondi, e in quei secondi lo schermo mostrava il titolo e sotto il vuoto -
+   cioe' sembrava rotto. La goccia e' quella della stilla, con lo stesso ciclo. */
+.scrivendo {
+  display: flex; align-items: center; gap: calc(var(--passo) * 1.2);
+  color: var(--oro-chiaro); font-size: var(--t-voce);
+}
+.scrivendo svg { width: 20px; height: 28px; flex: none; fill: var(--goccia);
+                 animation: respiro var(--ciclo) ease-in-out infinite; }
+@keyframes respiro { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .scrivendo svg { animation: none; }
+}
+
 /* ===========================================================================
    CONFERMA — quando il riconoscimento è dubbio si chiede, non si indovina.
    =========================================================================== */
-.domanda { font-size: var(--t-invito); color: var(--avorio-tenue); }
+#conferma { justify-content: flex-start; padding-top: calc(var(--passo) * 3); }
+.domanda { font-size: var(--t-voce); color: var(--avorio-tenue); }
 .scelte {
   display: flex; flex-direction: column;
-  /* Trenta pixel, cioe' due millimetri e mezzo sul vetro. Con dodici erano un
-     decimo di dito, e toccare la riga sbagliata non si annulla: non esiste una
-     transizione che riporti alla schermata di conferma. */
+  /* Trenta pixel, cioe' due millimetri e mezzo sul vetro: con dodici erano un
+     decimo di dito, e toccare la riga sbagliata non si annulla. */
   gap: calc(var(--passo) * 2.5);
   width: 100%; max-width: 940px;
 }
-/* Legata al suo contenitore, cosi' non colpisce piu' niente fuori di qui: era
-   gia' successo con la linguetta della lingua, che ne ereditava fondo e bordo. */
 #c-scelte .scelta {
   min-height: var(--tocco);
   display: flex; align-items: center; justify-content: center;
   padding: 0 calc(var(--passo) * 2);
-  font-size: var(--t-scelta); color: var(--avorio);
+  font-size: var(--t-voce); color: var(--avorio); line-height: 1.15;
+  text-wrap: balance;
   background: rgba(90,33,28,.55);
   border: 2px solid var(--oro-scuro); border-radius: var(--raggio);
-  transition: transform .12s var(--curva), background-color .2s;
+  transition: transform var(--d-tocco) var(--curva), background-color var(--d-stato);
 }
 #c-scelte .scelta.premuto {
   transform: scale(.985);
@@ -382,96 +459,124 @@ svg { display: block; }
 .simbolo { font-size: 110px; color: var(--invito-luce); line-height: 1; }
 #avviso.errore .simbolo { color: var(--errore-luce); }
 #avviso.neutro .simbolo { color: var(--neutro-luce); }
-#avviso .frase { max-width: 900px; color: var(--avorio); }
+#avviso .frase { max-width: 920px; color: var(--avorio); }
 
 /* ===========================================================================
-   LINGUE — in alto a destra, dove non coprono né titolo né testo.
+   LINGUE — le bandierine, in alto a destra.
+
+   Erano due sigle, «IT» ed «EN», con una lineetta sotto la scelta: si
+   leggevano, ma a quaranta pixel sotto la scritta la lineetta sembrava un
+   filo randagio, non una sottolineatura. Una bandiera si riconosce prima di
+   leggerla, e da un tavolo e' quello che serve.
+
+   Disegnate a mano in SVG, e non con le bandiere emoji: su Linux Chromium non
+   ha un carattere a colori che le contenga, e 🇮🇹 esce scritto «IT» - cioe'
+   si tornava esattamente a dove si era partiti.
    =========================================================================== */
 #lingue {
   position: absolute; right: 0; top: 0; z-index: 6;
-  display: flex; padding: var(--passo) calc(var(--passo) * 1.5);
+  display: flex; gap: 0; padding: calc(var(--passo) * .5) var(--passo);
 }
 .lingua {
-  min-width: var(--tocco); height: var(--tocco);
+  width: var(--tocco); height: var(--tocco);
   display: flex; align-items: center; justify-content: center;
-  font-size: var(--t-sottotit); letter-spacing: .16em;
-  /* Colore pieno, non opacita': a .5 il contrasto scendeva a 2,75:1, sotto
-     qualunque soglia di leggibilita'. */
-  color: var(--avorio-fioco);
-  border-bottom: 3px solid transparent;
-  transition: opacity .25s, color .25s, border-color .25s, transform .12s;
+  transition: transform var(--d-tocco) var(--curva);
 }
-/* Si chiama "corrente", non "scelta": `.scelta` e' gia' la riga della
-   schermata di conferma, e il pulsante della lingua ne ereditava fondo, bordo
-   e raggio. A schermo si vedeva come un riquadro attorno alla lingua attiva,
-   che nessuno aveva disegnato. */
-.lingua.corrente { color: var(--oro-chiaro); border-bottom-color: var(--oro); }
-.lingua.premuto { transform: scale(.94); }
+.lingua .bandiera {
+  width: 60px; height: 60px; border-radius: 50%; overflow: hidden;
+  /* Un filo d'avorio attorno a ogni bandiera: il Regno Unito ha il bordo blu
+     scuro, e sul fondo bordeaux senza filo non aveva un contorno. */
+  box-shadow: 0 0 0 2px rgba(244,237,227,.18);
+  opacity: .5; filter: saturate(.55);
+  transition: opacity var(--d-stato) var(--curva), filter var(--d-stato) var(--curva),
+              box-shadow var(--d-stato) var(--curva);
+}
+.lingua .bandiera svg { width: 100%; height: 100%; }
+/* La lingua in uso: piena, con l'anello d'oro. Si distingue per colore E per
+   forma, non per il colore soltanto. */
+.lingua.corrente .bandiera {
+  opacity: 1; filter: none;
+  box-shadow: 0 0 0 3px var(--carbone), 0 0 0 6px var(--oro);
+}
+.lingua.premuto { transform: scale(.92); }
+/* Una lingua senza bandiera disegnata esce con la sigla: aggiungerne una deve
+   restare un file JSON e nient'altro. */
+.lingua .sigla { font-size: var(--t-sottotit); letter-spacing: var(--crenatura-maiuscole);
+                 color: var(--avorio-fioco); }
+.lingua.corrente .sigla { color: var(--oro-chiaro); }
 
 /* ===========================================================================
-   VOLUME — in alto a sinistra, dov'e' speculare alle lingue.
+   VOLUME — in alto a sinistra, speculare alle lingue.
 
    Questa catena audio non ha un volume hardware: il suono esce dall'HDMI verso
-   lo schermo, e i controlli del mixer appartengono a un altro percorso. Quello
-   che si regola qui e' il PCM, prima di consegnarlo (vedi speech.scala_pcm).
+   lo schermo. Quello che si regola qui e' il PCM, prima di consegnarlo (vedi
+   speech.scala_pcm).
 
-   Si vede solo l'altoparlante; il resto esce al tocco e si richiude da solo.
-   Un dispositivo da tavolo non deve mostrare una manopola a chi voleva sapere
-   che vino ha in mano — ma chi apre il locale la deve trovare al primo colpo
-   d'occhio, senza istruzioni.
+   Si vede solo l'altoparlante; il cursore esce al tocco e si richiude da solo.
+   Era un «meno», dieci tacche e un «piu'»: undici tocchi per andare da zero
+   al massimo. Il cursore ci va con un gesto, e si legge a colpo d'occhio.
    =========================================================================== */
 #volume {
   position: absolute; left: 0; top: 0; z-index: 6;
-  padding: var(--passo) calc(var(--passo) * 1.5);
+  padding: calc(var(--passo) * .5) var(--passo);
 }
 #v-piatto {
-  display: flex; align-items: center; gap: calc(var(--passo) * 1.5);
-  padding: calc(var(--passo) * .5);
+  display: flex; align-items: center; gap: var(--passo);
+  padding: 0 calc(var(--passo) * 2) 0 0;
   /* Il bordo c'e' sempre, trasparente: se comparisse insieme al fondo,
      l'altoparlante si sposterebbe di due pixel a ogni apertura. */
-  border: 1px solid transparent; border-radius: var(--raggio-grande);
+  border: 1px solid transparent; border-radius: calc(var(--tocco) / 2);
   background: transparent;
-  transition: background-color .25s var(--curva), border-color .25s var(--curva);
+  transition: background-color var(--d-stato) var(--curva),
+              border-color var(--d-stato) var(--curva);
 }
-/* Aperto, il gruppo diventa una targa: sotto ci puo' essere il titolo del vino,
-   e un comando che si legge a meta' e' peggio di un comando che copre.
-
-   OPACA, non al 94%: su un fondo quasi nero il sei per cento di un titolo in
-   oro si legge ancora benissimo, e si vedeva il nome del vino passare dentro
-   ai pulsanti. Sui fondi scuri la trasparenza non perdona. */
+#v-apri { border-color: transparent; }
+/* Aperto, il gruppo diventa una targa OPACA: sotto ci puo' essere il titolo
+   del vino, e su un fondo quasi nero il sei per cento di un titolo in oro si
+   leggeva ancora dentro ai comandi. */
 #volume.aperto #v-piatto {
   background: #2A0F0C; border-color: var(--oro-scuro);
   box-shadow: 0 12px 44px rgba(0,0,0,.55);
 }
 #v-barra {
-  display: flex; align-items: center; gap: calc(var(--passo) * 1.5);
-  max-width: 0; opacity: 0; overflow: hidden;
-  pointer-events: none;
-  transition: max-width .32s var(--curva), opacity .22s var(--curva);
+  display: flex; align-items: center;
+  max-width: 0; opacity: 0; overflow: hidden; pointer-events: none;
+  transition: max-width var(--d-stato) var(--curva), opacity var(--d-stato) var(--curva);
 }
-#volume.aperto #v-barra { max-width: 640px; opacity: 1; pointer-events: auto; }
-
-/* La scala sale da sinistra a destra anche in ALTEZZA: si legge di sbieco, da
-   mezzo metro, senza contare le tacche. */
-#v-livello { display: flex; align-items: flex-end; gap: 7px; height: 56px; }
-#v-livello i {
-  width: 16px; border-radius: 3px;
-  height: calc(18px + var(--i) * 4px);
-  background: rgba(138,107,48,.34);
-  transition: background-color .18s var(--curva);
+#volume.aperto #v-barra { max-width: 520px; opacity: 1; pointer-events: auto; }
+/* Il cursore: tutto il riquadro e' toccabile, alto quanto un bersaglio, anche
+   se si vede solo un binario sottile e un pomello. */
+#v-cursore {
+  position: relative; width: 440px; height: var(--tocco); flex: none;
+  touch-action: none;
 }
-#v-livello i.acceso { background: var(--oro); }
-/* A zero il dispositivo racconta lo stesso, in silenzio: la scala si spegne
-   tutta e l'altoparlante prende la barra.
-
-   Le due onde dell'icona non sono decorazione: sotto meta' corsa ne resta una,
-   a zero nessuna e compare il taglio. Cosi' il livello si sa anche a comando
-   chiuso, che e' come sta per tutta la sera. */
-#volume.muto #v-apri { color: var(--avorio-fioco); border-color: var(--oro-scuro); }
-.altoparlante .onda { transition: opacity .2s; }
+#v-binario {
+  position: absolute; left: 30px; right: 30px; top: 50%; height: 8px;
+  margin-top: -4px; border-radius: 4px; background: rgba(138,107,48,.34);
+  overflow: hidden;
+}
+#v-pieno {
+  width: 100%; height: 100%; background: var(--oro);
+  transform: scaleX(var(--v, .6)); transform-origin: left center;
+}
+#v-pomello {
+  position: absolute; top: 50%; left: 30px; width: 52px; height: 52px;
+  margin: -26px 0 0 -26px; border-radius: 50%;
+  background: var(--avorio); border: 3px solid var(--oro);
+  box-shadow: 0 4px 14px rgba(0,0,0,.45);
+  transform: translateX(calc(var(--v, .6) * 380px));
+  transition: box-shadow var(--d-tocco);
+}
+#v-cursore.trascina #v-pomello { box-shadow: 0 0 0 10px rgba(227,180,87,.18),
+                                             0 4px 14px rgba(0,0,0,.45); }
+/* A zero il dispositivo racconta lo stesso, in silenzio: le onde dell'icona
+   spariscono e compare il taglio. Sotto meta' corsa ne resta una: il livello
+   si sa anche a comando chiuso, che e' come sta per tutta la sera. */
+#volume.muto #v-apri { color: var(--avorio-fioco); }
+.altoparlante .onda { transition: opacity var(--d-stato); }
 #volume.piano .altoparlante .onda.lontana { opacity: 0; }
 #volume.muto .altoparlante .onda { opacity: 0; }
-.altoparlante .taglio { opacity: 0; transition: opacity .2s; }
+.altoparlante .taglio { opacity: 0; transition: opacity var(--d-stato); }
 #volume.muto .altoparlante .taglio { opacity: 1; }
 #volume[hidden] { display: none; }
 
@@ -480,93 +585,61 @@ svg { display: block; }
 
    Sta in basso, come un sottotitolo, e cambia quando cambia la VOCE: il server
    la manda nel momento in cui una frase comincia a sentirsi, non quando la
-   scrive. Fra le due cose ci sono la riserva dell'uscita e il buffer di ALSA,
-   cioè mezzo secondo, e su una frase da un secondo mezzo secondo si vede.
-
-   La velatura sotto serve a renderla leggibile su qualunque vista senza
-   coprirla: sfuma da trasparente a quasi opaco solo nell'ultimo terzo.
+   scrive.
    =========================================================================== */
 #didascalia {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 8;
   display: flex; align-items: flex-end; justify-content: center;
   min-height: 168px;
   padding: 0 calc(var(--passo) * 6) calc(var(--passo) * 3);
-  font-size: var(--t-invito); line-height: 1.28; color: var(--avorio);
-  text-align: center; pointer-events: none;
+  font-size: var(--t-voce); line-height: 1.25; color: var(--avorio);
+  text-align: center; text-wrap: balance; pointer-events: none;
   background: linear-gradient(transparent 0, rgba(20,16,15,.55) 45%,
                               rgba(20,16,15,.9) 100%);
-  opacity: 0; transition: opacity .25s var(--curva);
+  opacity: 0; transition: opacity var(--d-stato) var(--curva);
 }
 #didascalia.visibile { opacity: 1; }
-/* Nel racconto no: il testo c'è già tutto, con la frase in ascolto accesa, e
-   una didascalia sarebbe la stessa frase scritta due volte a due centimetri
-   di distanza. */
+/* Nel racconto no: il testo c'è già tutto, con la frase in ascolto accesa. */
 #racconto.attiva ~ #didascalia { display: none; }
 
 /* ===========================================================================
    ANNULLA — chiudere senza dover togliere la bottiglia.
 
-   Fino a qui l'unico modo di finire era sollevare la bottiglia dal piatto. Va
-   benissimo quando si ha finito davvero, ma non per chi ha appena versato: il
-   vino e' nel bicchiere, la bottiglia sta li', e nessuno la risolleva solo per
-   far tacere il dispositivo.
-
-   Sta FUORI dalle viste, come la didascalia. Dentro `#racconto` finirebbe
-   sotto `.comandi`, che nonostante i cerchi stiano al centro e' una scatola
-   larga tutto lo schermo (left:0; right:0): si mangerebbe il tocco in tutta la
-   fascia bassa, e sembrerebbe un difetto del touch invece che una
-   sovrapposizione.
-
-   In basso a SINISTRA perche' l'angolo destro e' gia' il gesto da tre secondi
-   che apre lo stato tecnico. A sinistra il posto c'e', ma e' stretto: le righe
-   di scelta della conferma cominciano a 170 e la colonna del testo a 140. Ci
-   sta un cerchio da 108, non una pillola con la scritta - «Annulla» a 34 px
-   misura 110 px, che col contorno fanno 180. La scritta tradotta resta come
-   nome accessibile.
+   Sta FUORI dalle viste, come la didascalia: dentro `#racconto` finirebbe
+   sotto `.comandi`, che e' una scatola larga tutto lo schermo e si mangerebbe
+   il tocco in tutta la fascia bassa. In basso a SINISTRA perche' l'angolo
+   destro e' il gesto da tre secondi che apre le impostazioni.
    =========================================================================== */
 #annulla {
-  position: absolute; left: calc(var(--passo) * 2); z-index: 8;
-  /* Sulla stessa riga dei cerchi del racconto. Il loro `bottom` dichiarato e'
-     il fondo della SCATOLA, alta 140, con dentro cerchi da 108 centrati: il
-     fondo dei cerchi sta mezza differenza piu' su. Prendendo il valore
-     dichiarato si resterebbe sedici pixel piu' in basso. */
+  position: absolute; left: var(--margine); z-index: 8;
+  /* Sulla stessa riga dei cerchi del racconto: il loro `bottom` e' il fondo
+     della scatola alta 140, con dentro cerchi da 108 centrati. */
   bottom: calc(var(--passo) * 2.8 + (var(--tocco-grande) - var(--tocco)) / 2);
-  /* Tono spento come «Nessuno di questi»: e' una via d'uscita, non un comando
-     del racconto, e non deve pesare quanto la pausa. */
-  border-color: rgba(138, 107, 48, .45); color: var(--avorio-tenue);
   opacity: 0; visibility: hidden; pointer-events: none;
-  /* La visibilita' NON si interpola, per la stessa ragione delle viste: per
-     quattro decimi di secondo un pulsante invisibile resterebbe vivo sopra la
-     schermata d'invito, dove un tocco non deve fare niente. */
-  transition: opacity .3s var(--curva), visibility 0s linear .3s,
-              transform .12s var(--curva), background-color .2s, border-color .2s;
+  transition: opacity var(--d-stato) var(--curva), visibility 0s linear var(--d-stato),
+              transform var(--d-tocco) var(--curva), background-color var(--d-stato),
+              border-color var(--d-stato);
 }
 #annulla.disponibile {
   opacity: 1; visibility: visible; pointer-events: auto;
-  transition: opacity .3s var(--curva), visibility 0s,
-              transform .12s var(--curva), background-color .2s, border-color .2s;
+  transition: opacity var(--d-stato) var(--curva), visibility 0s,
+              transform var(--d-tocco) var(--curva), background-color var(--d-stato),
+              border-color var(--d-stato);
 }
 /* Il ritorno al tocco va ridichiarato: `#annulla` ha specificita' 1-1-0 e
-   batte `.cmd.premuto`, che ne ha 0-2-0. Senza queste due righe il bordo
-   smette di accendersi sotto il dito, in silenzio. */
-#annulla.premuto {
-  background: rgba(200, 134, 13, .16); border-color: var(--oro-chiaro);
-}
+   batte `.cmd.premuto`, che ne ha 0-2-0. */
+#annulla.premuto { background: rgba(200,134,13,.16); border-color: var(--oro-chiaro); }
 
 /* ===========================================================================
    SERVIZIO — cose che si vedono solo quando qualcosa non va.
    =========================================================================== */
-/* Quando non c'e' voce non c'e' niente da comandare: i pulsanti spariscono
-   invece di restare accesi e inerti sotto le dita di chi li prova, e l'avviso
-   si prende il posto loro. Prima era stampato ATTRAVERSO la barra di
-   avanzamento e sul bordo dei pulsanti. */
 #racconto.senza-voce .comandi,
 #racconto.senza-voce .progresso { display: none; }
 #muto {
   position: absolute; left: 0; right: 0; bottom: calc(var(--passo) * 2);
-  text-align: center;
+  text-align: center; text-wrap: balance;
   font-size: var(--t-sottotit); color: var(--avorio-tenue);
-  opacity: 0; transition: opacity .3s; pointer-events: none;
+  opacity: 0; transition: opacity var(--d-stato); pointer-events: none;
 }
 #muto.visibile { opacity: 1; }
 #spia {
@@ -577,11 +650,8 @@ svg { display: block; }
 #spia.rotto { background: var(--errore-luce); opacity: .95; }
 
 /* La batteria: quattro tacche, grandi, nella riga delle impostazioni che la
-   riguarda - e solo li'. Stava in basso a destra sulla scena, otto pixel, e
-   non si vedeva: un'icona che non si vede e' una bugia per omissione. Qui e'
-   larga un dito, e toccare la riga la riporta a piena, che e' anche il
-   ritorno visivo del tocco. Senza numero: e' una stima, e un numero le
-   darebbe una precisione che non ha. */
+   riguarda - e solo li'. Senza numero: e' una stima, e un numero le darebbe
+   una precisione che non ha. */
 #batteria {
   flex: none; position: relative; height: 34px; margin-right: 8px;
   display: flex; gap: 5px; align-items: center;
@@ -596,96 +666,94 @@ svg { display: block; }
 #batteria.t1 i:nth-child(-n+1), #batteria.t2 i:nth-child(-n+2),
 #batteria.t3 i:nth-child(-n+3), #batteria.t4 i:nth-child(-n+4) { opacity: 1; background: var(--oro); }
 #batteria.t1 i:first-child, #batteria.t1 { border-color: var(--oro); }
-#batteria.t0 { border-color: var(--errore-luce); animation: respiro 1.6s ease-in-out infinite; }
+#batteria.t0 { border-color: var(--errore-luce);
+               animation: respiro var(--ciclo) ease-in-out infinite; }
 
-/* Lo stato tecnico si APRE SOPRA la scena, non ci si naviga. Prima era un
-   `location.href`: su un chiosco senza barra degli indirizzi, senza tasto
-   indietro e senza tastiera, chi ci finiva restava su un blocco di JSON finche'
-   qualcuno non entrava da remoto - e il flusso degli eventi, cioe' il racconto
-   in corso, moriva li'. */
 #angolo { position: absolute; right: 0; bottom: 0; width: 110px; height: 110px; z-index: 7; }
-/* Il pannello delle impostazioni. Ci si arriva dallo stesso gesto da tre
-   secondi nell'angolo in basso a destra che prima apriva lo stato tecnico: un
-   ingresso nascosto basta e avanza, e i tre secondi con lo scarto che annulla
-   sono cio' che tiene fuori la mano dell'ospite che appoggia una bottiglia.
-   Lo stato tecnico e' diventato una riga qui dentro. */
+
+/* ===========================================================================
+   IMPOSTAZIONI — dallo stesso gesto da tre secondi nell'angolo in basso a
+   destra. Un ingresso nascosto basta e avanza: i tre secondi, con lo scarto
+   che annulla, sono cio' che tiene fuori la mano dell'ospite.
+
+   Le righe hanno la stessa forma delle scelte della conferma: stesso bordo,
+   stesso raggio, stesso ritorno al tocco. Prima erano due famiglie di
+   pulsanti diverse per la stessa cosa.
+   =========================================================================== */
 #impostazioni {
   position: absolute; inset: 0; z-index: 9; background: var(--carbone);
 }
 /* L'elenco scorre; la X per chiudere sta fuori dall'elenco, ferma in basso a
    sinistra, dov'e' quella che interrompe un racconto: e' lo stesso gesto e
-   deve stare nello stesso posto. Era una scritta «chiudi» in fondo alla
-   colonna: col selettore dei tre modi le righe sono diventate sei, il
-   contenuto ha superato i 480 px di vetro e la scritta e' finita sotto il
-   bordo - e appiccicata in fondo copriva l'ultima riga. */
+   deve stare nello stesso posto. */
 #i-elenco {
   position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain;
   display: flex; flex-direction: column; align-items: center;
   justify-content: flex-start; gap: var(--passo);
-  padding: calc(var(--passo) * 2) calc(var(--passo) * 3);
-  /* In fondo lo spazio della X, che sta sopra l'elenco: l'ultima riga deve
-     poter salire fin sopra di lei. */
+  padding: calc(var(--passo) * 3) calc(var(--passo) * 3);
   padding-bottom: calc(var(--tocco) + var(--passo) * 4);
 }
+#i-elenco::-webkit-scrollbar { display: none; }
 #i-chiudi {
-  position: absolute; left: calc(var(--passo) * 2); z-index: 8;
+  position: absolute; left: var(--margine); z-index: 8;
   bottom: calc(var(--passo) * 2.8 + (var(--tocco-grande) - var(--tocco)) / 2);
-  border-color: rgba(138, 107, 48, .45); color: var(--avorio-tenue);
 }
-#i-chiudi.premuto { background: rgba(200, 134, 13, .16); border-color: var(--oro-chiaro); }
+#i-chiudi.premuto { background: rgba(200,134,13,.16); border-color: var(--oro-chiaro); }
 #impostazioni[hidden] { display: none; }
-#i-titolo {
-  font-size: var(--t-titolo, 46px); color: var(--oro); margin-bottom: var(--passo);
-}
+#i-titolo { font-size: var(--t-titolo); color: var(--oro-chiaro); margin-bottom: var(--passo); }
 .i-riga {
   width: min(860px, 88%); min-height: var(--tocco);
   display: flex; align-items: center; justify-content: space-between;
-  gap: calc(var(--passo) * 2); padding: calc(var(--passo) / 1.5) var(--passo);
-  background: none; border: 2px solid rgba(200,134,13,.45);
+  gap: calc(var(--passo) * 2); padding: calc(var(--passo) * .75) calc(var(--passo) * 1.5);
+  background: rgba(90,33,28,.35); border: 2px solid var(--oro-scuro);
   border-radius: var(--raggio); color: var(--avorio);
   font: inherit; text-align: left;
+  transition: transform var(--d-tocco) var(--curva), background-color var(--d-stato),
+              border-color var(--d-stato);
 }
-.i-riga.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
-.i-nome { font-size: var(--t-scelta); }
+.i-riga.premuto { transform: scale(.985); background: rgba(200,134,13,.2);
+                  border-color: var(--oro-chiaro); }
+.i-nome { font-size: var(--t-sottotit); line-height: 1.2; }
 /* La spiegazione dice il PREZZO, non la lode: chi accende deve sapere che
    costa un'attesa, altrimenti la prima bottiglia sembra un guasto. */
 .i-spiega {
-  font-size: calc(var(--t-scelta) * .62); color: rgba(244,237,227,.62);
-  margin-top: calc(var(--passo) / 3); max-width: 620px; line-height: 1.35;
+  font-size: var(--t-minuto); color: var(--avorio-tenue);
+  margin-top: calc(var(--passo) / 3); max-width: 620px; line-height: 1.3;
+  text-wrap: pretty;
 }
 .i-interruttore {
   flex: none; width: 104px; height: 56px; border-radius: 28px;
   background: rgba(244,237,227,.16); border: 2px solid rgba(244,237,227,.3);
-  position: relative; transition: background .18s, border-color .18s;
+  position: relative; transition: background var(--d-stato), border-color var(--d-stato);
 }
 .i-pallina {
   position: absolute; top: 4px; left: 4px; width: 44px; height: 44px;
-  border-radius: 50%; background: var(--avorio); transition: transform .18s;
+  border-radius: 50%; background: var(--avorio); transition: transform var(--d-stato) var(--curva);
 }
-.i-riga.acceso .i-interruttore {
-  background: rgba(200,134,13,.55); border-color: var(--oro);
-}
+.i-riga.acceso .i-interruttore { background: rgba(200,134,13,.55); border-color: var(--oro); }
 .i-riga.acceso .i-pallina { transform: translateX(48px); }
 /* Un modo che il dispositivo non puo' servire non si mostra: un comando che non
-   fa niente e' peggio di nessun comando. E' lo stesso criterio del volume. */
+   fa niente e' peggio di nessun comando. */
 .i-scelta[hidden] { display: none; }
 .i-titoletto {
-  width: min(860px, 88%); font-size: calc(var(--t-scelta) * .5);
-  letter-spacing: .14em; text-transform: uppercase; color: var(--oro);
+  width: min(860px, 88%); font-size: var(--t-minuto);
+  letter-spacing: var(--crenatura-maiuscole); text-transform: uppercase;
+  color: var(--oro); margin-top: var(--passo);
 }
 /* Il segno di spunta occupa il suo posto anche quando non si vede: senza,
    scegliendo una riga tutte le altre si sposterebbero di lato. */
 .i-segno {
-  flex: none; width: var(--tocco); text-align: center;
-  font-size: var(--t-scelta); color: var(--oro); visibility: hidden;
+  flex: none; width: 60px; text-align: center;
+  font-size: var(--t-sottotit); color: var(--oro); visibility: hidden;
 }
 .i-scelta.acceso .i-segno { visibility: visible; }
-.i-scelta.acceso { border-color: var(--oro); }
+.i-scelta.acceso { border-color: var(--oro); background: rgba(200,134,13,.12); }
 
-/* Il mirino. Occupa tutto il vetro perche' quello che si sta guardando e'
+/* ===========================================================================
+   MIRINO — occupa tutto il vetro perche' quello che si sta guardando e'
    l'inquadratura: ridurla per far posto a una cornice vorrebbe dire tarare
-   una cosa guardandone un'altra. Il testo sta di fianco, e sotto i 900 px va
-   sotto - su un vetro da 800x480 l'immagine resta comunque la meta' larga. */
+   una cosa guardandone un'altra.
+   =========================================================================== */
 #mirino {
   position: absolute; inset: 0; z-index: 10; background: #0d0a09;
   display: flex; gap: calc(var(--passo) * 1.5);
@@ -693,38 +761,29 @@ svg { display: block; }
 }
 #mirino[hidden] { display: none; }
 /* Il video sta IN PIEDI, perche' in piedi sta la bottiglia: la camera e'
-   montata di lato e il fotogramma raddrizzato e' 1080x1920. Dargli i due terzi
-   della larghezza, come quando era orizzontale, vorrebbe dire una striscia
-   alta 700 px e larga 830 con dentro un'immagine larga 394: metà del vetro
-   spesa in bordi neri. Qui prende l'altezza e si tiene la sua proporzione. */
+   montata di lato e il fotogramma raddrizzato e' 1080x1920. */
 #m-video {
   flex: 0 1 auto; min-width: 0; min-height: 0; height: 100%; width: auto;
   object-fit: contain; border-radius: var(--raggio); background: #000;
 }
 #m-lato {
   flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
-  gap: calc(var(--passo) / 1.5); color: var(--avorio);
-  font-size: calc(var(--t-scelta) * .5); line-height: 1.3;
+  gap: var(--passo); color: var(--avorio);
+  font-size: var(--t-minuto); line-height: 1.3;
 }
-/* Scorre il CORPO, non il pannello. Il pulsante di ritorno sta fuori da qui e
-   non si muove: su una parete piena di scritte l'OCR trova quaranta righe, e
-   con il pulsante dentro all'elenco l'unica via d'uscita dal mirino finiva
-   sotto il bordo dello schermo. Su un dispositivo senza tastiera, quello non
-   e' un difetto di impaginazione: e' restarci chiusi dentro. */
+/* Scorre il CORPO, non il pannello: con il pulsante dentro all'elenco l'unica
+   via d'uscita dal mirino finiva sotto il bordo dello schermo. */
 #m-corpo { flex: 1 1 auto; min-height: 0; overflow: auto; }
 #m-corpo::-webkit-scrollbar { display: none; }
 #m-lato h3 {
-  margin: 0 0 .3em; font-size: calc(var(--t-scelta) * .42);
-  letter-spacing: .14em; text-transform: uppercase; color: var(--oro);
-  font-weight: 600;
+  margin: 0 0 .3em; font-size: calc(var(--t-minuto) * .85); font-weight: 600;
+  letter-spacing: var(--crenatura-maiuscole); text-transform: uppercase; color: var(--oro);
 }
 #m-lato h3:not(:first-child) { margin-top: .8em; }
 #m-lato p { margin: .2em 0; }
 #m-lato ul { margin: 0; padding-left: 1.1em; }
 #m-lato li { margin: .1em 0; }
-#m-lato code {
-  background: rgba(244,237,227,.09); padding: 0 5px; border-radius: 4px;
-}
+#m-lato code { background: rgba(244,237,227,.09); padding: 0 5px; border-radius: 4px; }
 #m-lato .certo { color: #5CDC7A; }
 #m-lato .dubbio { color: #FF9628; }
 #m-lato .nulla { color: #EE5F4F; }
@@ -732,12 +791,10 @@ svg { display: block; }
 #m-torna {
   flex: none; min-height: var(--tocco);
   display: flex; align-items: center; justify-content: center;
-  font-size: calc(var(--t-scelta) * .8); color: var(--avorio);
+  font-size: var(--t-sottotit); color: var(--avorio);
   border: 2px solid var(--oro); border-radius: var(--raggio);
 }
 #m-torna.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
-/* Su un vetro basso e largo il video in piedi non ci sta in altezza: allora
-   si arrende alla larghezza, invece di sbordare. */
 @media (max-height: 520px) {
   #m-video { height: auto; width: auto; max-width: 45%; flex: 0 1 auto; }
 }
@@ -753,24 +810,10 @@ svg { display: block; }
   color: var(--avorio); max-height: 70%; overflow: auto; white-space: pre-wrap;
 }
 #d-corpo::-webkit-scrollbar { display: none; }
-/* Mentre il racconto si scrive. Non e' una decorazione: generare costa
-   secondi, e in quei secondi lo schermo mostrava il titolo e sotto il vuoto -
-   cioe' sembrava rotto. */
-.scrivendo {
-  display: block; color: var(--oro-chiaro); opacity: .75;
-  animation: respiro 1.6s ease-in-out infinite;
-}
-@keyframes respiro { 0%, 100% { opacity: .35; } 50% { opacity: .95; } }
-/* Chi ha il movimento ridotto non vede lampeggiare niente, ma la frase resta:
-   e' lei a dire che il dispositivo sta lavorando, non il lampeggio. */
-@media (prefers-reduced-motion: reduce) {
-  .scrivendo { animation: none; opacity: .8; }
-}
-
 #d-chiudi {
   min-width: calc(var(--tocco) * 2.5); height: var(--tocco);
   display: flex; align-items: center; justify-content: center;
-  font-size: var(--t-scelta); color: var(--avorio);
+  font-size: var(--t-sottotit); color: var(--avorio);
   border: 2px solid var(--oro); border-radius: var(--raggio);
 }
 #d-chiudi.premuto { background: rgba(200,134,13,.2); border-color: var(--oro-chiaro); }
@@ -794,61 +837,50 @@ svg { display: block; }
         </svg>
       </button>
       <div id="v-barra">
-        <button class="cmd" id="v-giu" aria-label="Piu' piano">
-          <svg viewBox="0 0 24 24"><path d="M5 11h14v2H5z"/></svg>
-        </button>
-        <div id="v-livello"></div>
-        <button class="cmd" id="v-su" aria-label="Piu' forte">
-          <svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5z"/></svg>
-        </button>
+        <div id="v-cursore" role="slider" aria-label="Volume"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="60">
+          <div id="v-binario"><div id="v-pieno"></div></div>
+          <div id="v-pomello"></div>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- ATTESA -->
   <section id="attesa" class="vista attiva">
-    <svg class="marchio" viewBox="0 0 100 100" aria-hidden="true">
-      <g class="mirino">
-        <path d="M9 29 V17 A8 8 0 0 1 17 9 H29"/>
-        <path d="M71 9 H83 A8 8 0 0 1 91 17 V29"/>
-        <path d="M91 71 V83 A8 8 0 0 1 83 91 H71"/>
-        <path d="M29 91 H17 A8 8 0 0 1 9 83 V71"/>
-      </g>
-      <!-- La bottiglia: collo, spalla, corpo. Il fondo è arrotondato appena,
-           quanto basta perché non sembri una scatola. -->
-      <path class="bottiglia"
-            d="M45 20 H55 V37 C55 41 66 45 66 55 V83
-               A3.5 3.5 0 0 1 62.5 86.5 H37.5
-               A3.5 3.5 0 0 1 34 83 V55 C34 45 45 41 45 37 Z"/>
-      <path class="bottiglia" d="M45 26 H55"/>
-      <!-- La A sta dentro il corpo della bottiglia, dove sta l'etichetta. -->
-      <path class="lettera" d="M41.5 80.5 L50 57 L58.5 80.5 M44.7 71.6 H55.3"/>
+    <svg class="marchio" viewBox="-14 -710 2915 736" role="img" aria-label="Amelie">
+      <path class="parola" d="M26.3 5Q13.5 5 5.6 1.5Q-2.3 -2 -2.3 -8.5Q-2.3 -15.8 5.9 -21.2Q14.2 -26.6 29.4 -31.3Q55.8 -39.3 77.8 -55.5Q99.7 -71.6 115 -106.8Q142.6 -169.8 165.9 -225.6Q189.2 -281.3 210.2 -335.3Q231.2 -389.2 253.5 -447.3Q275.8 -505.3 300.2 -572.7Q306.6 -590.4 310.6 -605Q314.6 -619.7 315.8 -633.9Q326.1 -637.1 336 -640.3Q345.9 -643.5 356.3 -649.6Q366.5 -655.7 371.3 -667.6Q376 -679.4 379.5 -683.7Q381 -685 382.8 -685.1Q384.7 -685.2 386 -682.5Q388.2 -678.1 389.8 -672.1Q391.5 -666 393.5 -659.8Q417 -585 442.5 -507.3Q468 -429.7 492.2 -356.8Q516.4 -283.9 537.1 -224.2Q557.8 -164.5 571 -124.5Q584 -87.3 599.4 -68.2Q614.9 -49 632.2 -41Q649.6 -32.9 669.6 -28.7Q685.6 -25.7 693.5 -19.5Q701.3 -13.3 701.3 -5.9Q701.3 0.2 693.6 2.4Q685.9 4.7 673.5 4.7Q658.6 4.7 633.9 3.2Q609.1 1.8 581.7 0.3Q554.3 -1.1 531.3 -1.1Q512.2 -1.1 491.2 -1Q470.1 -0.9 451.6 -0.3Q433.1 0.3 419.9 0.3Q407.5 0.3 399.7 -2.8Q391.9 -5.9 391.9 -12Q391.9 -19.2 401.5 -24.3Q411.1 -29.3 423.6 -31.3Q457.2 -36.7 471.6 -48.8Q486.1 -60.9 485.2 -78.4Q484.6 -94 478.2 -121.4Q471.8 -148.8 463.3 -179.8Q454.8 -210.8 447.1 -235.1Q445.1 -243.1 439.9 -244.9Q434.7 -246.8 421.4 -246.8H234.1Q229.7 -246.8 225.3 -243.2Q220.9 -239.6 217.1 -228.9Q214 -218.3 207.3 -197.9Q200.6 -177.4 193.9 -154.8Q187.3 -132.2 182.4 -114Q177.5 -95.7 177 -89.6Q176 -66.4 192.4 -51.7Q208.8 -37 235.5 -30.5Q267.2 -21.9 267.2 -10.2Q267.2 -4.1 259.6 -1.5Q251.9 1.1 239.2 1.1Q223.8 1.1 198.8 0.1Q173.8 -1 145.6 -1Q113.1 -1 82.6 2Q52.1 5 26.3 5ZM261.2 -282.7H412.8Q426.9 -282.7 426.9 -287.9Q426.9 -290.2 426.4 -292.5Q425.9 -294.9 424.9 -298L348.5 -539.4Q342.8 -556.4 339.8 -556.4Q337.8 -556.4 332.1 -540.3L242.7 -298Q240.7 -292.3 240.7 -290Q240.7 -285 246.2 -283.9Q251.7 -282.7 261.2 -282.7ZM769.5 3Q761.8 3 755.7 0.8Q749.5 -1.5 749.5 -8.5Q749.5 -15.6 756.2 -18.8Q762.8 -22 772.5 -25Q786.7 -30 800.7 -36.5Q814.8 -43 814.8 -63V-280Q814.8 -306.2 808.8 -326Q802.8 -345.8 777.9 -349.7Q773.9 -350.7 771.2 -353.8Q768.5 -356.9 768.5 -363.4Q768.5 -374 776.9 -376.1Q803.5 -383 821.2 -390.6Q838.8 -398.2 853.1 -407.8Q867.5 -417.3 885.6 -428.2Q887.8 -429.3 890 -430.9Q892.1 -432.4 895.1 -432.4Q901.5 -432.4 901.5 -424.9Q901.5 -417.7 899 -396.6Q896.5 -375.4 896.5 -361.4Q896.5 -351.4 898.5 -349.4H900.5Q924.6 -372.6 961.9 -394.6Q999.2 -416.6 1055.5 -416.6Q1090.8 -416.6 1115.1 -400.2Q1139.4 -383.8 1154.9 -346.4H1158.1Q1189.8 -376.4 1230.3 -396.5Q1270.9 -416.6 1319.5 -416.6Q1352.3 -416.6 1374.7 -396.9Q1397.1 -377.2 1409.1 -345.2Q1421 -313.2 1421 -277V-62.9Q1421 -42.9 1434.7 -36.5Q1448.3 -30 1463.3 -25Q1473.1 -22 1479.5 -18.8Q1486 -15.6 1486 -8.5Q1486 -2.3 1481.4 0.3Q1476.8 3 1466.3 3Q1446.3 3 1434.4 1.5Q1422.5 0 1412 -1Q1401.5 -2 1383.5 -2Q1366.5 -2 1355 -1Q1343.5 0 1331 1.5Q1318.5 3 1298.5 3Q1289.9 3 1284.4 0.3Q1279 -2.3 1279 -8.5Q1279 -16.5 1285.4 -19.7Q1291.8 -22.9 1301.5 -25Q1317.2 -29 1329.8 -35.9Q1342.3 -42.8 1342.3 -62.1V-271.4Q1342.3 -295.5 1331.9 -316.6Q1321.5 -337.6 1304.2 -351.1Q1287 -364.6 1265.8 -364.6Q1242.6 -364.6 1221.9 -358.6Q1201.3 -352.7 1182.9 -338Q1156.8 -317.4 1156.8 -270.3V-62.9Q1156.8 -42.9 1170.8 -36Q1184.8 -29.2 1199.8 -25Q1209.5 -22.9 1216 -19.3Q1222.4 -15.6 1222.4 -8.5Q1222.4 -2.3 1217.3 0.3Q1212.3 3 1202.8 3Q1182.8 3 1170.7 1.5Q1158.6 0 1147.5 -1Q1136.4 -2 1118.4 -2Q1101.4 -2 1089.9 -1Q1078.4 0 1065.9 1.5Q1053.5 3 1033.5 3Q1025.7 3 1019.8 0.3Q1013.9 -2.3 1013.9 -8.5Q1013.9 -16.5 1021.2 -19.3Q1028.5 -22 1036.5 -25Q1051.2 -29.9 1064.7 -36.4Q1078.1 -42.8 1078.1 -62.1V-271.4Q1078.1 -295.5 1067.7 -316.5Q1057.3 -337.5 1040.1 -351Q1022.9 -364.4 1001.7 -364.4Q978.5 -364.4 957.8 -358.6Q937.2 -352.7 918.6 -338.1Q893.5 -319.7 893.5 -270.8V-62.9Q893.5 -43.3 906.4 -36.7Q919.3 -30 934.3 -25Q942.3 -22 949.6 -19.3Q956.9 -16.5 956.9 -8.5Q956.9 -2.5 951.4 0.3Q946 3 937.3 3Q917.3 3 905.3 1.5Q893.2 0 882.6 -1Q872 -2 854 -2Q837 -2 825.6 -1Q814.3 0 801.9 1.5Q789.5 3 769.5 3ZM1750.8 14.9Q1695.9 14.9 1654.7 -12.3Q1613.4 -39.6 1590.2 -89.1Q1567 -138.6 1567 -203.2Q1567 -261.9 1593.9 -310Q1620.8 -358.1 1665.6 -387.3Q1710.4 -416.6 1763.6 -416.6Q1803.9 -416.6 1835.4 -400.2Q1866.8 -383.9 1884.7 -355Q1902.6 -326.2 1902.6 -288.8Q1902.6 -256.9 1872.5 -256.9H1663Q1649 -256.9 1643.4 -249.3Q1637.8 -241.8 1637.8 -220.1Q1637.8 -173.5 1658.2 -135.2Q1678.6 -96.8 1712.8 -74.1Q1747 -51.3 1788.4 -51.3Q1818.3 -51.3 1842.8 -62.8Q1867.3 -74.2 1887 -95.9Q1890.9 -100.5 1893.1 -102.1Q1895.4 -103.8 1898.4 -103.8Q1906.7 -103.8 1906.7 -93.4Q1906.7 -75.6 1890.1 -53.1Q1875.8 -33.2 1854.5 -17.8Q1833.1 -2.3 1806.7 6.3Q1780.2 14.9 1750.8 14.9ZM1664.8 -289.4H1751.4Q1776 -289.4 1792.1 -290.4Q1808.2 -291.4 1823.3 -294.4Q1828.3 -295.5 1830 -301.4Q1831.7 -307.3 1831.7 -317.3Q1831.7 -346 1807.2 -366Q1782.7 -386 1748.8 -386Q1726.1 -386 1703.8 -372.8Q1681.4 -359.5 1666.9 -339.7Q1652.3 -320 1652.5 -300Q1652.5 -289.4 1664.8 -289.4ZM2000.5 3Q1995 3 1987.7 1.2Q1980.5 -0.6 1980.5 -6.7Q1980.5 -14.7 1987.9 -18.3Q1995.2 -21.9 2003.5 -25Q2018.5 -30 2032.2 -36.4Q2045.8 -42.8 2045.8 -63V-563.7Q2045.8 -592.4 2035.8 -612Q2025.8 -631.6 2000.8 -636.6Q1992.4 -638.6 1992.4 -649.9Q1992.4 -660.3 1999.8 -662.3Q2025.7 -668.1 2046.2 -675.1Q2066.8 -682.1 2084.8 -689.5Q2102.8 -697 2118.7 -702.9Q2123.3 -705 2125.6 -705Q2128.2 -705 2129.7 -702.3Q2131.3 -699.7 2131.3 -697.3Q2131.3 -688.5 2128 -660.5Q2124.7 -632.6 2124.5 -570.8V-63.3Q2124.5 -43 2138.2 -36.7Q2151.8 -30.3 2166.8 -25.3Q2175.2 -22.2 2182.5 -18.5Q2189.8 -14.9 2189.8 -6.9Q2189.8 -0.8 2182.6 1Q2175.4 2.8 2169.8 2.8Q2150.7 2.8 2138.2 1.3Q2125.8 -0.1 2114.3 -1.1Q2102.8 -2 2084.8 -2Q2067.8 -2 2056 -1Q2044.3 0 2032.4 1.5Q2020.5 3 2000.5 3ZM2281.1 3Q2272.4 3 2267 0.3Q2261.5 -2.3 2261.5 -8.3Q2261.5 -16.3 2268.7 -19.6Q2275.8 -22.8 2283.8 -24.8Q2305.5 -30 2316.5 -37.5Q2327.4 -44.9 2327.4 -62.7V-279.6Q2327.4 -307.6 2317.8 -327.6Q2308.2 -347.7 2282.7 -351.5Q2277.5 -352.5 2275 -355.8Q2272.4 -359.1 2272.4 -365.2Q2272.4 -376.8 2281.8 -377.9Q2323.4 -387.2 2351.5 -403Q2379.6 -418.9 2393.7 -428.9Q2403.8 -436 2408.7 -436Q2415.6 -436 2415.6 -429.9Q2415.5 -420.7 2412.8 -396.9Q2410.2 -373.2 2408.2 -344.9Q2406.1 -316.5 2406.1 -293.3V-62.8Q2406.1 -46.3 2417.4 -38.3Q2428.8 -30.3 2449.7 -24.8Q2457.7 -22.7 2464.9 -19.6Q2472.1 -16.5 2472.1 -8.5Q2472.1 2.9 2452.7 2.9Q2433.7 2.9 2420.9 1.4Q2408.1 0 2396.4 -1Q2384.6 -2 2366.6 -2Q2349.6 -2 2337.5 -1Q2325.4 0 2313.2 1.5Q2301.1 3 2281.1 3ZM2732.8 14.9Q2677.9 14.9 2636.7 -12.3Q2595.4 -39.6 2572.2 -89.1Q2549 -138.6 2549 -203.2Q2549 -261.9 2575.9 -310Q2602.8 -358.1 2647.6 -387.3Q2692.4 -416.6 2745.6 -416.6Q2785.9 -416.6 2817.4 -400.2Q2848.8 -383.9 2866.7 -355Q2884.6 -326.2 2884.6 -288.8Q2884.6 -256.9 2854.5 -256.9H2645Q2631 -256.9 2625.4 -249.3Q2619.8 -241.8 2619.8 -220.1Q2619.8 -173.5 2640.2 -135.2Q2660.6 -96.8 2694.8 -74.1Q2729 -51.3 2770.4 -51.3Q2800.3 -51.3 2824.8 -62.8Q2849.3 -74.2 2869 -95.9Q2872.9 -100.5 2875.1 -102.1Q2877.4 -103.8 2880.4 -103.8Q2888.7 -103.8 2888.7 -93.4Q2888.7 -75.6 2872.1 -53.1Q2857.8 -33.2 2836.5 -17.8Q2815.1 -2.3 2788.7 6.3Q2762.2 14.9 2732.8 14.9ZM2646.8 -289.4H2733.4Q2758 -289.4 2774.1 -290.4Q2790.2 -291.4 2805.3 -294.4Q2810.3 -295.5 2812 -301.4Q2813.7 -307.3 2813.7 -317.3Q2813.7 -346 2789.2 -366Q2764.7 -386 2730.8 -386Q2708.1 -386 2685.8 -372.8Q2663.4 -359.5 2648.9 -339.7Q2634.3 -320 2634.5 -300Q2634.5 -289.4 2646.8 -289.4Z"/>
+      <path class="goccia" d="M2369.0 -697.5C2381.5 -667.5 2419.0 -630.0 2419.0 -597.5A50 50 0 0 1 2319.0 -597.5C2319.0 -630.0 2356.5 -667.5 2369.0 -697.5Z"/>
     </svg>
-    <div class="nome">Amelie</div>
     <div class="filo"></div>
-    <div class="invito" id="invito">Appoggi una bottiglia</div>
+    <div class="passi">
+      <div class="passo">
+        <div class="p-titolo" id="invito">Appoggi</div>
+        <div class="p-spiega" id="p1-s">una bottiglia qui davanti</div>
+      </div>
+      <svg class="fra" viewBox="0 0 12 16" aria-hidden="true"><path d="M6 .8C7.25 3.75 11 7.5 11 10.75A5 5 0 0 1 1 10.75C1 7.5 4.75 3.75 6 .8Z"/></svg>
+      <div class="passo">
+        <div class="p-titolo" id="p2-t">Riconosco</div>
+        <div class="p-spiega" id="p2-s">il vino dall'etichetta</div>
+      </div>
+      <svg class="fra" viewBox="0 0 12 16" aria-hidden="true"><path d="M6 .8C7.25 3.75 11 7.5 11 10.75A5 5 0 0 1 1 10.75C1 7.5 4.75 3.75 6 .8Z"/></svg>
+      <div class="passo">
+        <div class="p-titolo" id="p3-t">Racconto</div>
+        <div class="p-spiega" id="p3-s">a voce e per iscritto</div>
+      </div>
+    </div>
   </section>
 
   <!-- LAVORO -->
   <section id="lavoro" class="vista">
-    <svg class="calice" viewBox="0 0 100 124" aria-hidden="true">
-      <defs>
-        <!-- Il vino esiste solo dentro la coppa: fuori non si vede salire. -->
-        <clipPath id="coppa">
-          <path d="M30 13 C30 43 37.5 58 50 58 C62.5 58 70 43 70 13 Z"/>
-        </clipPath>
-      </defs>
-      <g clip-path="url(#coppa)">
-        <g class="livello">
-          <rect class="vino" x="22" y="16" width="56" height="54"/>
-          <ellipse class="pelo" cx="50" cy="16" rx="28" ry="2.4"/>
-        </g>
-      </g>
-      <!-- Coppa a tulipano: larga all'orlo, raccolta sul fondo. -->
-      <path class="vetro" d="M30 13 C30 43 37.5 58 50 58 C62.5 58 70 43 70 13"/>
-      <path class="vetro" d="M30 13 H70"/>
-      <path class="vetro" d="M50 58 V97"/>
-      <ellipse class="vetro" cx="50" cy="103" rx="17" ry="5.5"/>
+    <!-- La goccia del marchio cade e increspa il vino: e' il marchio che si
+         muove. Non c'e' un orlo fermo sotto di lei - visto a riposo sembrava
+         un sorriso, non un calice: la superficie la disegnano le onde. -->
+    <svg class="stilla" viewBox="0 0 240 250" aria-hidden="true">
+      <ellipse class="onda uno" cx="120" cy="196" rx="84" ry="16"/>
+      <ellipse class="onda due" cx="120" cy="196" rx="84" ry="16"/>
+      <path class="cade" d="M120 29.3C126.5 44.9 146 64.4 146 81.3A26 26 0 0 1 94 81.3
+                            C94 64.4 113.5 44.9 120 29.3Z"/>
     </svg>
     <div class="frase" id="frase-lavoro">Sto leggendo l'etichetta…</div>
   </section>
@@ -892,7 +924,7 @@ svg { display: block; }
   <div id="didascalia"></div>
   <!-- Dopo la didascalia, cosi' a parita' di z-index vince sulla sua velatura
        e resta leggibile anche quando c'e' una didascalia accesa sotto. -->
-  <button class="cmd" id="annulla" aria-label="Annulla">
+  <button class="cmd spento" id="annulla" aria-label="Annulla">
     <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
   </button>
   <div id="muto"></div>
@@ -933,7 +965,7 @@ svg { display: block; }
       <div class="i-nome" id="i-stato-nome">Stato tecnico</div>
     </button>
    </div>
-   <button class="cmd" id="i-chiudi" aria-label="Chiudi">
+   <button class="cmd spento" id="i-chiudi" aria-label="Chiudi">
      <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
    </button>
   </section>
@@ -1131,36 +1163,32 @@ document.querySelectorAll("#r-comandi .cmd").forEach(b => {
 /* --------------------------------------------------------------- volume */
 
 /* Quanto resta aperto senza che nessuno lo tocchi. Quattro secondi e mezzo:
-   il tempo di due pressioni e un'occhiata, non tanto da restare in mezzo alla
+   il tempo di un gesto e un'occhiata, non tanto da restare in mezzo alla
    schermata dopo che ci si è dimenticati di lui. */
 const VOLUME_RIPOSO_MS = 4500;
-const TACCHE = 10;
+/* Il cursore va a passi di cinque: abbastanza fini da non sentire gli scalini,
+   abbastanza larghi perche' un dito che trema non mandi dieci richieste. */
+const PASSO_CURSORE = 5;
+/* Il binario e il pomello stanno dentro al riquadro con questo margine, in px
+   del disegno: e' mezzo pomello, cosi' agli estremi non esce dal bordo. */
+const MARGINE_CURSORE = 30;
+const LARGHEZZA_CURSORE = 440;
 
 let volume = 100;
 let passoVolume = 10;
 let chiusuraVolume = null;
-
-/* La scala si costruisce una volta sola: dieci tacche che crescono in altezza,
-   così il livello si legge di sbieco senza contarle. */
-(function costruisciScala() {
-  const box = $("v-livello");
-  for (let i = 0; i < TACCHE; i++) {
-    const t = document.createElement("i");
-    t.style.setProperty("--i", i);
-    box.appendChild(t);
-  }
-})();
+/* Mentre il dito trascina, il livello lo decide lui: i messaggi del server
+   che confermano un valore di un attimo prima farebbero saltare il pomello
+   all'indietro sotto il dito. */
+let trascinaVolume = false;
 
 function disegnaVolume(valore) {
-  volume = Math.max(0, Math.min(100, valore));
-  const accese = Math.round(volume / 100 * TACCHE);
-  $("v-livello").querySelectorAll("i").forEach((t, i) => {
-    t.classList.toggle("acceso", i < accese);
-  });
+  volume = Math.max(0, Math.min(100, Math.round(valore)));
+  const c = $("v-cursore");
+  c.style.setProperty("--v", volume / 100);
+  c.setAttribute("aria-valuenow", String(volume));
   $("volume").classList.toggle("muto", volume <= 0);
   $("volume").classList.toggle("piano", volume > 0 && volume < 50);
-  $("v-giu").disabled = volume <= 0;
-  $("v-su").disabled = volume >= 100;
 }
 
 function rinviaChiusura() {
@@ -1178,19 +1206,59 @@ function alternaVolume() {
   if (aperto) rinviaChiusura(); else clearTimeout(chiusuraVolume);
 }
 
-function regolaVolume(delta) {
-  rinviaChiusura();
-  /* Il livello si muove SUBITO e la risposta conferma: il colpetto che fa
-     sentire il volume arriva un terzo di secondo dopo, di proposito, e nel
-     frattempo la scala deve già aver risposto al dito. */
-  const chiesto = Math.max(0, Math.min(100, volume + delta));
-  if (chiesto === volume) return;
-  disegnaVolume(chiesto);
-  fetch("/volume/" + chiesto, { method: "POST" })
-    .then(r => r.json())
-    .then(d => { if (typeof d.valore === "number") disegnaVolume(d.valore); })
-    .catch(() => {});
+/* Il livello si muove SUBITO e il server lo segue: durante il gesto al
+   massimo un invio ogni centosessanta millesimi, e l'ultimo sempre, al
+   rilascio. Il colpetto che fa sentire il volume lo decide il server, quando
+   la mano si ferma. */
+let ultimoInvioVolume = 0;
+let invioVolumeRinviato = null;
+function inviaVolume(valore, subito) {
+  clearTimeout(invioVolumeRinviato);
+  const manda = () => {
+    ultimoInvioVolume = performance.now();
+    fetch("/volume/" + valore, { method: "POST" })
+      .then(r => r.json())
+      .then(d => { if (!trascinaVolume && typeof d.valore === "number") disegnaVolume(d.valore); })
+      .catch(() => {});
+  };
+  if (subito || performance.now() - ultimoInvioVolume > 160) manda();
+  else invioVolumeRinviato = setTimeout(manda, 160);
 }
+
+(function preparaCursore() {
+  const c = $("v-cursore");
+  /* Il punto toccato diventa un livello. Il riquadro misurato e' quello
+     SCALATO sul vetro, e il margine si scala con lui: si ragiona in frazioni
+     della larghezza, non in pixel del disegno. */
+  function livelloDa(x) {
+    const r = c.getBoundingClientRect();
+    const m = r.width * MARGINE_CURSORE / LARGHEZZA_CURSORE;
+    const f = (x - r.left - m) / Math.max(1, r.width - 2 * m);
+    return Math.round(Math.max(0, Math.min(1, f)) * 100 / PASSO_CURSORE) * PASSO_CURSORE;
+  }
+  function muovi(e) {
+    const v = livelloDa(e.clientX);
+    if (v !== volume) { disegnaVolume(v); inviaVolume(v, false); }
+    rinviaChiusura();
+  }
+  c.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    trascinaVolume = true;
+    c.classList.add("trascina");
+    try { c.setPointerCapture(e.pointerId); } catch { /* poco importa */ }
+    muovi(e);
+  });
+  c.addEventListener("pointermove", (e) => { if (trascinaVolume) muovi(e); });
+  const lascia = () => {
+    if (!trascinaVolume) return;
+    trascinaVolume = false;
+    c.classList.remove("trascina");
+    inviaVolume(volume, true);
+    rinviaChiusura();
+  };
+  c.addEventListener("pointerup", lascia);
+  c.addEventListener("pointercancel", lascia);
+})();
 
 rendiToccabile($("v-apri"), alternaVolume);
 /* Rotta a se', non un'azione del racconto: `comanda()` parla con
@@ -1200,10 +1268,39 @@ rendiToccabile($("v-apri"), alternaVolume);
    morto proprio nei casi in cui serve di piu'. */
 rendiToccabile($("annulla"), () => fetch("/annulla", { method: "POST" }).catch(() => {}));
 
-rendiToccabile($("v-giu"), () => regolaVolume(-passoVolume));
-rendiToccabile($("v-su"),  () => regolaVolume(+passoVolume));
 
 /* --------------------------------------------------------------- lingue */
+
+/* Le bandiere si disegnano qui, in SVG, e non con le emoji: su Linux Chromium
+   non ha un carattere a colori che le contenga, e 🇮🇹 esce scritto «IT». Il
+   Regno Unito e' la meta' centrale della bandiera 2:1, ritagliata a cerchio
+   dal suo contenitore. Una lingua che qui non c'e' esce con la sigla. */
+const BANDIERE = {
+  it: '<svg viewBox="0 0 60 60" aria-hidden="true">' +
+      '<rect width="20" height="60" fill="#009246"/>' +
+      '<rect x="20" width="20" height="60" fill="#F4F5F0"/>' +
+      '<rect x="40" width="20" height="60" fill="#CE2B37"/></svg>',
+  en: '<svg viewBox="15 0 30 30" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' +
+      '<clipPath id="uk-t"><path d="M30,15h30v15zv15h-30zh-30v-15zv-15h30z"/></clipPath>' +
+      '<path d="M0,0v30h60v-30z" fill="#012169"/>' +
+      '<path d="M0,0L60,30M60,0L0,30" stroke="#fff" stroke-width="6"/>' +
+      '<path d="M0,0L60,30M60,0L0,30" clip-path="url(#uk-t)" stroke="#C8102E" stroke-width="4"/>' +
+      '<path d="M30,0v30M0,15h60" stroke="#fff" stroke-width="10"/>' +
+      '<path d="M30,0v30M0,15h60" stroke="#C8102E" stroke-width="6"/></svg>',
+};
+/* Il nome di ogni lingua nella sua lingua: e' quello che si legge per
+   scegliere, e non si traduce. */
+const NOMI_LINGUE = { it: "Italiano", en: "English" };
+
+/* I testi fissi della schermata d'attesa che arrivano col messaggio «lingua». */
+function disegnaPassi(passi) {
+  if (!Array.isArray(passi) || passi.length !== 3) return;
+  const posti = [["invito", "p1-s"], ["p2-t", "p2-s"], ["p3-t", "p3-s"]];
+  passi.forEach((p, i) => {
+    if (p.titolo) $(posti[i][0]).textContent = p.titolo;
+    if (p.spiega) $(posti[i][1]).textContent = p.spiega;
+  });
+}
 
 /* L'elenco lo disegna il server: sa quali lingue esistono e come si chiamano
    le scritte fisse. La pagina non tiene un proprio elenco, così aggiungere
@@ -1213,21 +1310,34 @@ function disegnaLingue(m) {
   if (m.invito)  $("invito").textContent  = m.invito;
   if (m.domanda) $("domanda").textContent = m.domanda;
   if (m.avviso_muto) $("muto").textContent = m.avviso_muto;
+  disegnaPassi(m.passi);
   /* Il nome del pulsante non e' scritto nella pagina: arriva tradotto come
-     tutte le altre scritte fisse. Sul cerchio c'e' solo la croce, ma il nome
-     accessibile deve dire in che lingua si sta parlando. */
+     tutte le altre scritte fisse. */
   if (m.annulla) $("annulla").setAttribute("aria-label", m.annulla);
   segnaVoceMuta(m.voce_muta === true);
 
   const box = $("lingue");
   const codici = m.disponibili || [];
-  if (codici.length < 2) { box.innerHTML = ""; return; }
-
   box.innerHTML = "";
+  if (codici.length < 2) return;
+
   codici.forEach(codice => {
     const b = document.createElement("div");
     b.className = "lingua" + (codice === m.lingua ? " corrente" : "");
-    b.textContent = codice.toUpperCase();
+    b.setAttribute("role", "button");
+    b.setAttribute("aria-label", NOMI_LINGUE[codice] || codice);
+    b.setAttribute("aria-pressed", String(codice === m.lingua));
+    if (BANDIERE[codice]) {
+      const f = document.createElement("div");
+      f.className = "bandiera";
+      f.innerHTML = BANDIERE[codice];
+      b.appendChild(f);
+    } else {
+      const s = document.createElement("span");
+      s.className = "sigla";
+      s.textContent = codice.toUpperCase();
+      b.appendChild(s);
+    }
     rendiToccabile(b, () => fetch("/lingua/" + codice, { method: "POST" }).catch(() => {}));
     box.appendChild(b);
   });
@@ -1244,7 +1354,13 @@ eventi.onmessage = (e) => {
   switch (m.tipo) {
     case "stato":
       if (m.vista === "racconto") {
-        $("r-titolo").textContent = m.titolo || "";
+        const titolo = m.titolo || "";
+        $("r-titolo").textContent = titolo;
+        /* I gradini contano le lettere: trentaquattro stanno su una riga al
+           corpo pieno, cinquantasei su due al corpo medio, e oltre si scende
+           al piccolo invece di troncare. */
+        $("r-titolo").dataset.misura =
+          titolo.length > 56 ? "lunghissimo" : titolo.length > 34 ? "lungo" : "";
         $("r-sottotitolo").textContent = m.sottotitolo || "";
         /* Il testo si svuota QUI, non quando arriva quello nuovo: fra il
            cambio di vista e la prima frase passa qualche decimo, e in quel
@@ -1280,9 +1396,11 @@ eventi.onmessage = (e) => {
          segue la lingua da sola. */
       const t = $("r-testo");
       t.innerHTML = "";
-      const s = document.createElement("span");
+      const s = document.createElement("div");
       s.className = "scrivendo";
-      s.textContent = parole.sto_scrivendo || "…";
+      s.innerHTML = '<svg viewBox="0 0 20 28" aria-hidden="true"><path d="M10 1.2' +
+        'C12 6 18 12 18 17.4A8 8 0 0 1 2 17.4C2 12 8 6 10 1.2Z"/></svg><span></span>';
+      s.lastChild.textContent = parole.sto_scrivendo || "…";
       t.appendChild(s);
       frasi = []; viva = -1; avanzamento(0);
       break;
@@ -1365,7 +1483,7 @@ eventi.onmessage = (e) => {
          livello. */
       $("volume").hidden = m.attivo === false;
       if (typeof m.passo === "number") passoVolume = m.passo;
-      if (typeof m.valore === "number") disegnaVolume(m.valore);
+      if (typeof m.valore === "number" && !trascinaVolume) disegnaVolume(m.valore);
       break;
 
     case "impostazioni":

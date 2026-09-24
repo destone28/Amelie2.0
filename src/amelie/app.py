@@ -513,6 +513,13 @@ class Amelie:
             "avviso_muto": self.lex.frase("schermo", "voce_assente",
                                           lingua=self.lingua),
             "annulla": self.lex.frase("schermo", "annulla", lingua=self.lingua),
+            # Che cosa fa l'oggetto, in tre passi, sulla schermata d'attesa.
+            "passi": [
+                {"titolo": self.lex.frase("schermo", f"passo_{p}", lingua=self.lingua),
+                 "spiega": self.lex.frase("schermo", f"passo_{p}_spiega",
+                                          lingua=self.lingua)}
+                for p in ("appoggia", "riconosce", "racconta")
+            ],
             # Che cosa scrivere al posto del racconto mentre lo si scrive.
             # Sta qui, con le altre scritte fisse, perche' segua la lingua da
             # sola: il messaggio si rimanda a ogni cambio.
@@ -2052,6 +2059,25 @@ def crea_app(amelie: Amelie):
             STATICI / "index.html",
             headers={"Cache-Control": "no-store, must-revalidate",
                      "Pragma": "no-cache", "Expires": "0"})
+
+    # Il carattere dell'interfaccia sta DENTRO il dispositivo. Il foglio di stile
+    # chiedeva EB Garamond da sempre, ma sulla prima unita' il pacchetto non era
+    # mai stato installato - era stata preparata a mano prima che `install.sh`
+    # lo prevedesse - e sul vetro tutto usciva in DejaVu Serif: piu' largo,
+    # piu' pesante, con l'occhio medio un quarto piu' grande di quello su cui
+    # erano tarati i corpi. Servirlo da qui vuol dire che ogni unita' e ogni
+    # anteprima mostrano la stessa cosa, qualunque pacchetto ci sia sotto.
+    # Solo i file che ci sono, e solo woff2: niente percorsi composti.
+    CARATTERI = {p.name for p in (STATICI / "fonts").glob("*.woff2")}
+
+    @app.get("/fonts/{nome}")
+    async def carattere(nome: str):
+        if nome not in CARATTERI:
+            return JSONResponse({"ok": False}, status_code=404)
+        # Questi sì in cache, e per sempre: un carattere non cambia, e il
+        # chiosco lo rilegge a ogni ricarica della pagina.
+        return FileResponse(STATICI / "fonts" / nome, media_type="font/woff2",
+                            headers={"Cache-Control": "public, max-age=31536000"})
 
     @app.get("/eventi")
     async def eventi():

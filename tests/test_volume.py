@@ -378,12 +378,33 @@ class TestUnSoloColore:
         gruppo si centra più in basso, e il marchio salta nell'istante esatto
         in cui la schermata d'avvio lascia il posto all'interfaccia — che è
         l'unico modo di accorgersi che sono due pagine."""
+        import re
         radice = Path(__file__).resolve().parents[1]
+        interlinee = {}
         for nome in ("index", "avvio"):
             testo = (radice / f"src/amelie/ui/static/{nome}.html").read_text(
                 encoding="utf-8")
-            assert "line-height: 1.45" in testo, \
-                f"{nome}.html non dichiara l'interlinea comune"
+            regola = re.search(r"html, body \{(.*?)\}", testo, re.S)
+            assert regola, f"{nome}.html non ha la regola di html, body"
+            valore = re.search(r"line-height:\s*([\d.]+)", regola.group(1))
+            assert valore, f"{nome}.html non dichiara un'interlinea"
+            interlinee[nome] = valore.group(1)
+        assert interlinee["index"] == interlinee["avvio"], \
+            f"interlinee diverse: {interlinee} - il marchio salterebbe"
+
+    def test_l_avvio_ha_la_stessa_impaginazione_dell_attesa(self):
+        """Il marchio cade nello stesso punto solo se sotto di lui c'e' lo
+        stesso ingombro: l'avvio tiene i tre passi dell'attesa, invisibili.
+        Senza, il gruppo si centrerebbe piu' in basso di settanta pixel."""
+        radice = Path(__file__).resolve().parents[1]
+        avvio = (radice / "src/amelie/ui/static/avvio.html").read_text(encoding="utf-8")
+        assert 'class="passi"' in avvio and "visibility: hidden" in avvio
+        index = (radice / "src/amelie/ui/static/index.html").read_text(encoding="utf-8")
+        # E il marchio e' lo stesso disegno, tracciato per tracciato.
+        import re
+        tracce = [re.search(r'<path class="parola" d="([^"]+)"', t).group(1)
+                  for t in (index, avvio)]
+        assert tracce[0] == tracce[1], "il marchio dell'avvio non e' quello dell'attesa"
 
     def test_lo_stesso_bordeaux_dappertutto(self):
         for nome, testo in self._testo(
