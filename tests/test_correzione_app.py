@@ -152,6 +152,26 @@ class TestIlPulsante:
         assert amelie._azione_correzione() is None
 
 
+class TestIlTempoPerCorreggere:
+    """Il pulsante serve DOPO l'ultima frase, che e' quella che dice «non e' nel
+    mio archivio»: i due secondi di CONCLUSO non bastavano ad arrivarci."""
+
+    def _finisci(self, amelie):
+        import time
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.macchina.invia(Evento.RACCONTO_FINITO)
+        return amelie._scadenza - time.monotonic()
+
+    def test_fuori_archivio_resta_a_schermo(self, amelie):
+        from amelie import app as modulo
+        amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato")
+        assert self._finisci(amelie) > modulo.CONCLUSO_CON_CORREZIONE_S - 1
+
+    def test_un_vino_dell_archivio_se_ne_va_come_prima(self, amelie):
+        amelie._fatti = Fatti(livello=Livello.VINO, nome="Barolo Cannubi")
+        assert self._finisci(amelie) < 3
+
+
 class TestLEditor:
     def _in_racconto(self, amelie):
         _appoggia(amelie)

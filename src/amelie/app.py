@@ -141,6 +141,13 @@ RIPOSO_SFONDO_S = 600.0
 # da soli. Dieci minuti: scrivere una descrizione vera ne chiede cinque, e oltre
 # c'e' un tavolo che aspetta.
 CORREZIONE_TETTO_S = 600.0
+# Quanto resta a schermo un racconto finito che si puo' correggere. Di norma
+# sono i due secondi di CONCLUSO; ma sulla bottiglia fuori archivio l'ultima
+# frase dice che la descrizione si e' fatta da se', ed e' li' che viene voglia
+# di correggerla. Due secondi non bastano ad arrivare al pulsante: visto sul
+# dispositivo, il tocco e' arrivato sulla schermata d'invito. Dodici, come
+# la scelta fra i candidati.
+CONCLUSO_CON_CORREZIONE_S = 12.0
 SFONDO_DA_RISCRIVERE = 0.20
 # Di quanto sale e scende a ogni tocco. Dieci passi da un capo all'altro: meno
 # non si sente, di piu' non si regola.
@@ -376,6 +383,8 @@ class Amelie:
         if t.cambia_stato or t.rientro:
             log.info("%s -> %s", t.da.value, t.a.value)
             self._scadenza = (time.monotonic() + t.durata_s) if t.durata_s else None
+            if t.a is Stato.CONCLUSO and self._azione_correzione() is not None:
+                self._scadenza = time.monotonic() + CONCLUSO_CON_CORREZIONE_S
             # Il tavolo e' finito: si torna alla lingua di casa PRIMA di
             # ridisegnare, cosi' la schermata d'attesa esce gia' nella lingua
             # giusta invece di cambiare sotto gli occhi di chi arriva.
