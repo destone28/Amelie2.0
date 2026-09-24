@@ -66,3 +66,19 @@ def test_segui_conosce_la_sfumatura_vera():
     fondo = int(re.search(r"#racconto \.testo \{ padding-bottom: (\d+)px; \}",
                           PAGINA).group(1))
     assert fondo >= giu
+
+
+def test_la_maiuscola_non_ricostruisce_la_tastiera():
+    """Ricostruire i tasti a ogni cambio di maiuscola faceva sparire il ⌫ da
+    sotto il dito: un tocco che svuotava il campo riaccendeva la maiuscola, il
+    ripetitore del tasto vecchio partiva dopo 450 ms e non lo fermava piu'
+    nessuno. Sul dispositivo: «il cancella sembra sempre premuto, non riesco a
+    scrivere». Le maiuscole cambiano le scritte; i tasti si ricostruiscono solo
+    cambiando strato, lettere o simboli."""
+    maiuscola = re.search(r"function aggiornaMaiuscola\(\) \{(.*?)\n\}", PAGINA, re.S).group(1)
+    assert "disegnaTastiera" not in maiuscola
+    batti = re.search(r"function batti\(t\) \{(.*?)\n\}", PAGINA, re.S).group(1)
+    assert batti.count("disegnaTastiera") == 2, "solo ?123 e ABC ricostruiscono i tasti"
+    # e il ripetitore del cancella e' uno solo, fermato da qualunque dito che si alzi
+    assert 'window.addEventListener(ev, fermaRipetizione, true)' in PAGINA
+

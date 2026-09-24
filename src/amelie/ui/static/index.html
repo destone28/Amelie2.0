@@ -2048,6 +2048,7 @@ function disegnaVicine(vicine) {
 }
 
 function chiudiEditor(avvisa) {
+  fermaRipetizione();
   $("correzione").hidden = true;
   document.activeElement && document.activeElement.blur();
   if (avvisa) fetch("/correzione/chiudi", { method: "POST" }).catch(() => {});
@@ -2147,8 +2148,23 @@ let strato = LETTERE;
 let maiuscola = false;          /* la prossima lettera, e basta */
 let maiuscoleFisse = false;     /* doppio tocco sul tasto delle maiuscole */
 let ultimoShift = 0;
+let ripetizione = null;         /* il cancella tenuto premuto: uno solo per tutta la tastiera */
 
+function fermaRipetizione() {
+  clearTimeout(ripetizione);
+  clearInterval(ripetizione);
+  ripetizione = null;
+}
+
+/* I tasti si costruiscono una volta per strato - lettere o simboli - e poi se
+   ne cambiano solo le scritte. Si ricostruivano a ogni cambio di maiuscola, e
+   la maiuscola cambia anche SOTTO il dito: un tocco su ⌫ che svuota il campo
+   la riaccende. Il tasto premuto spariva, il dito si alzava su quello nuovo,
+   e il ripetitore del vecchio - avviato dopo 450 ms - non lo fermava piu'
+   nessuno: tutto quello che si scriveva spariva settanta millesimi dopo.
+   Visto sul dispositivo come «il cancella sembra sempre premuto». */
 function disegnaTastiera() {
+  fermaRipetizione();
   const box = $("tastiera");
   box.innerHTML = "";
   for (const riga of strato) {
@@ -2160,45 +2176,64 @@ function disegnaTastiera() {
       k.dataset.tasto = t;
       if (t === "⌫") { k.classList.add("servizio"); k.innerHTML = CANCELLA; }
       else if (t === "↵") { k.classList.add("servizio"); k.innerHTML = A_CAPO; }
-      else if (t === "⇧") {
+      else if (t === "⇧" || t === "?123" || t === "ABC") {
         k.classList.add("servizio");
-        k.innerHTML = MAIUSCOLA[maiuscoleFisse ? "fissa" : maiuscola ? "accesa" : "spenta"];
-      }
-      else if (t === "?123" || t === "ABC") { k.classList.add("servizio"); k.textContent = t; }
-      else if (t === "␣") {
+        if (t !== "⇧") k.textContent = t;
+      } else if (t === "␣") {
         k.classList.add("largo");
         k.textContent = scritte().tasto_spazio || "spazio";
-      } else {
-        k.textContent = maiuscola || maiuscoleFisse ? t.toUpperCase() : t;
       }
       premiTasto(k, t);
       r.appendChild(k);
     }
     box.appendChild(r);
   }
-  const s = box.querySelector('[data-tasto="⇧"]');
-  if (s) s.classList.toggle("acceso", maiuscola || maiuscoleFisse);
+  aggiornaTasti();
+}
+
+/* Maiuscole o minuscole: si riscrivono le lettere e la freccia, e basta. */
+function aggiornaTasti() {
+  const su = maiuscola || maiuscoleFisse;
+  for (const k of document.querySelectorAll("#tastiera .tasto")) {
+    const t = k.dataset.tasto;
+    if (t === "⇧") {
+      k.innerHTML = MAIUSCOLA[maiuscoleFisse ? "fissa" : maiuscola ? "accesa" : "spenta"];
+      k.classList.toggle("acceso", su);
+    } else if (t.length === 1 && !"⌫↵␣".includes(t)) {
+      k.textContent = su ? t.toUpperCase() : t;
+    }
+  }
 }
 
 /* Un tasto agisce alla PRESSIONE, non al rilascio come i pulsanti: su una
    tastiera il rilascio aggiunge un ritardo che si sente a ogni lettera. Il
    dito che scivola via non annulla niente - come su ogni tastiera. Il tasto
-   che cancella, tenuto premuto, continua a cancellare. */
+   che cancella, tenuto premuto, continua a cancellare; smette appena un dito
+   si alza, dovunque si alzi, e quando non c'e' piu' niente da cancellare. */
 function premiTasto(k, t) {
-  let ripeti = null;
-  const ferma = () => { clearTimeout(ripeti); clearInterval(ripeti); ripeti = null;
-                        k.classList.remove("premuto"); };
   k.addEventListener("pointerdown", (e) => {
     e.preventDefault();          /* il fuoco resta nel campo */
+    fermaRipetizione();
     k.classList.add("premuto");
     batti(t);
     if (t === "⌫") {
-      ripeti = setTimeout(() => { ripeti = setInterval(() => batti("⌫"), 70); }, 450);
+      ripetizione = setTimeout(() => {
+        ripetizione = setInterval(() => {
+          if (!k.isConnected || !batti("⌫")) fermaRipetizione();
+        }, 70);
+      }, 450);
     }
   });
+  const lascia = () => {
+    k.classList.remove("premuto");
+    if (t === "⌫") fermaRipetizione();
+  };
   for (const ev of ["pointerup", "pointercancel", "pointerleave"]) {
-    k.addEventListener(ev, ferma);
+    k.addEventListener(ev, lascia);
   }
+}
+for (const ev of ["pointerup", "pointercancel"]) {
+  window.addEventListener(ev, fermaRipetizione, true);
 }
 
 function batti(t) {
@@ -2208,26 +2243,29 @@ function batti(t) {
     if (ora - ultimoShift < 350) { maiuscoleFisse = !maiuscoleFisse; maiuscola = false; }
     else { maiuscola = !maiuscola; if (maiuscoleFisse) { maiuscoleFisse = false; maiuscola = false; } }
     ultimoShift = ora;
-    disegnaTastiera();
-    return;
+    aggiornaTasti();
+    return true;
   }
-  if (t === "?123") { strato = SIMBOLI; disegnaTastiera(); return; }
-  if (t === "ABC") { strato = LETTERE; disegnaTastiera(); return; }
+  if (t === "?123") { strato = SIMBOLI; disegnaTastiera(); return true; }
+  if (t === "ABC") { strato = LETTERE; disegnaTastiera(); aggiornaMaiuscola(); return true; }
+  let fatto = true;
   if (t === "↵") {
-    if (campoAttivo === "titolo") { attiva("descrizione"); return; }
+    if (campoAttivo === "titolo") { attiva("descrizione"); return true; }
     inserisci(campo, "\n");
   } else if (t === "⌫") {
     const a = campo.selectionStart, b = campo.selectionEnd;
     if (a !== b) campo.setRangeText("", a, b, "end");
     else if (a > 0) campo.setRangeText("", a - 1, a, "end");
+    else fatto = false;
   } else if (t === "␣") {
     inserisci(campo, " ");
   } else {
     inserisci(campo, maiuscola || maiuscoleFisse ? t.toUpperCase() : t);
-    if (maiuscola) { maiuscola = false; disegnaTastiera(); }
+    if (maiuscola) { maiuscola = false; aggiornaTasti(); }
   }
   campo.classList.remove("vuoto");
   aggiornaMaiuscola();
+  return fatto;
 }
 
 function inserisci(campo, testo) {
@@ -2248,7 +2286,7 @@ function aggiornaMaiuscola() {
   const campo = $("k-" + campoAttivo);
   const prima = campo.value.slice(0, campo.selectionStart);
   const vuole = prima.trim() === "" || /[.!?…]\s+$/.test(prima) || /\n\s*$/.test(prima);
-  if (vuole !== maiuscola) { maiuscola = vuole; disegnaTastiera(); }
+  if (vuole !== maiuscola) { maiuscola = vuole; aggiornaTasti(); }
 }
 
 /* La sfumatura in testa si accende solo a testo scorso. */
