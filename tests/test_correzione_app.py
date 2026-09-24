@@ -285,6 +285,9 @@ class TestLeRotte:
 
     @pytest.fixture
     def client(self, amelie):
+        # Il client di prova di FastAPI vuole httpx, che sulla board non c'e':
+        # li' questi test si saltano, sul PC girano.
+        pytest.importorskip("httpx")
         from fastapi.testclient import TestClient
 
         from amelie.app import crea_app
