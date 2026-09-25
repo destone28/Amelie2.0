@@ -169,6 +169,30 @@ class TestLEtichettaLettaAPezzi:
                  "BRUT ROSÉ", "RACCOLTA DIFERENZIATA VERIFICA LE DISPOSIZIONI"]
         assert lambrusco.cerca(righe) is None
 
+    def test_il_nome_intero_porta_con_se_cio_che_la_carta_da_per_scontato(self, lambrusco):
+        """«Castelvetro» sta in una voce sola: letto intero, insieme a un
+        pezzo di «Lambrusco», basta anche se «Grasparossa» e' caduto oltre la
+        curva. E «del» di «CORTE DEL BORGO», che sta in mezza carta, non deve
+        disfare la famiglia."""
+        righe = ["CORTE DEL BORGO", "OSSA DI CASTELVETRO", "AMBRUSCO",
+                 "VINO FRIZZANTE AMABILE"]
+        assert lambrusco.cerca(righe).titolo == "Lambrusco Grasparossa di Castelvetro DOC"
+
+    def test_ma_una_parola_sola_non_si_porta_dietro_un_titolo(self, tmp_path):
+        """Rigiocando il giornale: «TOSCANA» da sola diventava «Maremma Toscana
+        DOC Vermentino», e «VIN» di «VINICOLA» con «SALENTO» somigliante a
+        «santo» diventava un Vin Santo."""
+        f = tmp_path / "vini.csv"
+        with open(f, "w", encoding="utf-8", newline="") as g:
+            w = csv.writer(g, quoting=csv.QUOTE_ALL)
+            w.writerow(["titolo", "descrizione"])
+            w.writerows([("Maremma Toscana DOC Vermentino", "x"),
+                         ("Vin Santo del Chianti Classico DOC", "y"),
+                         ("Chianti DOCG", "z")])
+        c = Carta(f)
+        assert c.cerca(["RUFFINO", "TOSCANA", "DAL 1877"]) is None
+        assert c.cerca(["PALAMA", "ALBAL", "NICROAMARO", "SALENTO", "VIN"]) is None
+
     def test_e_la_parola_che_manca_resta_mancante(self, lambrusco):
         """«CAS» non e' «Castelvetro»: un titolo di cui manca una parola non si
         dice, pezzi o non pezzi."""

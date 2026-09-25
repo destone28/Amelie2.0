@@ -54,6 +54,21 @@ SOMIGLIANZA_MINIMA = 55.0
 # fa 78, «castelve» per «castelvetro» 84, «lambrus» per «lambrusco» 88 - e
 # le coincidenze sotto: «raccolta» per «franciacorta» fa 70.
 RISCONTRO_PEZZO = 75.0
+# E la parola letta esatta, che regge le altre, deve identificare: lunga
+# abbastanza da non essere un pezzo di un'altra - «VIN» di «VINICOLA» e'
+# esatto quanto «vin» di «Vin Santo», e non prova niente - e non una di quelle
+# che stanno su ogni etichetta, come «brut» o «rosso». Quattro lettere e non
+# cinque: «alba» e «asti» reggono «Barbera d'Alba» e «Moscato d'Asti».
+ESATTA_CHE_PROVA = 4
+
+# Articoli e preposizioni che stanno nei titoli senza identificare niente:
+# «del» di «Vin Santo del Chianti» e di «Castel del Monte». Non restringono
+# la famiglia di voci che una parola letta implica: vedi `Carta._implicate`.
+PAROLE_DI_LEGAME = frozenset((
+    "del", "dei", "della", "delle", "degli", "dello", "dal", "dalla", "dai",
+    "dalle", "sul", "sulla", "sui", "sulle", "nel", "nella", "con", "per",
+    "des", "les", "sur", "aux", "von", "und", "and", "the",
+))
 
 TACITE = frozenset((
     "doc", "docg", "dop", "igt", "igp", "aoc", "aop", "ava", "doca", "vdp",
@@ -198,7 +213,7 @@ class Carta:
         for voce, chiavi, parole in zip(self.voci, self._token, self._tutte):
             if not chiavi:
                 continue
-            punti = _somiglianza(testo, chiavi, lette)
+            punti = _somiglianza(testo, chiavi, lette, implicate)
             if punti < SOMIGLIANZA_MINIMA:
                 continue
             # Ogni parola del titolo che promette qualcosa dev'essere sul
@@ -224,6 +239,18 @@ class Carta:
             # Classico non è un Chianti: contare le parole del titolo che si
             # sono davvero lette sceglie il più specifico fra i veri.
             lette_qui = [p for p in parole if _si_e_letta(p, tutte_lette)]
+            # Ma l'implicazione ha un limite: le parole date per scontate non
+            # possono essere più di quelle che identificano e si sono lette.
+            # «Brunello» si porta dietro «Montalcino», una per una. «TOSCANA»,
+            # che in carta sta in una voce sola, si portava dietro «Maremma» e
+            # «Vermentino»: due parole mai lette per una che sta sull'etichetta
+            # di mezza regione. La carta sa quali vini ha, non quali esistono.
+            mute_implicate = [p for p in parole if p not in TACITE
+                              and p not in PAROLE_DI_LEGAME and p not in lette_qui]
+            identificanti = [p for p in lette_qui if p not in TACITE
+                             and p not in PAROLE_DI_LEGAME and p not in PAROLE_GENERICHE]
+            if len(mute_implicate) > len(identificanti):
+                continue
             # A parità di parole lette vince chi ne ha meno di NON lette: fra
             # «Champagne Rosé AOC» e «Champagne AOC», letto solo «champagne»,
             # il secondo promette meno e mantiene tutto.
@@ -260,8 +287,14 @@ class Carta:
         # piedi il solo «Champagne Extra Brut» e da li' «extra» risulterebbe
         # implicato - cioe' la regola si smentirebbe da sola proprio sul caso
         # che l'ha fatta nascere. Provato, e succedeva.
+        #
+        # E nemmeno le parole di legame. «del» sta in venti voci della carta, e
+        # su «CORTE DEL BORGO · OSSA DI CASTELVETRO» intersecava a vuoto la
+        # famiglia di «castelvetro», che e' una voce sola: la bottiglia aveva
+        # scritto il suo nome per intero e non se ne implicava niente.
         insiemi = [self._dove[p] for p in lette
-                   if p in self._dove and p not in PAROLE_GENERICHE]
+                   if p in self._dove and p not in PAROLE_GENERICHE
+                   and p not in PAROLE_DI_LEGAME]
         if not insiemi:
             return set()
         compatibili = set.intersection(*insiemi) if len(insiemi) > 1 else insiemi[0]
@@ -288,7 +321,8 @@ class Carta:
         return [f"{titolo} ({punti:.0f})" for punti, titolo in punteggi[:quante]]
 
 
-def _somiglianza(testo: str, chiavi: Sequence[str], lette: Sequence[str]) -> float:
+def _somiglianza(testo: str, chiavi: Sequence[str], lette: Sequence[str],
+                 implicate: set[str] = frozenset()) -> float:
     """Quanto un titolo somiglia a ciò che si è letto: la migliore di due misure.
 
     `token_set_ratio` da sola è tutto-o-niente sulle parole, e un'etichetta
@@ -312,6 +346,15 @@ def _somiglianza(testo: str, chiavi: Sequence[str], lette: Sequence[str]) -> flo
     parole: a settanta, «raccolta» della retroetichetta ritrovava
     «franciacorta», e con «BRUT» esatto uno spumante pugliese diventava un
     Franciacorta. Vedi `RISCONTRO_PEZZO`.
+
+    Una parola che la carta dà per scontata - vedi `Carta._implicate` - conta
+    come un pezzo appena sufficiente, ma solo se almeno due parole del titolo
+    si sono ritrovate davvero: «OSSA DI CASTELVETRO · AMBRUSCO» è un
+    Grasparossa anche se «Grasparossa» è caduto oltre la curva. Con una sola,
+    rigiocando il giornale, una parola che sta in una voce sola si portava
+    dietro tutto il titolo: «TOSCANA» diventava «Maremma Toscana DOC
+    Vermentino», «BAROSSA» letto da un'etichetta di Albarossa diventava
+    «Barossa Valley Shiraz».
     """
     from rapidfuzz import fuzz
 
@@ -319,7 +362,13 @@ def _somiglianza(testo: str, chiavi: Sequence[str], lette: Sequence[str]) -> flo
     if len(chiavi) < 2 or punti >= SOMIGLIANZA_MINIMA:
         return punti
     migliori = [max((fuzz.ratio(c, l) for l in lette), default=0.0) for c in chiavi]
-    if min(migliori) < RISCONTRO_PEZZO or max(migliori) < 100:
+    ritrovate = sum(m >= RISCONTRO_PEZZO for m in migliori)
+    if ritrovate >= 2:
+        migliori = [RISCONTRO_PEZZO if m < RISCONTRO_PEZZO and c in implicate else m
+                    for c, m in zip(chiavi, migliori)]
+    esatte = [c for c, m in zip(chiavi, migliori)
+              if m >= 100 and len(c) >= ESATTA_CHE_PROVA and c not in PAROLE_GENERICHE]
+    if min(migliori) < RISCONTRO_PEZZO or not esatte:
         return punti
     return max(punti, sum(migliori) / len(migliori))
 
