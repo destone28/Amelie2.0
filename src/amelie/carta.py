@@ -48,6 +48,13 @@ SOMIGLIANZA_MINIMA = 55.0
 # quelle parole devono essere sul vetro. Promettono un vino diverso, e
 # prometterlo senza averlo letto è l'errore che la carta rende peggiore —
 # perché qui la descrizione è lunga, dettagliata e convincente.
+# Quanto deve somigliare un pezzo di parola per ritrovare la parola intera,
+# quando il titolo si accetta parola per parola: vedi `_somiglianza`. I pezzi
+# veri, lasciati dal vetro curvo, stanno sopra - «parossa» per «grasparossa»
+# fa 78, «castelve» per «castelvetro» 84, «lambrus» per «lambrusco» 88 - e
+# le coincidenze sotto: «raccolta» per «franciacorta» fa 70.
+RISCONTRO_PEZZO = 75.0
+
 TACITE = frozenset((
     "doc", "docg", "dop", "igt", "igp", "aoc", "aop", "ava", "doca", "vdp",
     "qba", "annata",
@@ -191,7 +198,7 @@ class Carta:
         for voce, chiavi, parole in zip(self.voci, self._token, self._tutte):
             if not chiavi:
                 continue
-            punti = fuzz.token_set_ratio(testo, " ".join(chiavi))
+            punti = _somiglianza(testo, chiavi, lette)
             if punti < SOMIGLIANZA_MINIMA:
                 continue
             # Ogni parola del titolo che promette qualcosa dev'essere sul
@@ -279,6 +286,42 @@ class Carta:
                     for v, k in zip(self.voci, self._token) if k]
         punteggi.sort(reverse=True)
         return [f"{titolo} ({punti:.0f})" for punti, titolo in punteggi[:quante]]
+
+
+def _somiglianza(testo: str, chiavi: Sequence[str], lette: Sequence[str]) -> float:
+    """Quanto un titolo somiglia a ciò che si è letto: la migliore di due misure.
+
+    `token_set_ratio` da sola è tutto-o-niente sulle parole, e un'etichetta
+    letta a pezzi la manda sotto la soglia anche quando ogni parola del titolo
+    c'è. Sul dispositivo, un Lambrusco tenuto in mano davanti alla camera:
+    «LAMBRUSCO / PAROSSA DI CASTELVETN» faceva 54 con «Lambrusco Grasparossa
+    di Castelvetro», e il titolo non arrivava nemmeno alla regola che l'avrebbe
+    accettato - «parossa» e «castelvetn» sono proprio le parole del titolo, con
+    la curva del vetro che se ne mangia un pezzo.
+
+    La seconda misura è quella dell'archivio, parola per parola: ogni parola
+    del titolo cerca la sua fra quelle lette. Ma vale solo a tre condizioni,
+    e ognuna viene da un errore visto rigiocando milleduecento letture del
+    giornale: il titolo ha almeno due parole, le ritrova TUTTE, e almeno una
+    l'ha letta esatta. Senza, una parola sola somigliante bastava: «SALENTO»
+    diventava «Alentejo DOC», «MARO» diventava «Marino DOC». Con due parole
+    di cui una esatta, il resto può essere un pezzo di parola: è ciò che il
+    vetro curvo lascia leggere.
+
+    Il pezzo deve somigliare un po' più di quanto chieda la regola sulle
+    parole: a settanta, «raccolta» della retroetichetta ritrovava
+    «franciacorta», e con «BRUT» esatto uno spumante pugliese diventava un
+    Franciacorta. Vedi `RISCONTRO_PEZZO`.
+    """
+    from rapidfuzz import fuzz
+
+    punti = fuzz.token_set_ratio(testo, " ".join(chiavi))
+    if len(chiavi) < 2 or punti >= SOMIGLIANZA_MINIMA:
+        return punti
+    migliori = [max((fuzz.ratio(c, l) for l in lette), default=0.0) for c in chiavi]
+    if min(migliori) < RISCONTRO_PEZZO or max(migliori) < 100:
+        return punti
+    return max(punti, sum(migliori) / len(migliori))
 
 
 def _si_e_letta(parola: str, lette: Sequence[str]) -> bool:

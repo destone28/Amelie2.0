@@ -125,6 +125,56 @@ class TestLOcrSbagliaLeLettere:
         assert carta.cerca(["BARBERA", "DOCG"]) is None
 
 
+class TestLEtichettaLettaAPezzi:
+    """Il vetro curvo si mangia l'inizio e la fine delle parole.
+
+    Sul dispositivo,un Lambrusco tenuto in mano: ogni
+    parola del titolo era sul vetro, ma a pezzi, e la somiglianza dell'intera
+    stringa restava a 54 - sotto la soglia - anche con tutte le parole lette.
+    """
+
+    VOCI = [
+        ("Lambrusco Grasparossa di Castelvetro DOC", "Frizzante, rosso scuro."),
+        ("Lambrusco di Sorbara DOC", "Il piu' chiaro dei Lambruschi."),
+        ("Franciacorta DOCG Brut", "Metodo classico in Lombardia."),
+        ("Alentejo DOC", "Il sud del Portogallo."),
+        ("Marino DOC", "Bianco dei Castelli Romani."),
+    ]
+
+    @pytest.fixture
+    def lambrusco(self, tmp_path):
+        f = tmp_path / "vini.csv"
+        with open(f, "w", encoding="utf-8", newline="") as g:
+            w = csv.writer(g, quoting=csv.QUOTE_ALL)
+            w.writerow(["titolo", "descrizione"])
+            w.writerows(self.VOCI)
+        return Carta(f)
+
+    def test_i_pezzi_del_titolo_bastano(self, lambrusco):
+        righe = ["BORGO", "LAMBRUSCO", "PAROSSA DI CASTELVETN", "ourmd", "CORTE",
+                 "DEL", "toncominasione di Crigine Contedlt", "VINO FRIZZANTE AMABILE"]
+        assert lambrusco.cerca(righe).titolo == "Lambrusco Grasparossa di Castelvetro DOC"
+
+    def test_ma_una_parola_sola_che_somiglia_no(self, lambrusco):
+        """Senza una parola letta esatta e una seconda che la conferma, basta
+        una somiglianza: «SALENTO» faceva «Alentejo», «MARO» faceva «Marino»."""
+        assert lambrusco.cerca(["PALAMA", "NEGROAMARO", "SALENTO", "VINICOLA"]) is None
+        assert lambrusco.cerca(["2026", "ALBAD", "PALAMÀ", "MARO", "22"]) is None
+
+    def test_e_un_pezzo_troppo_lontano_nemmeno(self, lambrusco):
+        """«raccolta» della retroetichetta somiglia a «franciacorta» per settanta
+        su cento: con «BRUT» esatto, uno spumante pugliese diventava un
+        Franciacorta."""
+        righe = ["PRODUTTORI MANDURIA", "Vino Spumante di Qualità", "METODO CLASSICO",
+                 "BRUT ROSÉ", "RACCOLTA DIFERENZIATA VERIFICA LE DISPOSIZIONI"]
+        assert lambrusco.cerca(righe) is None
+
+    def test_e_la_parola_che_manca_resta_mancante(self, lambrusco):
+        """«CAS» non e' «Castelvetro»: un titolo di cui manca una parola non si
+        dice, pezzi o non pezzi."""
+        assert lambrusco.cerca(["LAMBRUSCO", "SPAROSSA DI CAS"]) is None
+
+
 class TestLeVicine:
     """Servono al giornale, non alla voce: se il titolo giusto è fra queste, il
     problema è la regola o l'OCR; se non c'è, il problema è la carta."""
