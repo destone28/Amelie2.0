@@ -46,6 +46,10 @@ from .matcher import SOGLIA_DUBBIA, Fatti, Livello
 
 log = logging.getLogger(__name__)
 
+# Un vitigno finto del registro detto come se fosse un'uva: vedi
+# `matcher.VITIGNI_FINTI` e `Narratore._dalla_cache`.
+_UVA_FINTA = re.compile(r"\b(?:da|from)\s+(?:na|n\.a\.|n/a|nd|n\.d\.)(?=[\s.,;]|$)", re.I)
+
 # Un racconto piu' lungo di così non lo ascolta nessuno in piedi davanti a un
 # tavolo, e ogni parola in piu' costa ~0,2 s di generazione sui Cortex-A53.
 PAROLE_MAX = 130
@@ -1516,6 +1520,13 @@ class Narratore:
             if not ok:
                 log.warning("cache %s/%s scartata, ha inventato: %s",
                             ambito, ident, invenzioni)
+                continue
+            # Quarantotto testi pronti sono stati scritti quando il vitigno
+            # «na» del registro passava per un'uva: «Nasce da na.», «It is
+            # made from na.». Si saltano come quelli che inventano.
+            if _UVA_FINTA.search(r["testo"]):
+                log.warning("cache %s/%s scartata: nomina un vitigno che non c'e'",
+                            ambito, ident)
                 continue
             apertura = _apertura(f, self.lex, self.lingua, seme_di(f))
             log.debug("racconto da %s/%s in cache", ambito, ident)

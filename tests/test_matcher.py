@@ -1199,3 +1199,28 @@ class TestIlProduttoreScrittoSullEtichetta:
         indice = m._cantine_per_parola()
         assert indice["palama"] == {"palama"}
         assert len(indice.get("serra", ())) > 1
+
+
+class TestIVitigniFinti:
+    """«na» e' un buco del registro, non un'uva: e' collegato a 691 tipologie,
+    a volte come vitigno principale, e il racconto diceva «Si ottiene da na.»
+    - sul dispositivo, per un Garda Cabernet."""
+
+    def test_non_finisce_fra_i_vitigni(self, m):
+        f = m.fatti_di("tipologia", 1973)          # Garda Cabernet
+        assert f.tipologia == "Garda Cabernet"
+        assert "na" not in [v.lower() for v in f.vitigni + f.vitigni_ammessi]
+
+    def test_e_i_vitigni_veri_restano(self, m):
+        f = m.fatti_di("tipologia", 26)            # Aglianico del Vulture
+        assert "Aglianico" in f.vitigni
+        assert "na" not in [v.lower() for v in f.vitigni_ammessi]
+
+    def test_il_racconto_non_lo_dice(self, m):
+        from amelie.narrator import Narratore
+        n = Narratore()
+        try:
+            testo = n.racconta(m.fatti_di("tipologia", 1973)).testo
+        finally:
+            n.chiudi()
+        assert " na." not in testo and " na " not in testo

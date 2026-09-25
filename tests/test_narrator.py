@@ -1690,3 +1690,19 @@ class TestOgniVoceDellElencoDeveEssereUnUva:
         f = self._fatti(regione="Umbria")
         assert verifica("Nasce dal Trebbiano, Umbria. Il disciplinare lo vuole "
                         "giallo paglierino.", f)[0]
+
+
+def test_un_racconto_pronto_che_nomina_un_uva_finta_si_salta(matcher):
+    """Quarantotto testi pronti dicono «Nasce da na.»: scritti quando il
+    vitigno «na» del registro passava per un'uva. Si saltano."""
+    from amelie.narrator import Narratore
+    n = Narratore()
+    try:
+        f = matcher.fatti_di("tipologia", 3400)
+        with n._db:
+            r = n.con.execute("SELECT testo FROM racconto WHERE ambito='tipologia'"
+                              " AND ambito_id=3400 AND lingua='it'").fetchone()
+        assert r is not None and "da na." in r["testo"]
+        assert n._dalla_cache(f, solo_esatto=True) is None
+    finally:
+        n.chiudi()

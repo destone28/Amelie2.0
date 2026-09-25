@@ -610,6 +610,15 @@ FAMIGLIA_DAL_TIPO = {
 # distingue.
 CANDIDATI_PER_COLORE = 16
 
+# I vitigni che nell'archivio non sono uve ma buchi del registro. «na» e'
+# collegato a 691 tipologie, a volte come vitigno principale - il Garda
+# Cabernet ce l'ha come unico - e il racconto diceva «Si ottiene da na.»:
+# visto sul dispositivo. Il database non si ricostruisce dal repo,
+# quindi si scartano qui, in ogni interrogazione che legge i vitigni.
+VITIGNI_FINTI = ("na", "n.a.", "n/a", "nd", "n.d.")
+_SENZA_VITIGNI_FINTI = (" AND lower(vi.nome) NOT IN ("
+                        + ", ".join(f"'{v}'" for v in VITIGNI_FINTI) + ")")
+
 # La temperatura di servizio la decide la CATEGORIA, non l'uva, tutte le volte
 # che il vino non e' fermo. Le schede dei vitigni in `data/vitigni.json` danno
 # la temperatura del vino fermo di quell'uva - giusta per un Pinot Nero, giusta
@@ -2198,7 +2207,7 @@ class Matcher:
         f.categoria = self._categoria_del_vino(r)
         f.vitigni = [x[0] for x in self.con.execute(
             "SELECT vi.nome FROM vino_vitigno vv JOIN vitigno vi ON vi.id = vv.vitigno_id"
-            " WHERE vv.vino_id = ? ORDER BY vi.nome", (vid,))]
+            " WHERE vv.vino_id = ?" + _SENZA_VITIGNI_FINTI + " ORDER BY vi.nome", (vid,))]
         f.abbinamenti = [x[0] for x in self.con.execute(
             "SELECT abbinamento FROM vino_abbinamento WHERE vino_id = ? LIMIT 6", (vid,))]
         # Col colore vero e la categoria, il registro puo' finalmente dire la
@@ -2254,8 +2263,8 @@ class Matcher:
             dove.extend(x[0] for x in self.con.execute(
                 "SELECT vi.nome FROM tipologia_vitigno tv"
                 " JOIN vitigno vi ON vi.id = tv.vitigno_id"
-                " WHERE tv.tipologia_id = ? AND tv.ruolo = ? ORDER BY vi.nome",
-                (tid, ruolo)))
+                " WHERE tv.tipologia_id = ? AND tv.ruolo = ?" + _SENZA_VITIGNI_FINTI
+                + " ORDER BY vi.nome", (tid, ruolo)))
         self._aggiungi_disciplinare(f, r["denominazione_id"], r["nome"],
                                     r["colore"], r["categoria"])
         self._aggiungi_nota_vitigno(f)
@@ -2305,6 +2314,7 @@ class Matcher:
             " JOIN vitigno vi ON vi.id = tv.vitigno_id"
             " JOIN tipologia t ON t.id = tv.tipologia_id"
             " WHERE t.denominazione_id = ? AND tv.ruolo = 'principale'"
+            + _SENZA_VITIGNI_FINTI +
             " GROUP BY vi.id"
             " HAVING count(*) >= (SELECT count(*) FROM tipologia WHERE denominazione_id = ?) / 2.0"
             " ORDER BY count(*) DESC LIMIT 5", (did, did))]
