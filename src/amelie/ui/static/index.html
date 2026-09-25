@@ -920,6 +920,7 @@ svg { display: block; }
 #k-salva.premuto { transform: scale(.96); background: var(--oro); }
 /* Mentre scrive - foto, parole, punti dell'etichetta - non si ripreme. */
 #k-salva.in-corso { opacity: .55; }
+#k-salva.nascosto { visibility: hidden; }
 /* Una riga sola sotto la barra: di norma spiega che cosa resta sul
    dispositivo; se la bottiglia somiglia a una gia' corretta, propone quella. */
 #k-nota {
@@ -1000,6 +1001,26 @@ svg { display: block; }
 .k-campo::placeholder { color: var(--avorio-fioco); }
 .k-campo.attivo { border-color: var(--oro); background: rgba(90,33,28,.6); }
 .k-campo.vuoto { border-color: var(--errore-luce); }
+#k-domanda {
+  position: absolute; left: 0; right: 0; top: 88px; bottom: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: calc(var(--passo) * 4); padding: 0 var(--margine);
+  background: var(--carbone); animation: affiora var(--d-vista) var(--curva);
+}
+#k-domanda[hidden] { display: none; }
+#k-d-frase { font-size: var(--t-voce); color: var(--avorio); text-align: center;
+             max-width: 980px; line-height: 1.25; }
+#k-d-scelte { display: flex; gap: calc(var(--passo) * 3); }
+.k-d-scelta {
+  height: 88px; min-width: 300px; padding: 0 calc(var(--passo) * 3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--t-sottotit); color: var(--oro-chiaro);
+  border: 2px solid var(--oro-scuro); border-radius: 44px;
+  transition: transform var(--d-tocco) var(--curva), background-color var(--d-stato);
+}
+.k-d-scelta.si { color: var(--carbone); background: var(--oro-chiaro); border-color: var(--oro-chiaro);
+                 font-weight: 500; }
+.k-d-scelta.premuto { transform: scale(.97); }
 #k-titolo { font-size: var(--t-sottotit); height: 64px; flex: none; }
 #k-descrizione { font-size: var(--t-piccolo); flex: 1; min-height: 0; overflow-y: auto; }
 #k-descrizione::-webkit-scrollbar { display: none; }
@@ -1164,6 +1185,11 @@ svg { display: block; }
   <section id="avviso" class="vista">
     <div class="simbolo" id="a-simbolo">↻</div>
     <div class="frase"   id="a-frase"></div>
+    <!-- Una bottiglia che non si e' riconosciuta si puo' insegnare al
+         dispositivo: solo con le correzioni accese, come il pulsante del racconto. -->
+    <div class="correggi" id="a-aiuta" role="button" hidden>
+      <span class="pillola"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg><span class="scritta"></span></span>
+    </div>
   </section>
 
   <div id="didascalia"></div>
@@ -1264,6 +1290,15 @@ svg { display: block; }
       </div>
     </div>
     <div id="tastiera"></div>
+    <!-- Salvata una descrizione, la domanda sull'altra lingua copre campi e
+         tastiera: si risponde con un tocco, e non c'e' altro da fare. -->
+    <div id="k-domanda" hidden>
+      <div id="k-d-frase"></div>
+      <div id="k-d-scelte">
+        <div class="k-d-scelta si" id="k-d-si" role="button"></div>
+        <div class="k-d-scelta" id="k-d-no" role="button"></div>
+      </div>
+    </div>
   </section>
 </div>
 
@@ -1744,8 +1779,10 @@ eventi.onmessage = (e) => {
         if (!m.stesso_racconto) componiRacconto([]);
         segnaCorrezione();
       }
-      /* L'editor vive dentro al racconto: se il dispositivo va altrove, si chiude. */
-      if (m.vista !== "racconto" && !$("correzione").hidden) chiudiEditor(false);
+      /* L'editor vive dentro alla schermata da cui si e' aperto - il racconto,
+         o l'avviso di una bottiglia non riconosciuta: se il dispositivo va
+         altrove, si chiude. */
+      if (m.vista !== vistaEditor && !$("correzione").hidden) chiudiEditor(false);
       if (m.vista === "lavoro" && m.frase) $("frase-lavoro").textContent = m.frase;
       if (m.vista === "avviso") {
         $("a-frase").textContent = m.frase || "";
@@ -1753,6 +1790,10 @@ eventi.onmessage = (e) => {
         /* Il tono lo decide il server, che sa se sta chiedendo qualcosa o
            dichiarando un guasto. Prima erano tutti dello stesso oro. */
         $("avviso").className = "vista " + (m.tono || "invito");
+        const aiuta = $("a-aiuta");
+        aiuta.hidden = m.aiuta !== true;
+        aiuta.querySelector(".scritta").textContent =
+          scritte().aiutami || "Mi aiuti a riconoscerla";
       }
       if ("voce_muta" in m) segnaVoceMuta(m.voce_muta === true);
       /* Cambiando scena si tace: una didascalia rimasta accesa parlerebbe di
@@ -2120,6 +2161,11 @@ let idIniziale = null;          /* quella che si stava modificando aprendo */
 let rifScelto = null;
 let scollegata = false;
 let titoloScelto = "";          /* il titolo com'era quando si e' scelto */
+/* La schermata da cui l'editor si e' aperto: il racconto, o l'avviso. */
+let vistaEditor = "racconto";
+/* Si sta scrivendo la descrizione nell'altra lingua: titolo e collegamento
+   sono gia' decisi, e il titolo non si cerca fra le bottiglie. */
+let secondaLingua = false;
 
 function scritte() { return parole.correzione || {}; }
 
@@ -2140,8 +2186,13 @@ function apriEditor() {
       idScelto = idIniziale = d.id || null;
       rifScelto = d.riferimento || null;
       scollegata = false;
+      secondaLingua = false;
       titoloScelto = d.titolo || "";
-      $("k-titolo-editor").textContent = d.id
+      vistaEditor = d.aiuto ? "avviso" : "racconto";
+      $("k-domanda").hidden = true;
+      $("k-titolo-editor").textContent = d.aiuto
+        ? (s.aiutami || "Mi aiuti a riconoscerla")
+        : d.id
         ? (s.modifica_descrizione || "Modifica la descrizione")
         : (s.correggi_descrizione || "Correggi la descrizione");
       $("k-salva").textContent = s.salva || "Salva";
@@ -2243,6 +2294,8 @@ const PER_PAGINA = 5;           /* piu' «Nessuna di queste»: sei caselle */
 
 function proponi() {
   clearTimeout(ritardoProposte);
+  /* Nell'altra lingua il vino e' gia' scelto: il titolo e' solo un nome. */
+  if (secondaLingua) return;
   ritardoProposte = setTimeout(() => {
     const q = $("k-titolo").value.trim();
     if (q.length < 2) { nascondiProposte(); return; }
@@ -2351,6 +2404,9 @@ function chiudiEditor(avvisa) {
   fermaRipetizione();
   clearTimeout(ritardoProposte);
   nascondiProposte();
+  secondaLingua = false;
+  $("k-domanda").hidden = true;
+  $("k-salva").classList.remove("nascosto");
   $("correzione").hidden = true;
   document.activeElement && document.activeElement.blur();
   if (avvisa) fetch("/correzione/chiudi", { method: "POST" }).catch(() => {});
@@ -2384,6 +2440,12 @@ function salvaEditor() {
            ha gia' cominciato a leggere la descrizione nuova. */
         nota(s.correzione_salvata || "");
         $("k-nota").classList.add("fatto");
+        if (d.altra_lingua) {
+          /* Scritta una descrizione, si chiede se la si vuole anche
+             nell'altra lingua: il racconto aspetta la risposta. */
+          setTimeout(() => { libera(); chiediAltraLingua(d.domanda); }, 700);
+          return;
+        }
         setTimeout(() => { chiudiEditor(false); libera(); }, 900);
         return;
       }
@@ -2397,6 +2459,50 @@ function salvaEditor() {
       }
     })
     .catch(libera);
+}
+
+function chiediAltraLingua(domanda) {
+  const s = scritte();
+  fermaRipetizione();
+  $("k-d-frase").textContent = domanda || "";
+  $("k-d-si").textContent = s.si_scrivo || "Sì";
+  $("k-d-no").textContent = s.no_grazie || "No";
+  $("k-domanda").hidden = false;
+  /* Salvato e' gia' salvato: il pulsante sparirebbe comunque dietro la
+     risposta, e toccarlo adesso non avrebbe niente da salvare. */
+  $("k-salva").classList.add("nascosto");
+  document.activeElement && document.activeElement.blur();
+}
+
+let rispondendo = false;
+
+function rispondiAltraLingua(accetta) {
+  if (rispondendo) return;
+  rispondendo = true;
+  fetch("/correzione/altra_lingua", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accetta }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      rispondendo = false;
+      if (!accetta || !d.ok) { chiudiEditor(false); return; }
+      /* Stessa bottiglia, altra lingua: il titolo di solito non si traduce,
+         e la descrizione che c'era gia', se c'era, si ritrova. */
+      secondaLingua = true;
+      idScelto = d.id; rifScelto = null; scollegata = false; titoloScelto = "";
+      $("k-titolo-editor").textContent = d.titolo_editor || "";
+      $("k-titolo").value = d.titolo || "";
+      $("k-descrizione").value = d.descrizione || "";
+      for (const c of document.querySelectorAll(".k-campo")) c.classList.remove("vuoto");
+      nascondiProposte();
+      nota("");
+      segnaSegnaposto();
+      $("k-domanda").hidden = true;
+      $("k-salva").classList.remove("nascosto");
+      attiva("descrizione");
+    })
+    .catch(() => { rispondendo = false; chiudiEditor(false); });
 }
 
 function attiva(nome, alFondo = true) {
@@ -2606,6 +2712,9 @@ $("r-testo").addEventListener("scroll", (e) => {
   rendiToccabile($("k-chiudi"), () => chiudiEditor(true));
   rendiToccabile($("k-salva"), salvaEditor);
   rendiToccabile($("r-correggi"), apriEditor);
+  rendiToccabile($("a-aiuta"), apriEditor);
+  rendiToccabile($("k-d-si"), () => rispondiAltraLingua(true));
+  rendiToccabile($("k-d-no"), () => rispondiAltraLingua(false));
   for (const nome of ["titolo", "descrizione"]) {
     const campo = $("k-" + nome);
     campo.addEventListener("pointerdown", () => attiva(nome, false));

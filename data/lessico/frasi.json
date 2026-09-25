@@ -366,9 +366,9 @@
       "it": "Provi a girare l'etichetta verso di me?",
       "en": "Could you turn the label towards me?"
     },
-    "rinuncia": {
-      "it": "Può togliere la bottiglia.",
-      "en": "You can take the bottle away."
+    "non_riconosciuta": {
+      "it": "Non ho riconosciuto questa bottiglia.",
+      "en": "I couldn't recognise this bottle."
     },
     "guasto": {
       "it": "Qualcosa non ha funzionato. Riprovo fra un istante.",
@@ -601,6 +601,34 @@
     "nessuna_scrivo_io": {
       "it": "scrivo la descrizione",
       "en": "I'll write the description"
+    },
+    "aiutami": {
+      "it": "Mi aiuti a riconoscerla",
+      "en": "Help me recognise it"
+    },
+    "altra_lingua_domanda": {
+      "it": "Vuole scrivere la descrizione anche in {nome}?",
+      "en": "Would you like to write the description in {nome} too?"
+    },
+    "si_scrivo": {
+      "it": "Sì, la scrivo",
+      "en": "Yes, I'll write it"
+    },
+    "no_grazie": {
+      "it": "No, grazie",
+      "en": "No, thanks"
+    },
+    "descrizione_in": {
+      "it": "Descrizione in {nome}",
+      "en": "Description in {nome}"
+    },
+    "nome_lingua_it": {
+      "it": "italiano",
+      "en": "Italian"
+    },
+    "nome_lingua_en": {
+      "it": "inglese",
+      "en": "English"
     },
     "ripristina": {
       "it": "Ripristina il funzionamento",

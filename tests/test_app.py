@@ -575,12 +575,33 @@ class TestLingua:
                 != amelie.lex.frase("voce", "conferma_lingua", lingua="en"))
 
     def test_la_rinuncia_parla_la_lingua_scelta(self, amelie):
+        """A tentativi finiti, con le correzioni accese e qualcosa di letto,
+        si dice che la bottiglia non e' stata riconosciuta, nella lingua del
+        tavolo, e si offre di insegnarla."""
+        import numpy as np
+        amelie.correzioni_attive = True
+        amelie._righe = ["PALAMA", "NEGROAMARO"]
+        amelie._ultimo_scatto = np.zeros((8, 8, 3), dtype=np.uint8)
         amelie.cambia_lingua("en")
         catturati = []
         amelie._pubblica = lambda m: catturati.append(m)
         amelie._mostra(Stato.CONCLUSO)          # senza fatti: e' una rinuncia
         assert catturati[0]["vista"] == "avviso"
-        assert catturati[0]["frase"], "nessun messaggio: lo schermo resterebbe vuoto"
+        assert catturati[0]["frase"] == "I couldn't recognise this bottle."
+        assert catturati[0]["aiuta"] is True
+
+    def test_senza_niente_da_insegnare_si_torna_all_invito(self, amelie):
+        """«Puo' togliere la bottiglia» non c'e' piu': senza il pulsante per
+        insegnarla, a tentativi finiti si torna subito all'invito."""
+        amelie.correzioni_attive = False
+        catturati = []
+        amelie._pubblica = lambda m: catturati.append(m)
+        amelie._mostra(Stato.CONCLUSO)
+        assert catturati[0]["vista"] == "attesa"
+        amelie.macchina.stato = Stato.RIPOSIZIONA
+        amelie.macchina.invia(Evento.RINUNCIA)
+        import time
+        assert amelie._scadenza is not None and amelie._scadenza <= time.monotonic()
 
 
 class TestAvvio:

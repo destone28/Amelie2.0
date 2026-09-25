@@ -59,6 +59,9 @@ class Evento(enum.Enum):
     # Il tocco su «annulla»: l'ospite chiude da se', senza togliere la
     # bottiglia dal piatto. Vedi le tre righe in TRANSIZIONI.
     ANNULLA = "annulla"
+    # Una correzione e' stata salvata: si racconta la bottiglia com'e' ora,
+    # anche se prima non era stata riconosciuta affatto.
+    CORREZIONE_SALVATA = "correzione_salvata"
     ERRORE = "errore"
 
 
@@ -189,6 +192,14 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
     # illeggibile lasciato sul piatto - un bicchiere, una bottiglia senza
     # etichetta - fa lampeggiare l'anello e girare l'OCR per tutta la sera.
     (Stato.RIPOSIZIONA, Evento.RINUNCIA): Stato.CONCLUSO,
+
+    # Una correzione salvata si racconta subito: e' la prova che ha
+    # funzionato. Anche dagli stati in cui la bottiglia non era stata
+    # riconosciuta - fra un tentativo e l'altro, o a tentativi finiti - dove
+    # il pulsante per insegnarla al dispositivo si vede.
+    (Stato.RACCONTO, Evento.CORREZIONE_SALVATA): Stato.RACCONTO,
+    (Stato.CONCLUSO, Evento.CORREZIONE_SALVATA): Stato.RACCONTO,
+    (Stato.RIPOSIZIONA, Evento.CORREZIONE_SALVATA): Stato.RACCONTO,
 
     # Se il lavoro non torna entro il tetto, si passa da GUASTO, che scade da
     # solo e riporta in attesa.

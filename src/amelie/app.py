@@ -405,6 +405,11 @@ class Amelie:
             self._scadenza = (time.monotonic() + t.durata_s) if t.durata_s else None
             if t.a is Stato.CONCLUSO and self._azione_correzione() is not None:
                 self._scadenza = time.monotonic() + CONCLUSO_CON_CORREZIONE_S
+            elif t.a is Stato.CONCLUSO and self._niente_raccontato():
+                # Col pulsante per insegnarla si lascia il tempo di arrivarci;
+                # senza, non c'e' niente da guardare e si torna all'invito.
+                self._scadenza = time.monotonic() + (
+                    CONCLUSO_CON_CORREZIONE_S if self._aiuto_possibile() else 0.0)
             # Il tavolo e' finito: si torna alla lingua di casa PRIMA di
             # ridisegnare, cosi' la schermata d'attesa esce gia' nella lingua
             # giusta invece di cambiare sotto gli occhi di chi arriva.
@@ -470,13 +475,25 @@ class Amelie:
         def frase(chiave: str) -> str:
             return self.lex.frase("schermo", chiave, lingua=self.lingua)
 
-        if stato is Stato.CONCLUSO and self._fatti.vuoto:  # si e' rinunciato
+        if stato is Stato.CONCLUSO and self._niente_raccontato():
             # Ci si arriva dopo aver rinunciato a leggere l'etichetta: la vista
             # "racconto" mostrerebbe un titolo vuoto e nessun testo, cioe' uno
             # schermo nero con una bottiglia ancora appoggiata sopra.
-            self._pubblica({"tipo": "stato", "vista": "avviso", "simbolo": "☐",
-                            "tono": "neutro", "frase": frase("rinuncia"),
-                            "voce_muta": not self._voce_disponibile()})
+            #
+            # Qui c'era «Puo' togliere la bottiglia»: una frase che non serve a
+            # niente, e che si toglie. Se la bottiglia si
+            # puo' insegnare al dispositivo - correzioni accese, e qualche
+            # parola letta - si dice che non la si e' riconosciuta e si offre
+            # il pulsante per farlo; se no si torna subito all'invito, e la
+            # macchina ci arriva un istante dopo (vedi `_su_transizione`).
+            if self._aiuto_possibile():
+                self._pubblica({"tipo": "stato", "vista": "avviso", "simbolo": "?",
+                                "tono": "neutro", "frase": frase("non_riconosciuta"),
+                                "aiuta": True,
+                                "voce_muta": not self._voce_disponibile()})
+            else:
+                self._pubblica({"tipo": "stato", "vista": "attesa",
+                                "voce_muta": not self._voce_disponibile()})
             return
 
         m: dict[str, Any] = {"tipo": "stato", "vista": VISTA[stato],
@@ -532,6 +549,9 @@ class Amelie:
         elif stato is Stato.RIPOSIZIONA:
             m["simbolo"] = "↻"
             m["frase"] = frase("invito_a_girare")
+            # Fra un tentativo e l'altro si puo' gia' insegnare la bottiglia,
+            # senza aspettare che il dispositivo si arrenda.
+            m["aiuta"] = self._aiuto_possibile()
         elif stato is Stato.GUASTO:
             m["simbolo"] = "⚠"
             m["frase"] = frase("guasto")
@@ -558,7 +578,8 @@ class Amelie:
                                "correzione_vicine", "tasto_spazio", "annulla",
                                "correzione_collegata", "descrizione_facoltativa",
                                "nessuna_di_queste", "altre_proposte",
-                               "nessuna_scrivo_io")
+                               "nessuna_scrivo_io", "aiutami", "si_scrivo",
+                               "no_grazie")
             },
             # La frase sotto il nome, e che cosa si fa in tre passi, sulla
             # schermata d'attesa: il verbo, che la pagina scrive in grassetto,
@@ -1674,6 +1695,29 @@ class Amelie:
             return None
         return "correggi"
 
+    def _niente_raccontato(self) -> bool:
+        """Questa bottiglia non e' stata raccontata: non la si e' riconosciuta.
+
+        Non basta guardare i fatti dell'archivio. In modo carta, o con una
+        correzione scritta senza collegamento, il racconto viene da li' e i
+        fatti possono restare vuoti lo stesso.
+        """
+        return self._fatti.vuoto and self._voce is None and self._correzione is None
+
+    def _aiuto_possibile(self) -> bool:
+        """Si puo' offrire di insegnare questa bottiglia al dispositivo?
+
+        Solo con «Aggiungi correzioni» acceso, come il pulsante di correzione:
+        gli ospiti non scrivono descrizioni. E solo se dall'etichetta si e'
+        letta almeno una parola che identifica: una correzione si riconosce
+        la volta dopo dalle parole e dalla foto insieme, e senza parole non
+        si ritroverebbe mai - si insegnerebbe una bottiglia che non tornera'.
+        """
+        from .correzioni import parole_identificanti
+        if not self.correzioni_attive or getattr(self, "_ultimo_scatto", None) is None:
+            return False
+        return bool(parole_identificanti(getattr(self, "_righe", [])))
+
     def _tentativo_fallito(self) -> None:
         """Letto, ma senza trovare un vino: si chiede di girare l'etichetta,
         e dopo tre volte si tace finche' la bottiglia non viene tolta.
@@ -2027,9 +2071,20 @@ class Amelie:
         """
         if not self.correzioni_attive:
             return {"ok": False}
-        if self.macchina.stato not in (Stato.RACCONTO, Stato.CONCLUSO):
-            return {"ok": False}
         if getattr(self, "_ultimo_scatto", None) is None:
+            return {"ok": False}
+        # Dal racconto, per correggerlo; o da una bottiglia che non si e'
+        # riconosciuta - fra un tentativo e l'altro, o a tentativi finiti -
+        # per insegnarla al dispositivo. Li' il pulsante e' «Mi aiuti a
+        # riconoscerla», e la regola per mostrarlo e' la stessa che si
+        # controlla qui.
+        stato = self.macchina.stato
+        aiuto = (stato is Stato.RIPOSIZIONA
+                 or (stato is Stato.CONCLUSO and self._niente_raccontato()))
+        if aiuto:
+            if not self._aiuto_possibile():
+                return {"ok": False}
+        elif stato not in (Stato.RACCONTO, Stato.CONCLUSO):
             return {"ok": False}
         self._ferma_racconto()
         self._correggendo = {"righe": list(self._righe_lette),
@@ -2048,7 +2103,7 @@ class Amelie:
             # campo resta vuoto: «Vino rosato» andrebbe solo cancellato.
             titolo = riferimento["titolo"] if riferimento else ""
         return {
-            "ok": True, "lingua": self.lingua,
+            "ok": True, "lingua": self.lingua, "aiuto": aiuto,
             "id": c.id if c is not None else None,
             "titolo": titolo,
             # Il vino a cui la bottiglia e' collegata: quello della correzione,
@@ -2075,11 +2130,16 @@ class Amelie:
         esistente a cui aggiungere questa foto.
         """
         g = self._correggendo
-        if g is None:
+        if g is None or g.get("domanda"):
             return {"ok": False, "motivo": "editor chiuso"}
         if not str(titolo or "").strip():
             return {"ok": False, "campo": "titolo"}
         riferimento = self._riferimento_valido(riferimento)
+        if g.get("seconda"):
+            # La descrizione nell'altra lingua: stessa correzione, stesso
+            # collegamento, e nessuna foto in piu' - la bottiglia e' quella
+            # appena salvata, e una seconda vista identica non insegna niente.
+            ident, riferimento, scollega = g["id"], None, False
         if ident is None and self._correzione is not None:
             ident = self._correzione.id
         esistente = self.correzioni.trova(ident) if ident else None
@@ -2094,14 +2154,14 @@ class Amelie:
         if not descrizione and not collegata:
             return {"ok": False, "campo": "descrizione"}
         try:
-            c = self.correzioni.salva(righe=g["righe"], immagine=g["immagine"],
-                                      titolo=titolo, descrizione=descrizione,
-                                      lingua=g["lingua"], ident=ident,
-                                      riferimento=collegata)
+            c = self.correzioni.salva(
+                righe=[] if g.get("seconda") else g["righe"],
+                immagine=None if g.get("seconda") else g["immagine"],
+                titolo=titolo, descrizione=descrizione,
+                lingua=g["lingua"], ident=ident, riferimento=collegata)
         except (OSError, ValueError) as e:
             log.warning("correzione non salvata: %s", e)
             return {"ok": False, "motivo": str(e)}
-        self._correggendo = None
         self._correzione = c
         # Il racconto che riparte deve essere gia' quello della bottiglia
         # corretta: collegata a un altro vino, si racconta quello. Senza questa
@@ -2111,9 +2171,66 @@ class Amelie:
             self._fatti, self._voce = self._della_correzione(
                 c, [getattr(r, "testo", r) for r in g["righe"]])
         self._annota("corretta a mano")
-        # Si rientra nel racconto: titolo e descrizione nuovi a schermo, e a voce.
-        self.macchina.invia(Evento.RIPETI)
+        # Scritta una descrizione, si chiede se la si vuole anche nell'altra
+        # lingua: chi la scrive in italiano spesso sa scriverla in inglese, ed
+        # e' il momento in cui ce l'ha in testa. L'editor resta aperto intanto,
+        # cosi' il dispositivo non torna a guardare il piatto e il racconto non
+        # riparte sotto la domanda.
+        altra = self._altra_lingua(g["lingua"])
+        if descrizione and altra and not g.get("seconda"):
+            g.update(domanda=altra, id=c.id, quando=time.monotonic())
+            return {"ok": True, "id": c.id, "altra_lingua": altra,
+                    "domanda": self.lex.frase("schermo", "altra_lingua_domanda",
+                                              lingua=self.lingua,
+                                              nome=self._nome_lingua(altra))}
+        self._finisci_correzione()
         return {"ok": True, "id": c.id}
+
+    def _altra_lingua(self, lingua: str) -> str | None:
+        """La lingua in cui la descrizione non si e' appena scritta."""
+        return next((l for l in self.lex.lingue if l != lingua), None)
+
+    def _nome_lingua(self, codice: str) -> str:
+        """Il nome di una lingua, scritto nella lingua di chi legge lo schermo."""
+        return self.lex.frase("schermo", f"nome_lingua_{codice}", lingua=self.lingua) or codice
+
+    def _finisci_correzione(self) -> None:
+        """L'editor si chiude su una correzione salvata: la si racconta subito.
+
+        Dal racconto si rientra nel racconto; da una bottiglia che non si era
+        riconosciuta ci si entra per la prima volta. In tutti e due i casi
+        titolo e descrizione nuovi a schermo, e a voce: e' la prova che ha
+        funzionato.
+        """
+        self._correggendo = None
+        self.macchina.invia(Evento.CORREZIONE_SALVATA)
+
+    def altra_lingua(self, accetta: bool) -> dict:
+        """La risposta alla domanda sull'altra lingua.
+
+        Si': l'editor si riapre sulla stessa correzione, nell'altra lingua, col
+        titolo gia' scritto - il nome di un vino di solito non si traduce - e
+        la descrizione che c'era, se c'era. No: si racconta la bottiglia.
+        """
+        g = self._correggendo
+        if g is None or not g.get("domanda"):
+            return {"ok": False}
+        if not accetta:
+            self._finisci_correzione()
+            return {"ok": True}
+        altra = g["domanda"]
+        c = self.correzioni.trova(g["id"])
+        if c is None:
+            self._finisci_correzione()
+            return {"ok": False}
+        g.update(lingua=altra, seconda=True, domanda=None, quando=time.monotonic())
+        t = c.testi.get(altra) or {}
+        return {"ok": True, "lingua": altra, "id": c.id,
+                "titolo": t.get("titolo") or c.titolo(),
+                "descrizione": t.get("descrizione", ""),
+                "titolo_editor": self.lex.frase("schermo", "descrizione_in",
+                                                lingua=self.lingua,
+                                                nome=self._nome_lingua(altra))}
 
     def _riferimento_valido(self, rif) -> dict | None:
         """Il collegamento arrivato dalla pagina, ricontrollato qui: si salva
@@ -2183,8 +2300,17 @@ class Amelie:
         return fuori[:20]
 
     def chiudi_correzione(self) -> dict:
-        """Si esce dall'editor senza salvare: il racconto fermato si da' per finito."""
-        if self._correggendo is None:
+        """Si esce dall'editor senza salvare: il racconto fermato si da' per finito.
+
+        Ma se una descrizione si era gia' salvata - si stava rispondendo alla
+        domanda sull'altra lingua, o scrivendo in quella - chiudere vuol dire
+        soltanto «basta cosi'»: quello che si e' salvato si racconta.
+        """
+        g = self._correggendo
+        if g is None:
+            return {"ok": True}
+        if g.get("domanda") or g.get("seconda"):
+            self._finisci_correzione()
             return {"ok": True}
         self._correggendo = None
         if self.macchina.stato is Stato.RACCONTO:
@@ -2590,6 +2716,10 @@ def crea_app(amelie: Amelie):
     @app.post("/correzione/chiudi")
     async def correzione_chiudi():
         return JSONResponse(amelie.chiudi_correzione())
+
+    @app.post("/correzione/altra_lingua")
+    async def correzione_altra_lingua(d: dict = Body(...)):
+        return JSONResponse(amelie.altra_lingua(bool(d.get("accetta"))))
 
     @app.get("/correzione/foto/{ident}")
     async def correzione_foto(ident: str):

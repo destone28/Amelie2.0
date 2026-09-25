@@ -60,7 +60,7 @@ _CHIAVI_CORREZIONE = ("correggi_descrizione", "modifica_descrizione", "campo_tit
                       "correzione_spiega", "correzione_salvata", "correzione_vicine",
                       "tasto_spazio", "annulla", "correzione_collegata",
                       "descrizione_facoltativa", "nessuna_di_queste", "altre_proposte",
-                      "nessuna_scrivo_io")
+                      "nessuna_scrivo_io", "aiutami", "si_scrivo", "no_grazie")
 for _l, _m in (("it", LINGUA_IT), ("en", LINGUA_EN)):
     _m["correzione"] = {k: _scritta(k, _l) for k in _CHIAVI_CORREZIONE}
 
@@ -177,6 +177,29 @@ SCENE: dict[str, list[dict]] = {
         LINGUA_IT,
         {"tipo": "stato", "vista": "avviso", "simbolo": "↻", "tono": "invito",
          "frase": "Non riesco a leggere l'etichetta. Provi a girarla verso di me?"}],
+
+    # Fra un tentativo e l'altro, con le correzioni accese: si puo' gia'
+    # insegnare la bottiglia.
+    "riposiziona_aiuto": [
+        LINGUA_IT,
+        {"tipo": "stato", "vista": "avviso", "simbolo": "↻", "tono": "invito",
+         "frase": _scritta("invito_a_girare", "it"), "aiuta": True}],
+
+    # A tentativi finiti: al posto di «Puo' togliere la bottiglia».
+    "non_riconosciuta": [
+        LINGUA_IT,
+        {"tipo": "stato", "vista": "avviso", "simbolo": "?", "tono": "neutro",
+         "frase": _scritta("non_riconosciuta", "it"), "aiuta": True}],
+    "non_riconosciuta_en": [
+        LINGUA_EN,
+        {"tipo": "stato", "vista": "avviso", "simbolo": "?", "tono": "neutro",
+         "frase": _scritta("non_riconosciuta", "en"), "aiuta": True}],
+
+    # Il racconto e la sua domanda: salvata la descrizione, l'altra lingua.
+    "editor_altra_lingua": [LINGUA_IT, {"tipo": "stato", "vista": "racconto",
+                                        "titolo": "x", "correzione": "correggi"}],
+    "editor_in_inglese": [LINGUA_IT, {"tipo": "stato", "vista": "racconto",
+                                      "titolo": "x", "correzione": "correggi"}],
 
     "guasto": [
         LINGUA_IT,
@@ -303,6 +326,10 @@ DOPO = {
     "editor_collegata": "apriEditor()",
     "editor_ricerca": ("apriEditor(); setTimeout(() => { attiva('titolo'); "
                        "for (const c of 'barolo') batti(c); }, 400)"),
+    "editor_altra_lingua": ("apriEditor(); setTimeout(() => chiediAltraLingua("
+                            + repr(_scritta("altra_lingua_domanda", "it").format(
+                                nome=_scritta("nome_lingua_en", "it"))) + "), 400)"),
+    "editor_in_inglese": ("apriEditor(); setTimeout(() => rispondiAltraLingua(true), 400)"),
 }
 
 # Che cosa risponde il server finto, per le scene che gli chiedono qualcosa.
@@ -337,6 +364,18 @@ RISPOSTE = {
             {"tipo": "archivio", "ambito": "vino", "id": 510,
              "titolo": "Cannubi Barolo — Marchesi di Barolo", "sotto": "archivio · vino",
              "descrizione": ""}]},
+    "editor_altra_lingua": {"/correzione/apri": {
+        "ok": True, "id": None, "lingua": "it", "titolo": "Albarossa Negroamaro",
+        "descrizione": "Un rosato del Salento da uve Negroamaro.", "vicine": []}},
+    "editor_in_inglese": {
+        "/correzione/apri": {"ok": True, "id": None, "lingua": "it",
+                             "titolo": "Albarossa Negroamaro", "descrizione": "x",
+                             "vicine": []},
+        "/correzione/altra_lingua": {
+            "ok": True, "lingua": "en", "id": "c1", "titolo": "Albarossa Negroamaro",
+            "descrizione": "",
+            "titolo_editor": _scritta("descrizione_in", "it").format(
+                nome=_scritta("nome_lingua_en", "it"))}},
     "editor_vicine": {"/correzione/apri": {
         "ok": True, "id": None, "lingua": "it", "titolo": "", "descrizione": "",
         "vicine": [{"id": "a", "titolo": "Albarossa Negroamaro Rosato", "descrizione": ""},

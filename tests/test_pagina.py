@@ -140,3 +140,18 @@ def test_il_vino_del_marchio_ondeggia():
     assert "@keyframes ondeggia" in PAGINA
     assert re.search(r"prefers-reduced-motion: reduce\) \{\s*#attesa \.marchio \.livello "
                      r"\{ animation: none; \}", PAGINA)
+
+
+def test_il_pulsante_per_insegnare_la_bottiglia_sta_nell_avviso():
+    avviso = re.search(r'<section id="avviso" class="vista">(.*?)</section>', PAGINA, re.S).group(1)
+    assert 'id="a-aiuta"' in avviso
+    assert 'rendiToccabile($("a-aiuta"), apriEditor)' in PAGINA
+
+
+def test_nessuna_schermata_puo_togliere_la_bottiglia():
+    """«Puo' togliere la bottiglia» non c'e' piu', in nessuna lingua."""
+    import json
+    frasi = json.loads((RADICE / "data/lessico/frasi.json").read_text(encoding="utf-8"))
+    assert "rinuncia" not in frasi["schermo"]
+    testi = json.dumps(frasi, ensure_ascii=False)
+    assert "togliere la bottiglia" not in testi and "take the bottle away" not in testi

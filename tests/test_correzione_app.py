@@ -274,6 +274,9 @@ class TestLEditor:
         amelie.apri_correzione()
         esito = amelie.salva_correzione("Albarossa", "Un rosato del Salento.")
         assert esito["ok"]
+        # Prima la domanda sull'altra lingua; a «no» si racconta.
+        assert esito["altra_lingua"] == "en"
+        assert amelie.altra_lingua(False) == {"ok": True}
         assert amelie._correggendo is None
         assert amelie._correzione is not None
         assert amelie._correzione_parla_ora()
@@ -376,6 +379,21 @@ class TestLeRotte:
         assert esito["ok"], esito
         assert client.get(f"/correzione/foto/{esito['id']}").status_code == 200
         assert len(amelie.correzioni.tutte()) == 1
+
+    def test_la_domanda_sull_altra_lingua(self, amelie, client):
+        _appoggia(amelie)
+        amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato")
+        amelie.macchina.stato = Stato.RACCONTO
+        client.post("/correzione/apri")
+        esito = client.post("/correzione/salva",
+                            json={"titolo": "Albarossa", "descrizione": "Un rosato."}).json()
+        assert esito["altra_lingua"] == "en"
+        aperta = client.post("/correzione/altra_lingua", json={"accetta": True}).json()
+        assert aperta["ok"] and aperta["lingua"] == "en"
+        seconda = client.post("/correzione/salva",
+                              json={"titolo": "Albarossa", "descrizione": "A rosé."}).json()
+        assert seconda["ok"] and "altra_lingua" not in seconda
+        assert amelie.correzioni.trova(esito["id"]).testo_in("en")["descrizione"] == "A rosé."
 
     def test_un_campo_vuoto_torna_indietro_col_suo_nome(self, amelie, client):
         _appoggia(amelie)
@@ -546,3 +564,130 @@ def test_si_puo_togliere_un_collegamento(amelie):
         "ok": False, "campo": "descrizione"}
     assert amelie.salva_correzione("Cannubi", "Detto a mano.", scollega=True)["ok"]
     assert amelie.correzioni.trova(esito["id"]).riferimento is None
+
+
+
+class TestLAltraLingua:
+    """Salvata una descrizione, si chiede se la si vuole anche nell'altra
+    lingua: in italiano si chiede l'inglese, in inglese l'italiano."""
+
+    def _salvata(self, amelie, lingua="it"):
+        _appoggia(amelie)
+        amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato")
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.lingua = lingua
+        amelie.apri_correzione()
+        return amelie.salva_correzione("Albarossa", "Un rosato del Salento.")
+
+    def test_la_domanda_nella_lingua_di_chi_scrive(self, amelie):
+        esito = self._salvata(amelie)
+        assert esito["altra_lingua"] == "en"
+        assert esito["domanda"] == "Vuole scrivere la descrizione anche in inglese?"
+        # Mentre si risponde, il dispositivo resta fermo: il racconto non riparte.
+        assert amelie._correggendo is not None
+        assert not amelie._va_sorvegliata()
+
+    def test_e_viceversa(self, amelie):
+        esito = self._salvata(amelie, lingua="en")
+        assert esito["altra_lingua"] == "it"
+        assert esito["domanda"] == "Would you like to write the description in Italian too?"
+
+    def test_si_scrive_nella_stessa_correzione_senza_un_altra_foto(self, amelie):
+        esito = self._salvata(amelie)
+        aperta = amelie.altra_lingua(True)
+        assert aperta["ok"] and aperta["lingua"] == "en" and aperta["id"] == esito["id"]
+        assert aperta["titolo"] == "Albarossa"          # il nome non si traduce
+        assert aperta["titolo_editor"] == "Descrizione in inglese"
+        seconda = amelie.salva_correzione("Albarossa", "A rosé from Salento.")
+        assert seconda == {"ok": True, "id": esito["id"]}  # nessuna altra domanda
+        c = amelie.correzioni.trova(esito["id"])
+        assert c.testo_in("it")["descrizione"] == "Un rosato del Salento."
+        assert c.testo_in("en")["descrizione"] == "A rosé from Salento."
+        assert len(c.viste) == 1
+        assert amelie._correggendo is None
+        assert amelie.macchina.stato is Stato.RACCONTO
+
+    def test_chiudere_la_domanda_racconta_quello_che_si_e_salvato(self, amelie):
+        self._salvata(amelie)
+        assert amelie.chiudi_correzione() == {"ok": True}
+        assert amelie._correggendo is None
+        assert amelie._correzione_parla_ora()
+        assert amelie.macchina.stato is Stato.RACCONTO
+
+    def test_senza_descrizione_non_si_chiede_niente(self, amelie):
+        """Collegata a un vino dell'archivio, senza descrizione: in ogni lingua
+        si racconta la sua scheda, e non c'e' niente da tradurre."""
+        _appoggia(amelie)
+        amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato")
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.apri_correzione()
+        rif = amelie.matcher.suggerisci("barolo", 1)[0]
+        esito = amelie.salva_correzione(
+            "Barolo", "", riferimento={"tipo": "archivio", "ambito": rif[0], "id": rif[1]})
+        assert esito["ok"] and "altra_lingua" not in esito
+        assert amelie._correggendo is None
+
+
+class TestAiutareIlRiconoscimento:
+    """Una bottiglia che non si riconosce si puo' insegnare al dispositivo: il
+    pulsante compare fra un tentativo e l'altro e a tentativi finiti, solo con
+    le correzioni accese e solo se si e' letta qualche parola."""
+
+    def _non_riconosciuta(self, amelie, stato=Stato.RIPOSIZIONA, testo="PALAMA|NEGROAMARO"):
+        _appoggia(amelie, testo)
+        amelie._fatti = Fatti()
+        amelie._voce = None
+        amelie._correzione = None
+        amelie.macchina.stato = stato
+
+    def test_fra_un_tentativo_e_l_altro(self, amelie):
+        self._non_riconosciuta(amelie)
+        detti = []
+        amelie._pubblica = detti.append
+        amelie._mostra(Stato.RIPOSIZIONA)
+        assert detti[-1]["aiuta"] is True
+        esito = amelie.apri_correzione()
+        assert esito["ok"] and esito["aiuto"] is True
+        assert esito["titolo"] == "" and esito["riferimento"] is None
+
+    def test_salvata_si_racconta(self, amelie):
+        self._non_riconosciuta(amelie)
+        amelie.apri_correzione()
+        amelie.salva_correzione("Albarossa", "Un rosato del Salento.")
+        amelie.altra_lingua(False)
+        assert amelie.macchina.stato is Stato.RACCONTO
+        assert amelie._correzione_parla_ora()
+        # e la prossima volta la bottiglia si riconosce
+        _appoggia(amelie, "PALAMA|NEGROAMARO")
+        amelie._riconosci()
+        assert amelie._correzione is not None
+
+    def test_a_tentativi_finiti(self, amelie):
+        self._non_riconosciuta(amelie, Stato.CONCLUSO)
+        detti = []
+        amelie._pubblica = detti.append
+        amelie._mostra(Stato.CONCLUSO)
+        assert detti[-1]["vista"] == "avviso" and detti[-1]["aiuta"] is True
+        assert amelie.apri_correzione()["ok"]
+
+    def test_senza_parole_lette_non_si_offre(self, amelie):
+        """Una correzione si ritrova dalle parole: senza, non tornerebbe mai."""
+        self._non_riconosciuta(amelie, testo="2024|75 cl")
+        assert amelie._aiuto_possibile() is False
+        assert amelie.apri_correzione() == {"ok": False}
+
+    def test_a_interruttore_spento_non_si_offre(self, amelie):
+        self._non_riconosciuta(amelie)
+        amelie.correzioni_attive = False
+        detti = []
+        amelie._pubblica = detti.append
+        amelie._mostra(Stato.RIPOSIZIONA)
+        assert detti[-1]["aiuta"] is False
+        assert amelie.apri_correzione() == {"ok": False}
+
+    def test_chiudere_senza_salvare_lascia_riprovare(self, amelie):
+        self._non_riconosciuta(amelie)
+        amelie.apri_correzione()
+        assert amelie.chiudi_correzione() == {"ok": True}
+        assert amelie._correggendo is None
+        assert amelie.macchina.stato is Stato.RIPOSIZIONA
