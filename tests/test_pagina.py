@@ -89,7 +89,7 @@ def test_la_maiuscola_non_ricostruisce_la_tastiera():
 def test_la_home_riceve_motto_e_tre_passi():
     """Le scritte dell'attesa vengono dal lessico, in ogni lingua: la pagina
     deve avere un posto per ciascuna, e il server deve mandarle tutte."""
-    for ident in ("motto", "invito", "p1-s", "p2-t", "p2-s", "p3-t", "p3-s"):
+    for ident in ("motto", "p1", "p2", "p3"):
         assert f'id="{ident}"' in PAGINA, ident
     from amelie.app import Amelie, Configurazione
     a = Amelie(Configurazione(simula_mcu=True, senza_camera=True, senza_voce=True,
@@ -103,7 +103,12 @@ def test_la_home_riceve_motto_e_tre_passi():
             m = detti[-1]
             assert m["motto"].strip(), lingua
             assert len(m["passi"]) == 3
-            assert all(p["titolo"].strip() and p["spiega"].strip() for p in m["passi"]), lingua
+            assert all(p["verbo"].strip() and p["resto"].strip() for p in m["passi"]), lingua
+        # Le tre frasi della home, col verbo in grassetto.
+        a.lingua = "it"
+        a._manda_lingua()
+        assert [f"{p['verbo']} {p['resto']}" for p in detti[-1]["passi"]] == [
+            "Scegli una bottiglia", "Posa la bottiglia su Amelie", "Ascolta la sua storia"]
     finally:
         a.matcher.chiudi()
         a.narratore.chiudi()
@@ -125,3 +130,13 @@ def test_le_proposte_stanno_al_posto_della_descrizione():
     assert "const PER_PAGINA = 5;" in PAGINA
     pagina = re.search(r"function disegnaPagina\(\) \{(.*?)\n\}", PAGINA, re.S).group(1)
     assert "nessuna_di_queste" in pagina and "paginaProposte++" in pagina
+
+
+def test_il_vino_del_marchio_ondeggia():
+    """Nella schermata d'attesa il vino nel calice ondeggia appena; e chi ha
+    chiesto meno movimento lo vede fermo."""
+    regola = re.search(r"#attesa \.marchio \.livello \{(.*?)\}", PAGINA, re.S).group(1)
+    assert "animation: ondeggia" in regola
+    assert "@keyframes ondeggia" in PAGINA
+    assert re.search(r"prefers-reduced-motion: reduce\) \{\s*#attesa \.marchio \.livello "
+                     r"\{ animation: none; \}", PAGINA)

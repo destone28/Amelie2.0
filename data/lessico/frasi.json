@@ -361,7 +361,7 @@
     }
   },
   "schermo": {
-    "_nota": "Qui il dispositivo parla all'ospite, non del vino: si dà del lei.",
+    "_nota": "Qui il dispositivo parla all'ospite, non del vino: si dà del lei. Tranne i tre passi della schermata d'attesa, che sono un'insegna e non una frase rivolta a qualcuno: «Scegli una bottiglia», come su un cartello.",
     "invito_a_girare": {
       "it": "Provi a girare l'etichetta verso di me?",
       "en": "Could you turn the label towards me?"
@@ -393,10 +393,6 @@
     "illeggibile_con_invito": {
       "it": "Provi a girare l'etichetta verso di me.",
       "en": "Please turn the label towards me."
-    },
-    "appoggia_bottiglia": {
-      "it": "Posi la bottiglia qui davanti",
-      "en": "Set your bottle down here"
     },
     "voce_assente": {
       "it": "In questa lingua il racconto si legge, non si ascolta.",
@@ -498,29 +494,29 @@
       "it": "Ogni bottiglia ha una storia.",
       "en": "Every bottle has a story."
     },
-    "passo_appoggia": {
-      "it": "Posi la bottiglia",
-      "en": "Set down your bottle"
+    "passo_scegli": {
+      "it": "Scegli",
+      "en": "Choose"
     },
-    "passo_appoggia_spiega": {
-      "it": "qui davanti, con l'etichetta verso di me",
-      "en": "right here, with the label facing me"
+    "passo_scegli_resto": {
+      "it": "una bottiglia",
+      "en": "a bottle"
     },
-    "passo_riconosce": {
-      "it": "Ne leggo l'etichetta",
-      "en": "I read its label"
+    "passo_posa": {
+      "it": "Posa",
+      "en": "Place"
     },
-    "passo_riconosce_spiega": {
-      "it": "e riconosco il vino in pochi secondi",
-      "en": "and recognise the wine in seconds"
+    "passo_posa_resto": {
+      "it": "la bottiglia su Amelie",
+      "en": "the bottle on Amelie"
     },
-    "passo_racconta": {
-      "it": "Ne racconto la storia",
-      "en": "I tell its story"
+    "passo_ascolta": {
+      "it": "Ascolta",
+      "en": "Listen"
     },
-    "passo_racconta_spiega": {
-      "it": "a voce e per iscritto",
-      "en": "aloud and in writing"
+    "passo_ascolta_resto": {
+      "it": "la sua storia",
+      "en": "to its story"
     },
     "correggi_descrizione": {
       "it": "Correggi la bottiglia",

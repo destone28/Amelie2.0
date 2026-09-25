@@ -543,8 +543,6 @@ class Amelie:
             "tipo": "lingua",
             "lingua": self.lingua,
             "disponibili": list(self.lex.lingue),
-            "invito": self.lex.frase("schermo", "appoggia_bottiglia",
-                                     lingua=self.lingua),
             "voce_muta": not self._voce_disponibile(),
             "avviso_muto": self.lex.frase("schermo", "voce_assente",
                                           lingua=self.lingua),
@@ -562,14 +560,15 @@ class Amelie:
                                "nessuna_di_queste", "altre_proposte",
                                "nessuna_scrivo_io")
             },
-            # La frase sotto il nome, e che cosa fa l'oggetto in tre passi,
-            # sulla schermata d'attesa.
+            # La frase sotto il nome, e che cosa si fa in tre passi, sulla
+            # schermata d'attesa: il verbo, che la pagina scrive in grassetto,
+            # e il resto della frase.
             "motto": self.lex.frase("schermo", "motto", lingua=self.lingua),
             "passi": [
-                {"titolo": self.lex.frase("schermo", f"passo_{p}", lingua=self.lingua),
-                 "spiega": self.lex.frase("schermo", f"passo_{p}_spiega",
-                                          lingua=self.lingua)}
-                for p in ("appoggia", "riconosce", "racconta")
+                {"verbo": self.lex.frase("schermo", f"passo_{p}", lingua=self.lingua),
+                 "resto": self.lex.frase("schermo", f"passo_{p}_resto",
+                                         lingua=self.lingua)}
+                for p in ("scegli", "posa", "ascolta")
             ],
             # Che cosa scrivere al posto del racconto mentre lo si scrive.
             # Sta qui, con le altre scritte fisse, perche' segua la lingua da

@@ -44,14 +44,13 @@ def _scritta(chiave: str, lingua: str) -> str:
 
 def _lingua(lingua: str) -> dict:
     return {"tipo": "lingua", "lingua": lingua, "disponibili": ["it", "en"],
-            "invito": _scritta("appoggia_bottiglia", lingua),
             "motto": _scritta("motto", lingua),
             "voce_muta": False, "avviso_muto": "",
             "annulla": _scritta("annulla", lingua),
             "sto_scrivendo": _scritta("sto_scrivendo", lingua),
-            "passi": [{"titolo": _scritta(f"passo_{p}", lingua),
-                       "spiega": _scritta(f"passo_{p}_spiega", lingua)}
-                      for p in ("appoggia", "riconosce", "racconta")]}
+            "passi": [{"verbo": _scritta(f"passo_{p}", lingua),
+                       "resto": _scritta(f"passo_{p}_resto", lingua)}
+                      for p in ("scegli", "posa", "ascolta")]}
 
 
 LINGUA_IT = _lingua("it")
