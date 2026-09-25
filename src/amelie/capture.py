@@ -1042,7 +1042,7 @@ class Camera:
                 return None
             time.sleep(0.01)
 
-    def al_volo(self, *, dopo: float = 0.0, attesa: float = 0.25) -> "Scatto | None":
+    def al_volo(self, *, dopo: float = 0.0, attesa: float = 1.0) -> "Scatto | None":
         """Lo scatto quando la camera è già in moto: si prende, non si fa.
 
         Si prende il primo fotogramma abbastanza nitido, e se non ne arriva
@@ -1052,10 +1052,17 @@ class Camera:
         una appoggiata di slancio oscilla e si aspetta lei — invece di
         aspettare sempre, per il caso peggiore, anche quando non serve.
 
-        L'attesa è un quarto di secondo, cioè due o tre fotogrammi: è quanto
-        basta a una bottiglia appoggiata da una mano ferma, ed è il tetto che
-        si paga quando la scena non arriva mai a fuoco — davanti a un piatto
-        vuoto la nitidezza resta a 11 e non c'è nessun fotogramma da aspettare.
+        L'attesa è un tetto, non un costo: ci si ferma al primo fotogramma
+        nitido, e una bottiglia appoggiata da una mano ferma lo dà subito. Era
+        un quarto di secondo, due o tre fotogrammi, ed è bastato finché le
+        bottiglie si posavano. Una serale si teneva in mano davanti
+        alla camera, e in un quarto di secondo non arrivava nessun fotogramma
+        fermo: si leggeva il migliore dei mossi, «ASTI» grande come mezza
+        etichetta e nemmeno una riga trovata. In un secondo i fotogrammi sono
+        dieci, e fra dieci uno fermo c'è quasi sempre. Il prezzo si paga solo
+        quando la scena non arriva mai a fuoco - davanti a un piatto vuoto la
+        nitidezza resta a 11 - ed è tre quarti di secondo su una scansione che
+        comunque non troverà niente.
 
         `None` vuol dire che il guardiano non sta girando o non ha ancora un
         fotogramma abbastanza nuovo: chi chiama torna a `scatta`, che la camera
