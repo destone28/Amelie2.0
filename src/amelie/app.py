@@ -162,6 +162,17 @@ CORREZIONE_TETTO_S = 600.0
 # la scelta fra i candidati.
 CONCLUSO_CON_CORREZIONE_S = 12.0
 SFONDO_DA_RISCRIVERE = 0.20
+# Quanti punti dell'etichetta, ritrovati nella foto nuova, bastano a dire che
+# la bottiglia rimessa sul piatto e' la stessa che si sta raccontando. Misurato
+# su 75 scansioni vere del dispositivo, cinque bottiglie, confrontando la zona
+# dell'etichetta di una foto con l'intera foto dell'altra: fra bottiglie
+# diverse mai oltre 17 punti su 4.022 coppie; fra foto della stessa bottiglia
+# 25 o piu' nella meta' delle 1.528 coppie. Il contrario la foto non lo sa
+# dire: una bottiglia su quattro, rimessa girata, ritrova meno di 10 punti. Per
+# dire «e' un'altra» serve il testo.
+STESSA_A_OCCHIO = 25
+# Quanto vale una lettura fatta in anticipo, se nessuno la usa subito.
+ANTICIPO_VALIDO_S = 30.0
 # Di quanto sale e scende a ogni tocco. Dieci passi da un capo all'altro: meno
 # non si sente, di piu' non si regola.
 PASSO_VOLUME = 10
@@ -185,6 +196,19 @@ COLORE_ANELLO = {
     Effetto.ANELLO_ATTENZIONE: ROSSO,
     Effetto.ANELLO_SPENTO: SPENTO,
 }
+
+
+@dataclass
+class _Anticipo:
+    """Una bottiglia arrivata mentre si raccontava la precedente, e la sua lettura."""
+
+    apparsa: float
+    annullata: threading.Event = field(default_factory=threading.Event)
+    scatto: Any = None
+    lettura: Any = None
+    allargata: Any = None
+    durata_scatto: float = 0.0
+    letta: float = 0.0
 
 
 @dataclass
@@ -358,6 +382,11 @@ class Amelie:
         # fondo, oppure l'ospite ha annullato. Finche' e' alzata, il ciclo non
         # riparte da solo. Si abbassa quando la bottiglia viene tolta davvero.
         self._bottiglia_chiusa = False
+        # La bottiglia arrivata a racconto in corso: la lettura in corso, e
+        # quella finita e riconosciuta come un'altra bottiglia, in attesa che
+        # la scansione la prenda. Vedi `_anticipa`.
+        self._anticipo: _Anticipo | None = None
+        self._anticipata: _Anticipo | None = None
         self.volume = self._volume_salvato(cfg.volume)
         if self.voce is not None:
             self.voce.volume = self.volume
@@ -1315,6 +1344,7 @@ class Amelie:
         self._tentativi = 0
         self._bottiglia_chiusa = False
         self._cambiata_durante_il_racconto = False
+        self._annulla_anticipo()
         self.macchina.reimposta()
         self._mostra(Stato.ATTESA)
         for e in EFFETTI_INGRESSO[Stato.ATTESA]:
@@ -1447,9 +1477,189 @@ class Amelie:
 
     # ------------------------------------------------------------- pipeline
 
+    # ------------------------------------------------------- cambio bottiglia
+
+    def _anticipa(self) -> None:
+        """Una bottiglia e' arrivata mentre si raccontava la precedente.
+
+        La si legge subito, SENZA fermare la voce. Il comportamento voluto e' questo:
+        quando la bottiglia cambia, la descrizione deve cambiare subito, e per
+        non far pesare l'attesa si comincia a leggere la nuova mentre si sta
+        ancora parlando della vecchia. Ma sollevarla per versare e rimetterla
+        e' il gesto piu' comune di un tavolo, e interrompere li' vorrebbe dire
+        ricominciare da capo la storia che si stava ascoltando.
+
+        Quindi si decide prima di interrompere, e si decide in fretta dove si
+        puo'. La foto dice «e' la stessa» in un secondo circa, quando ritrova
+        abbastanza punti dell'etichetta di prima (`STESSA_A_OCCHIO`); «e'
+        un'altra» invece non lo sa dire, e lo dice il testo, qualche secondo
+        dopo: le parole lette, e cosa se ne riconosce. Solo allora la voce
+        tace e parte la bottiglia nuova, gia' letta - la scansione non rifa'
+        niente, vedi `_scatta_e_leggi`.
+
+        Se dalla lettura non si capisce niente - nessuna parola - si lascia
+        finire il racconto, e la bottiglia si rilegge dopo, come prima.
+        """
+        if self.camera is None or self.lettore is None:
+            return
+        self._annulla_anticipo()
+        a = _Anticipo(apparsa=self._apparsa)
+        self._anticipo = a
+        threading.Thread(target=self._leggi_in_anticipo, args=(a,),
+                         name="anticipo", daemon=True).start()
+
+    def _annulla_anticipo(self) -> None:
+        """La bottiglia letta in anticipo non c'e' piu': se ne dimentica tutto."""
+        a, self._anticipo = self._anticipo, None
+        if a is not None:
+            a.annullata.set()
+        self._anticipata = None
+
+    def _prendi_anticipata(self) -> _Anticipo | None:
+        """La lettura fatta in anticipo, se c'e' ed e' ancora buona. Una volta sola."""
+        a, self._anticipata = self._anticipata, None
+        if (a is None or a.annullata.is_set() or a.lettura is None
+                or time.monotonic() - a.letta > ANTICIPO_VALIDO_S):
+            return None
+        return a
+
+    def _leggi_in_anticipo(self, a: _Anticipo) -> None:
+        try:
+            self._decidi_in_anticipo(a)
+        except Exception:                                   # noqa: BLE001
+            # Una lettura in anticipo che fallisce costa quello che costava
+            # prima: la bottiglia si rilegge a racconto finito.
+            log.exception("lettura in anticipo")
+        finally:
+            if self._anticipo is a:
+                self._anticipo = None
+
+    def _decidi_in_anticipo(self, a: _Anticipo) -> None:
+        # Il tempo perche' la mano esca dall'inquadratura, come nell'assestamento.
+        if a.annullata.wait(DURATE_S[Stato.ASSESTAMENTO]):
+            return
+        inizio = time.perf_counter()
+        self.camera.sorveglia()
+        scatto = self.camera.al_volo(dopo=a.apparsa, attesa=1.5)
+        if scatto is None:
+            try:
+                scatto = self.camera.scatta()
+            except CameraNonDisponibile as e:
+                log.warning("lettura in anticipo senza camera: %s", e)
+                return
+        a.durata_scatto = time.perf_counter() - inizio
+        if self.macchina.stato in (Stato.RACCONTO, Stato.CONCLUSO):
+            # Mentre si parla lo stream resta spento, e la foto c'e' gia'.
+            # Vedi `_va_sorvegliata`.
+            self.camera.chiudi()
+        if a.annullata.is_set():
+            return
+        a.scatto = scatto
+        punti = self.correzioni.punti_in_comune(
+            getattr(self, "_ultimo_scatto", None), self._righe_lette, scatto.immagine)
+        if punti >= STESSA_A_OCCHIO:
+            self._e_la_stessa(f"{punti} punti dell'etichetta ritrovati")
+            return
+        try:
+            a.lettura, a.allargata = self._leggi_scatto(scatto)
+        except OCRNonDisponibile as e:
+            log.warning("lettura in anticipo senza OCR: %s", e)
+            return
+        a.letta = time.monotonic()
+        if a.annullata.is_set():
+            return
+        altra = self._e_un_altra(a.lettura,
+                                 scatto.immagine if a.allargata is None else a.allargata)
+        if altra is None:
+            log.info("bottiglia rimessa: dalla lettura non si capisce se e' un'altra, "
+                     "la si rileggera' a racconto finito")
+            if self.macchina.stato in (Stato.CONCLUSO, Stato.ATTESA):
+                # Il racconto e' gia' finito: la bottiglia si rilegge adesso.
+                self._bottiglia_chiusa = False
+            return
+        if not altra:
+            self._e_la_stessa("le stesse parole")
+            return
+        log.info("un'altra bottiglia sul piatto: il racconto si ferma e parte la nuova")
+        self._anticipata = a
+        self._cambiata_durante_il_racconto = False
+        # Se il racconto e' gia' finito e si e' tornati all'invito, il cambio
+        # non ha piu' niente da interrompere e la macchina lo ignora: la
+        # bottiglia la raccoglie il rilancio del battito, che trova la lettura
+        # pronta. Senza questa riga restava segnata come gia' raccontata.
+        self._bottiglia_chiusa = False
+        self._tentativi = 0
+        self.macchina.invia(Evento.CAMBIO_BOTTIGLIA)
+
+    def _e_la_stessa(self, perche: str) -> None:
+        """La bottiglia rimessa sul piatto e' quella di prima: non si rilegge."""
+        log.info("la bottiglia rimessa sul piatto e' la stessa (%s): il racconto continua",
+                 perche)
+        self._cambiata_durante_il_racconto = False
+        if self.macchina.stato in (Stato.CONCLUSO, Stato.ATTESA):
+            # Il racconto e' gia' finito, e la bottiglia e' quella raccontata.
+            self._bottiglia_chiusa = True
+
+    def _e_un_altra(self, lettura, immagine) -> bool | None:
+        """La bottiglia letta in anticipo e' un'altra? `None` se non si capisce.
+
+        Prima le parole, con la regola delle correzioni: le stesse parole
+        identificanti rilette sono la stessa etichetta. Poi quello che se ne
+        riconosce: due etichette diverse dello stesso vino - fronte e retro -
+        raccontano la stessa storia, e non c'e' niente da interrompere.
+        """
+        from .correzioni import REGOLA, parole_identificanti, parole_in_comune
+
+        righe = [r.testo for r in lettura.righe]
+        nuove = parole_identificanti(righe)
+        if not nuove:
+            return None
+        quota, prese = parole_in_comune(
+            parole_identificanti(getattr(self, "_righe", [])), nuove)
+        if prese >= REGOLA.parole_minime and quota >= REGOLA.parole:
+            return False
+        prima = self._chiave_attuale()
+        return prima is None or prima != self._chiave_di(righe, lettura.righe, immagine)
+
+    def _chiave_attuale(self) -> tuple | None:
+        """Che cosa si sta raccontando, in una forma che si puo' confrontare."""
+        if self._correzione is not None:
+            return ("correzione", self._correzione.id)
+        if self.modo == "carta" and self._voce is not None:
+            return ("carta", self._voce.titolo)
+        f = self._fatti
+        return ("archivio", tuple(f.origine)) if f.origine and not f.vuoto else None
+
+    def _chiave_di(self, righe, righe_lette, immagine) -> tuple | None:
+        """Che cosa si racconterebbe di questa lettura: la stessa strada di
+        `_riconosci`, senza toccare niente di quello che si sta raccontando."""
+        try:
+            r = self.correzioni.cerca(righe_lette, immagine)
+        except Exception as e:                              # noqa: BLE001
+            log.warning("correzioni: confronto non riuscito (%s)", e)
+            r = None
+        if r is not None:
+            return ("correzione", r.correzione.id)
+        if self.modo == "carta" and self.carta is not None:
+            v = self.carta.cerca(righe)
+            return ("carta", v.titolo) if v is not None else None
+        f = self.matcher.cerca(righe)
+        if f.dubbio:
+            f = self.matcher.il_piu_generico(f, righe)
+        return ("archivio", tuple(f.origine)) if f.origine and not f.vuoto else None
+
     def _scatta_e_leggi(self) -> None:
         if self.camera is None or self.lettore is None:
             self.macchina.invia(Evento.LETTURA_FALLITA)
+            return
+        # La bottiglia cambiata a racconto in corso e' gia' stata fotografata e
+        # letta, mentre la voce parlava ancora della precedente: rifarlo
+        # vorrebbe dire far aspettare di nuovo quello che si e' gia' pagato.
+        anticipata = self._prendi_anticipata()
+        if anticipata is not None:
+            self._dopo_la_lettura(anticipata.scatto, anticipata.lettura,
+                                  anticipata.allargata, anticipata.durata_scatto,
+                                  anticipata=True)
             return
         # La luce dello scatto è l'anello stesso, che sale a bianco e poi torna
         # al colore del lavoro. Prima era un secondo Modulino Pixels che faceva
@@ -1502,22 +1712,31 @@ class Amelie:
 
         durata_scatto = time.perf_counter() - inizio_scatto
         try:
-            # Il guardiano si ferma per il tempo della lettura: il fotogramma
-            # buono ce l'abbiamo gia', e decodificare MJPEG mentre l'OCR gira
-            # vuol dire toglierle un core su quattro.
-            with self.camera.in_pausa():
-                lettura = self.lettore.leggi_comunque(scatto.immagine)
-                allargata = None
-                if scatto.intero is not None:
-                    # Una riga che tocca il bordo del ritaglio e' un'etichetta
-                    # tagliata: si rilegge piu' largo. Vedi `Lettore.allarga`.
-                    lettura, allargata = self.lettore.allarga(
-                        lettura, scatto.intero, scatto.posto)
+            lettura, allargata = self._leggi_scatto(scatto)
         except OCRNonDisponibile as e:
             log.error("OCR: %s", e)
             self.macchina.invia(Evento.ERRORE)
             return
+        self._dopo_la_lettura(scatto, lettura, allargata, durata_scatto)
 
+    def _leggi_scatto(self, scatto):
+        """L'OCR su uno scatto: la lettura, e l'immagine allargata se serviva."""
+        # Il guardiano si ferma per il tempo della lettura: il fotogramma
+        # buono ce l'abbiamo gia', e decodificare MJPEG mentre l'OCR gira
+        # vuol dire toglierle un core su quattro.
+        with self.camera.in_pausa():
+            lettura = self.lettore.leggi_comunque(scatto.immagine)
+            allargata = None
+            if scatto.intero is not None:
+                # Una riga che tocca il bordo del ritaglio e' un'etichetta
+                # tagliata: si rilegge piu' largo. Vedi `Lettore.allarga`.
+                lettura, allargata = self.lettore.allarga(
+                    lettura, scatto.intero, scatto.posto)
+        return lettura, allargata
+
+    def _dopo_la_lettura(self, scatto, lettura, allargata, durata_scatto: float,
+                         *, anticipata: bool = False) -> None:
+        """Quello che si e' letto diventa la bottiglia sul piatto, e si va avanti."""
         self._righe = [r.testo for r in lettura.righe]
         self._righe_lette = list(lettura.righe)
         # Si tiene l'ultimo scatto: e' la foto che una correzione a mano
@@ -1541,6 +1760,8 @@ class Amelie:
         }
         if allargata is not None:
             self._scansione["allargata"] = True
+        if anticipata:
+            self._scansione["anticipata"] = True
         if lettura.utile:
             self.macchina.invia(Evento.LETTURA_RIUSCITA)
             return
@@ -2399,11 +2620,14 @@ class Amelie:
                 # di prima mostra il piatto vuoto, o una mano che scende.
                 self._apparsa = time.monotonic()
                 if self.macchina.stato in (Stato.RACCONTO, Stato.CONCLUSO):
-                    # Arrivata mentre si raccontava: quando il racconto e'
-                    # finito si legge, perche' puo' essere un altro vino.
+                    # Arrivata mentre si raccontava: puo' essere un altro vino,
+                    # e lo si legge subito, mentre la voce continua. Se non si
+                    # riesce a deciderlo, la si rilegge a racconto finito.
                     self._cambiata_durante_il_racconto = True
+                    self._anticipa()
                 self.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
             elif self.macchina.stato is Stato.RACCONTO:
+                self._annulla_anticipo()
                 # Tolta mentre si racconta: il racconto CONTINUA. L'ospite
                 # che alza la bottiglia per versare non ha chiesto silenzio,
                 # e un racconto che muore a meta' frase si nota molto piu' di
@@ -2412,11 +2636,15 @@ class Amelie:
                 self._cambiata_durante_il_racconto = True
             else:
                 # Tolta la bottiglia, la prossima e' un'altra storia.
+                self._annulla_anticipo()
                 self._bottiglia_chiusa = False
                 self.macchina.invia(Evento.BOTTIGLIA_ASSENTE)
         elif (ora and self.macchina.stato is Stato.ATTESA
                 and not self._bottiglia_chiusa
-                and self._tentativi < TENTATIVI_MAX):
+                and self._tentativi < TENTATIVI_MAX
+                # Una bottiglia che si sta gia' leggendo in anticipo non si
+                # rilancia: la lettura in corso decidera' se e' da raccontare.
+                and self._anticipo is None):
             # La bottiglia c'e' ma siamo tornati in attesa: succede dopo un
             # guasto. NON dopo un racconto finito - quello ci torna apposta, e
             # rilanciare li' vorrebbe dire raccontare lo stesso vino all'infinito

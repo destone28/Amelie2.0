@@ -59,6 +59,10 @@ class Evento(enum.Enum):
     # Il tocco su «annulla»: l'ospite chiude da se', senza togliere la
     # bottiglia dal piatto. Vedi le tre righe in TRANSIZIONI.
     ANNULLA = "annulla"
+    # Mentre si raccontava, sul piatto e' arrivata un'altra bottiglia - letta
+    # in anticipo, a racconto ancora in corso, e riconosciuta come DIVERSA da
+    # quella che si stava raccontando. Vedi `Amelie._anticipa`.
+    CAMBIO_BOTTIGLIA = "cambio_bottiglia"
     # Una correzione e' stata salvata: si racconta la bottiglia com'e' ora,
     # anche se prima non era stata riconosciuta affatto.
     CORREZIONE_SALVATA = "correzione_salvata"
@@ -192,6 +196,12 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
     # illeggibile lasciato sul piatto - un bicchiere, una bottiglia senza
     # etichetta - fa lampeggiare l'anello e girare l'OCR per tutta la sera.
     (Stato.RIPOSIZIONA, Evento.RINUNCIA): Stato.CONCLUSO,
+
+    # La bottiglia cambiata a racconto in corso. Si va dritti alla lettura:
+    # uscendo da RACCONTO la voce tace, e la lettura e' gia' stata fatta in
+    # anticipo, quindi SCANSIONE non scatta un'altra foto ma usa quella.
+    (Stato.RACCONTO, Evento.CAMBIO_BOTTIGLIA): Stato.SCANSIONE,
+    (Stato.CONCLUSO, Evento.CAMBIO_BOTTIGLIA): Stato.SCANSIONE,
 
     # Una correzione salvata si racconta subito: e' la prova che ha
     # funzionato. Anche dagli stati in cui la bottiglia non era stata

@@ -420,6 +420,28 @@ class Correzioni:
         percorso = self.cartella / c.id / c.viste[0].immagine
         return percorso if percorso.is_file() else None
 
+    def punti_in_comune(self, prima, righe_prima: Sequence[Any], dopo) -> int:
+        """Quanti punti dell'etichetta di una foto si ritrovano in un'altra.
+
+        Serve a dire in un attimo, senza aspettare l'OCR, che la bottiglia
+        rimessa sul piatto e' la stessa che si sta raccontando. La prima foto
+        si guarda solo sull'etichetta, dove le sue righe dicono che sta; la
+        seconda tutta, perche' le sue righe non ci sono ancora. Cosi' lo
+        sfondo, che e' lo stesso in tutte e due, non puo' farle somigliare.
+        Zero quando non si puo' dire niente.
+        """
+        occhio = self._vede()
+        if occhio is None or prima is None or dopo is None:
+            return 0
+        if not righe_prima or not hasattr(righe_prima[0], "riquadro"):
+            return 0
+        zona = zona_etichetta(righe_prima, prima.shape[:2])
+        if zona is None:
+            return 0
+        alto, largo = dopo.shape[:2]
+        return occhio.in_comune(occhio.descrivi(prima, zona),
+                                occhio.descrivi(dopo, (0, 0, largo, alto)))
+
     def _basta(self, r: Riscontro) -> bool:
         g = self.regola
         if r.immagine >= g.immagine_da_sola:
