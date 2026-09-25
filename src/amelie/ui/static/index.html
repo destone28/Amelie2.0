@@ -281,23 +281,6 @@ svg { display: block; }
 /* Le due bottiglie accanto a quella scelta sono le altre, e restano indietro. */
 .passo .fioca { opacity: .5; }
 
-/* Il vino nel calice del marchio ondeggia appena, come in un bicchiere
-   posato sul tavolo: il pelo si inclina da una parte e dall'altra attorno al
-   centro della coppa. Poco, e lento - tre gradi in sette secondi - perche'
-   la schermata d'attesa resta accesa tutta la sera, e un movimento che si
-   nota troppo a lungo stanca. Solo qui: il calice della lettura e quello
-   della scrittura hanno gia' il loro. */
-#attesa .marchio .livello {
-  transform-box: view-box; transform-origin: 60px 62px;
-  animation: ondeggia 7s ease-in-out infinite;
-}
-@keyframes ondeggia {
-  0%, 100% { transform: rotate(-3deg); }
-  50%      { transform: rotate(3deg) translateY(.8px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  #attesa .marchio .livello { animation: none; }
-}
 
 /* ===========================================================================
    VERSA — il segnale che il dispositivo sta leggendo.

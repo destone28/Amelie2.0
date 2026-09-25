@@ -132,14 +132,13 @@ def test_le_proposte_stanno_al_posto_della_descrizione():
     assert "nessuna_di_queste" in pagina and "paginaProposte++" in pagina
 
 
-def test_il_vino_del_marchio_ondeggia():
-    """Nella schermata d'attesa il vino nel calice ondeggia appena; e chi ha
-    chiesto meno movimento lo vede fermo."""
-    regola = re.search(r"#attesa \.marchio \.livello \{(.*?)\}", PAGINA, re.S).group(1)
-    assert "animation: ondeggia" in regola
-    assert "@keyframes ondeggia" in PAGINA
-    assert re.search(r"prefers-reduced-motion: reduce\) \{\s*#attesa \.marchio \.livello "
-                     r"\{ animation: none; \}", PAGINA)
+def test_il_calice_della_home_sta_fermo():
+    """Il vino che ondeggiava e' stato tolto: anche a scatti teneva acceso un
+    5 % di core a schermata ferma - a sessanta fotogrammi erano 80 - e la
+    schermata d'attesa resta accesa tutta la sera, a batteria. Misurato sulla
+    board."""
+    assert "ondeggia" not in PAGINA
+    assert not re.search(r"#attesa \.marchio \.livello \{[^}]*animation", PAGINA)
 
 
 def test_il_pulsante_per_insegnare_la_bottiglia_sta_nell_avviso():
