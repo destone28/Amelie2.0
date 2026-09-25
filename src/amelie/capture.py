@@ -204,11 +204,21 @@ class ImpostazioniCamera:
     ritaglio_largo: float = 0.70
     ritaglio_alto: float = 0.95
 
-    # Di quanto si stringe ai lati il riquadro trovato sulla bottiglia vera.
-    # Il bordo e' dove il vetro curva via e le lettere si accartocciano: sono
-    # le stesse che si perderebbero comunque, e toglierle risparmia al
-    # rilevatore due regioni di testo che non sa leggere.
-    margine_riquadro: float = 0.06
+    # Di quanto si allarga ai lati il riquadro trovato sulla bottiglia vera,
+    # in frazione della sua larghezza.
+    #
+    # Si STRINGEVA, del 6 %: il bordo e' dove il vetro curva via, e le lettere
+    # che stanno li' sembravano perse comunque. Sul dispositivo, una sera,
+    # con le bottiglie tenute in mano davanti alla camera, erano
+    # proprio quelle che mancavano: «GRASPAROSSA DI CASTELVETRO» arrivava
+    # all'OCR come «SPAROSSA DI CASTEL», e la carta non la riconosceva. E la
+    # sagoma, con una mano che regge il collo, puo' finire spostata di lato:
+    # stringerla ancora vuol dire tagliare l'etichetta due volte.
+    #
+    # Allargando un poco si lascia all'etichetta il suo bordo. Quello che
+    # resta tagliato lo recupera `Lettore.allarga`, rileggendo a tutta
+    # larghezza le sole righe che toccano il bordo.
+    allarga_riquadro: float = 0.08
 
     # Di quanto ruotare il fotogramma prima di guardarlo, in gradi orari.
     #
@@ -271,6 +281,12 @@ class Scatto:
     nitidezza: float                         # varianza del laplaciano
     scartati: int = 0
     nitidezze: list[float] = field(default_factory=list)
+    # Il fotogramma intero, già in piedi, e dove ci sta il ritaglio: (x0, y0,
+    # x1, y1) in pixel. Servono a rileggere più largo quando l'etichetta
+    # esce dal ritaglio - vedi `Lettore.allarga`. `None` quando lo scatto non
+    # viene da una camera vera.
+    intero: np.ndarray | None = None
+    posto: tuple[int, int, int, int] | None = None
 
     @property
     def sospetto_mosso(self) -> bool:
@@ -1052,7 +1068,8 @@ class Camera:
             frame = self.pronto(dopo=dopo, attesa=max(0.0, scadenza - time.monotonic()))
             if frame is None:
                 break
-            ritaglio = self.ritaglia(frame)
+            posto = self.posto(frame)
+            ritaglio = frame[posto[1]:posto[3], posto[0]:posto[2]]
             # La nitidezza si misura sul RITAGLIO e non sul fotogramma intero:
             # costa meno, e dice quello che conta davvero, cioè se è a fuoco
             # dove si legge. Una stanza nitida dietro una bottiglia mossa
@@ -1061,7 +1078,7 @@ class Camera:
             viste.append(n)
             if migliore is None or n > migliore.nitidezza:
                 migliore = Scatto(immagine=ritaglio, nitidezza=n, scartati=0,
-                                  nitidezze=[])
+                                  nitidezze=[], intero=frame, posto=posto)
             if n >= SOGLIA_NITIDEZZA or time.monotonic() >= scadenza:
                 break
             # Il prossimo dev'essere un altro fotogramma, non lo stesso
@@ -1228,27 +1245,33 @@ class Camera:
         torna alle frazioni fisse, che sono larghe e non tagliano niente. Una
         renana alta e stretta e una borgognona larga non occupano la stessa
         parte del fotogramma: un riquadro fisso o taglia l'una o lascia dentro
-        mezza stanza per l'altra.
-
-        Il riquadro si stringe di poco ai lati. Il bordo della bottiglia e'
-        dove il vetro curva via, e li' le lettere si accartocciano: sono le
-        stesse che si perderebbero comunque, e toglierle risparmia al
-        rilevatore due regioni di testo che non sa leggere.
+        mezza stanza per l'altra. Dove, esattamente, lo dice `posto`.
         """
-        r = self.riquadro
-        if r is None:
-            return ritaglia_centro(frame, self.imp.ritaglio_largo,
-                                   self.imp.ritaglio_alto)
+        x0, y0, x1, y1 = self.posto(frame)
+        return frame[y0:y1, x0:x1]
+
+    def posto(self, frame) -> tuple[int, int, int, int]:
+        """Dove sta il ritaglio nel fotogramma: (x0, y0, x1, y1) in pixel.
+
+        Una funzione sola per tre clienti - il ritaglio, il mirino che lo
+        disegna e la rilettura che lo allarga - perche' tre copie dello stesso
+        conto finiscono per non essere piu' lo stesso conto.
+
+        Il riquadro della bottiglia si allarga un poco ai lati: vedi
+        `ImpostazioniCamera.allarga_riquadro`.
+        """
         h, w = frame.shape[:2]
-        x0, y0, x1, y1 = r
-        stretta = (x1 - x0) * self.imp.margine_riquadro
-        x0, x1 = x0 + stretta, x1 - stretta
-        px0, px1 = int(w * max(0.0, x0)), int(w * min(1.0, x1))
-        py0, py1 = int(h * max(0.0, y0)), int(h * min(1.0, y1))
-        if px1 - px0 < 2 or py1 - py0 < 2:
-            return ritaglia_centro(frame, self.imp.ritaglio_largo,
-                                   self.imp.ritaglio_alto)
-        return frame[py0:py1, px0:px1]
+        r = self.riquadro
+        if r is not None:
+            x0, y0, x1, y1 = r
+            largo = (x1 - x0) * self.imp.allarga_riquadro
+            px0, px1 = int(w * max(0.0, x0 - largo)), int(w * min(1.0, x1 + largo))
+            py0, py1 = int(h * max(0.0, y0)), int(h * min(1.0, y1))
+            if px1 - px0 >= 2 and py1 - py0 >= 2:
+                return px0, py0, px1, py1
+        nh, nw = int(h * self.imp.ritaglio_alto), int(w * self.imp.ritaglio_largo)
+        y0, x0 = (h - nh) // 2, (w - nw) // 2
+        return x0, y0, x0 + nw, y0 + nh
 
     def _cerca_la_posa(self, cap) -> float:
         """Regola il tempo di posa sulla luce che c'è davvero, ora, qui.
@@ -1340,11 +1363,14 @@ class Camera:
         # Prima si raddrizza, poi si ritaglia: il ritaglio è centrato, e su
         # un'immagine coricata terrebbe la fascia sbagliata della bottiglia.
         migliore = self._raddrizza(migliore)
+        posto = self.posto(migliore)
         return Scatto(
-            immagine=self.ritaglia(migliore),
+            immagine=migliore[posto[1]:posto[3], posto[0]:posto[2]],
             nitidezza=migliore_n,
             scartati=scartati,
             nitidezze=tutte,
+            intero=migliore,
+            posto=posto,
         )
 
 

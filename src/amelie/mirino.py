@@ -162,16 +162,11 @@ def disegna(frame, camera):
     from .capture import SOGLIA_NITIDEZZA, nitidezza
 
     h, w = frame.shape[:2]
-    ritagliato = camera.ritaglia(frame)
-    nh, nw = ritagliato.shape[:2]
     # Dove sta davvero il ritaglio dentro al fotogramma: la camera lo prende
     # centrato quando e' fisso, e sulla bottiglia quando l'ha trovata.
-    r = camera.riquadro
-    if r is None:
-        y0, x0 = (h - nh) // 2, (w - nw) // 2
-    else:
-        stretta = (r[2] - r[0]) * camera.imp.margine_riquadro
-        x0, y0 = int(w * max(0.0, r[0] + stretta)), int(h * max(0.0, r[1]))
+    x0, y0, x1, y1 = camera.posto(frame)
+    ritagliato = frame[y0:y1, x0:x1]
+    nh, nw = ritagliato.shape[:2]
     n = nitidezza(ritagliato)
     copia = ritagliato.copy()
     colore = (90, 220, 60) if n >= SOGLIA_NITIDEZZA else (60, 80, 240)   # BGR

@@ -561,10 +561,32 @@ class TestIlRitaglioSegueIlRiquadro:
     def test_col_riquadro_si_usa_quello(self):
         c = self.camera((0.2, 0.1, 0.6, 0.9))
         out = c.ritaglia(immagine(1000, 500))
-        # 40% di larghezza meno il margine ai due lati, 80% di altezza
-        largo = int(500 * (0.4 - 2 * 0.06 * 0.4))
+        # 40% di larghezza piu' il margine ai due lati, 80% di altezza
+        largo = int(500 * 0.4 * (1 + 2 * c.imp.allarga_riquadro))
         assert out.shape[0] == 800
         assert abs(out.shape[1] - largo) <= 2, out.shape
+
+    def test_il_riquadro_della_bottiglia_si_allarga_non_si_stringe(self):
+        """Si stringeva del 6 %: il bordo del vetro sembrava da buttare. Con
+        la bottiglia tenuta in mano erano proprio le lettere che mancavano -
+        «SPAROSSA» per GRASPAROSSA - e la carta non la riconosceva."""
+        c = self.camera((0.2, 0.1, 0.6, 0.9))
+        x0, _, x1, _ = c.posto(immagine(1000, 500))
+        assert x0 < 500 * 0.2 and x1 > 500 * 0.6
+
+    def test_il_riquadro_non_esce_dal_fotogramma(self):
+        c = self.camera((0.0, 0.0, 0.95, 1.0))
+        assert c.posto(immagine(1000, 500)) == (0, 0, 500, 1000)
+
+    def test_posto_e_ritaglio_dicono_la_stessa_cosa(self):
+        """Il mirino disegna `posto`, l'OCR legge `ritaglia`: devono essere lo
+        stesso rettangolo, o si tara l'inquadratura contro una linea che non
+        decide niente."""
+        for r in (None, (0.2, 0.1, 0.6, 0.9)):
+            c = self.camera(r)
+            f = immagine(1000, 500)
+            x0, y0, x1, y1 = c.posto(f)
+            assert c.ritaglia(f).shape[:2] == (y1 - y0, x1 - x0)
 
     def test_un_riquadro_degenere_torna_al_fisso(self):
         c = self.camera((0.5, 0.5, 0.5001, 0.5001))

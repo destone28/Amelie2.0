@@ -354,18 +354,23 @@ class Lettore:
         log.info("motore OCR caricato in %.1f s", time.perf_counter() - inizio)
         return self._motore
 
-    def leggi(self, immagine) -> Lettura:
-        """Legge un'immagine **BGR nativa**, non convertita in grigio."""
+    def leggi(self, immagine, *, scala: float | None = None) -> Lettura:
+        """Legge un'immagine **BGR nativa**, non convertita in grigio.
+
+        `scala` e' quanto rimpicciolire l'immagine per il rilevatore. Di solito
+        la decide `lato_rilevatore`; la da' chi rilegge un pezzo di un'immagine
+        gia' letta, perche' il pezzo va guardato alla stessa scala del tutto.
+        """
         motore = self._carica()
         inizio = time.perf_counter()
-        trovate = self._trova_e_leggi(motore, immagine)
+        trovate = self._trova_e_leggi(motore, immagine, scala)
         durata = time.perf_counter() - inizio
 
         righe = [r for r in trovate if self._tieni(r)]
         log.debug("OCR: %d righe utili in %.2f s", len(righe), durata)
         return Lettura(righe=righe, durata_s=durata)
 
-    def _trova_e_leggi(self, motore, immagine) -> list[Riga]:
+    def _trova_e_leggi(self, motore, immagine, scala: float | None = None) -> list[Riga]:
         """Le due fasi: si cerca sul piccolo, si legge sul grande.
 
         Il rilevatore costa in proporzione ai pixel - 2835 ms a 768x1824, 198 ms
@@ -379,7 +384,8 @@ class Lettore:
 
         if self.imp.normalizza_contrasto:
             immagine = _contrasto_normalizzato(immagine)
-        scala = self.imp.lato_rilevatore / max(1, min(immagine.shape[:2]))
+        if scala is None:
+            scala = self._scala(immagine)
         if scala < 1.0:
             piccola = cv2.resize(
                 immagine,
@@ -428,6 +434,79 @@ class Lettore:
         return [Riga(testo=str(t), confidenza=float(c),
                      riquadro=_riquadro(np.array(b, dtype=np.float32) / scala))
                 for t, c, b in zip(testi, punteggi, scelti)]
+
+    def _scala(self, immagine) -> float:
+        """Quanto si rimpicciolisce un'immagine prima di cercarci il testo."""
+        return self.imp.lato_rilevatore / max(1, min(immagine.shape[:2]))
+
+    def allarga(self, lettura: Lettura, intero, posto) -> tuple[Lettura, Any]:
+        """Rilegge più largo quando il ritaglio ha tagliato l'etichetta.
+
+        Sul dispositivo,con le bottiglie tenute in mano
+        davanti alla camera: in più di metà delle scansioni il titolo
+        dell'etichetta toccava il bordo del ritaglio. «LAMBRUSCO GRASPAROSSA DI
+        CASTELVETRO» arrivava all'OCR come «SPAROSSA DI CAS», l'Asti come
+        «STI». Il ritaglio c'è per buone ragioni - fuori c'è la stanza, e la
+        stanza costa - ma quando una riga di parole ne tocca il bordo, il
+        ritaglio ha sbagliato, e il fotogramma intero sta lì accanto.
+
+        Si rilegge il ritaglio allargato fino al bordo del fotogramma, dalla
+        parte dove le righe toccano, e alla stessa scala della prima lettura:
+        le lettere restano grandi come prima. Rileggere solo la fascia delle
+        righe tagliate è stato provato, e non conviene: sulla board costa 1,5 s
+        invece di 2,8, ma perde le righe rimaste fuori del tutto - «ASTI» sopra
+        un «VINO SPUMANTE» che si leggeva - e in simulazione, su 74 scansioni
+        vere ristrette apposta, riconosce 15 bottiglie invece di 18.
+
+        Restituisce la lettura completata e l'immagine su cui ora stanno le
+        sue righe: il ritaglio allargato, alto come prima. Se non c'era niente
+        da allargare, la lettura com'era e `None`.
+        """
+        if intero is None or posto is None or not lettura.righe:
+            return lettura, None
+        x0, y0, x1, y1 = posto
+        largo_tutto = intero.shape[1]
+        bordo = max(4.0, (x1 - x0) * BORDO_CHE_TAGLIA)
+        sinistra = destra = False
+        tagliate = []
+        for r in lettura.righe:
+            if len(r.riquadro) < 3 or sum(c.isalpha() for c in r.testo) < LETTERE_DI_UNA_RIGA:
+                # Le cifre non si inseguono: un calendario appeso dietro la
+                # bottiglia ne mette sempre qualcuna sul bordo.
+                continue
+            xs = [p[0] for p in r.riquadro]
+            a_sinistra = x0 > 0 and min(xs) <= bordo
+            a_destra = x1 < largo_tutto and max(xs) >= (x1 - x0) - bordo
+            if a_sinistra or a_destra:
+                tagliate.append(r)
+                sinistra, destra = sinistra or a_sinistra, destra or a_destra
+        if not tagliate:
+            return lettura, None
+
+        xa = 0 if sinistra else x0
+        xb = largo_tutto if destra else x1
+        allargata = intero[y0:y1, xa:xb]
+        scala = min(1.0, self._scala(intero[y0:y1, x0:x1]))
+        nuova = self.leggi(allargata, scala=scala)
+
+        # Le righe di prima nelle coordinate del ritaglio allargato. Si tiene
+        # quella che la rilettura non ha ritrovato dentro una delle sue: un
+        # pezzo di parola è meglio di nessuna parola.
+        rilette = [_confrontabile(r.testo) for r in nuova.righe]
+        righe = list(nuova.righe)
+        for r in lettura.righe:
+            chiave = _confrontabile(r.testo)
+            if chiave and any(chiave in n for n in rilette):
+                continue
+            righe.append(Riga(testo=r.testo, confidenza=r.confidenza,
+                              riquadro=tuple((x + x0 - xa, y) for x, y in r.riquadro)))
+        log.info("OCR: %d righe toccavano il bordo (%s), riletto %dx%d in %.2f s: %s",
+                 len(tagliate),
+                 "+".join(n for n, si in (("sinistra", sinistra), ("destra", destra)) if si),
+                 xb - xa, y1 - y0, nuova.durata_s,
+                 " / ".join(r.testo for r in nuova.righe))
+        return (Lettura(righe=righe, durata_s=lettura.durata_s + nuova.durata_s),
+                allargata)
 
     def _normalizza_riga(self, ritaglio):
         """Una riga portata all'altezza di lettura, con un tetto alla larghezza.
@@ -555,6 +634,22 @@ def _contrasto_normalizzato(immagine):
     l, a, b = cv2.split(lab)
     l = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(l)
     return cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
+
+
+# Quanto vicino al bordo del ritaglio deve arrivare una riga per dire che il
+# ritaglio l'ha tagliata, in frazione della sua larghezza. Una riga intera ha
+# sempre un po' di margine attorno, e il rilevatore lo allarga ancora
+# (`allargamento`); una tagliata arriva al pixel.
+BORDO_CHE_TAGLIA = 0.03
+# Quante lettere deve avere una riga perché valga la pena inseguirla oltre il
+# bordo. Due e non tre: una parola tagliata è spesso solo il suo inizio, e
+# «ST» sul bordo era l'«ASTI» di un'etichetta tenuta di sbieco.
+LETTERE_DI_UNA_RIGA = 2
+
+
+def _confrontabile(testo: str) -> str:
+    """Una riga ridotta a lettere e cifre minuscole, per dire se due sono uguali."""
+    return "".join(c for c in testo.lower() if c.isalnum())
 
 
 def _c_e_una_lettera(lettura: "Lettura") -> bool:

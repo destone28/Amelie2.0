@@ -326,6 +326,33 @@ class TestCicloCompleto:
                                    Stato.CONCLUSO, Stato.GUASTO})
         assert finale is not Stato.GUASTO
 
+    def test_un_etichetta_tagliata_si_rilegge_piu_larga(self, amelie_con_etichetta):
+        """Quando lo scatto porta il fotogramma intero, il ciclo chiede al
+        lettore di allargare; e se il lettore allarga, e' l'immagine allargata
+        quella che si conserva - le righe lette stanno li' - e il giornale lo
+        dice."""
+        import numpy as np
+
+        from amelie.capture import Scatto
+
+        a = amelie_con_etichetta
+        intero = np.zeros((40, 60, 3), dtype=np.uint8)
+        a.camera.al_volo = lambda **_: Scatto(
+            immagine=intero[:, 20:40], nitidezza=420.0, intero=intero,
+            posto=(20, 0, 40, 40))
+        chieste = []
+
+        def allarga(lettura, fotogramma, posto):
+            chieste.append(posto)
+            return lettura, fotogramma[:, 0:40]
+
+        a.lettore.allarga = allarga
+        a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
+        self._attendi(a, {Stato.RACCONTO, Stato.CONCLUSO, Stato.GUASTO})
+        assert chieste == [(20, 0, 40, 40)]
+        assert a._ultimo_scatto.shape[:2] == (40, 40)
+        assert a._scansione.get("allargata") is True
+
 
 class TestLingua:
     """La lingua si sceglie a schermo, con un tocco, anche a racconto in corso."""

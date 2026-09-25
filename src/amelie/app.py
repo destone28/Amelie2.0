@@ -1487,6 +1487,12 @@ class Amelie:
             # vuol dire toglierle un core su quattro.
             with self.camera.in_pausa():
                 lettura = self.lettore.leggi_comunque(scatto.immagine)
+                allargata = None
+                if scatto.intero is not None:
+                    # Una riga che tocca il bordo del ritaglio e' un'etichetta
+                    # tagliata: si rilegge piu' largo. Vedi `Lettore.allarga`.
+                    lettura, allargata = self.lettore.allarga(
+                        lettura, scatto.intero, scatto.posto)
         except OCRNonDisponibile as e:
             log.error("OCR: %s", e)
             self.macchina.invia(Evento.ERRORE)
@@ -1495,8 +1501,10 @@ class Amelie:
         self._righe = [r.testo for r in lettura.righe]
         self._righe_lette = list(lettura.righe)
         # Si tiene l'ultimo scatto: e' la foto che una correzione a mano
-        # conserva, e l'unica cosa che permette di capire un errore dopo.
-        self._ultimo_scatto = scatto.immagine
+        # conserva, e l'unica cosa che permette di capire un errore dopo. Se
+        # si e' riletto piu' largo, e' quella allargata: e' li' che stanno le
+        # righe lette, ed e' quella che l'OCR ha guardato davvero.
+        self._ultimo_scatto = scatto.immagine if allargata is None else allargata
         log.info("scatto in %.2f s, lette %d righe in %.2f s (nitidezza %.0f)",
                  durata_scatto, len(self._righe), lettura.durata_s,
                  scatto.nitidezza)
@@ -1511,6 +1519,8 @@ class Amelie:
             "posa": self.camera.imp.esposizione,
             "tentativo": self._tentativi + 1,
         }
+        if allargata is not None:
+            self._scansione["allargata"] = True
         if lettura.utile:
             self.macchina.invia(Evento.LETTURA_RIUSCITA)
             return

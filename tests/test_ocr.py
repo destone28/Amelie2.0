@@ -312,3 +312,108 @@ class TestIlVersoDelFotogramma:
                                 for t in ("CERASUOLO", "D'ABRUZZO", "ULISS")])
         assert _parole_utili(cifre) == 0
         assert _parole_utili(parole) == 3
+
+
+class TestIlRitaglioCheTaglia:
+    """Una riga che tocca il bordo del ritaglio è un'etichetta tagliata.
+
+    Una sera, con le bottiglie tenute in mano davanti alla camera,
+    «LAMBRUSCO GRASPAROSSA DI CASTELVETRO» arrivava all'OCR come «SPAROSSA DI
+    CAS»: il titolo usciva dal ritaglio, e il fotogramma intero stava lì
+    accanto. `allarga` lo rilegge più largo, e solo quando serve.
+    """
+
+    # Il fotogramma finto: 300 di larghezza, e il titolo va da 20 a 280.
+    TITOLO = (20, 280)
+
+    @staticmethod
+    def fotogramma():
+        np = pytest.importorskip("numpy")
+        return np.zeros((200, 300, 3), dtype=np.uint8)
+
+    def finta(self, letture):
+        """Legge il titolo per quanto ne entra nell'immagine che riceve.
+
+        L'immagine è una vista del fotogramma: da dove comincia lo si ricava
+        dal suo indirizzo in memoria, perché il lettore vero non lo sa e non
+        deve saperlo.
+        """
+        intero = self.intero
+        a, b = self.TITOLO
+
+        def leggi(lettore, immagine, *, scala=None):
+            letture.append((immagine.shape, scala))
+            passo = intero.strides[1]
+            x0 = (immagine.__array_interface__["data"][0]
+                  - intero.__array_interface__["data"][0]) % intero.strides[0] // passo
+            x1 = x0 + immagine.shape[1]
+            da, fino = max(a, x0), min(b, x1)
+            testo = "GRASPAROSSA DI CASTELVETRO"
+            n = len(testo)
+            pezzo = testo[int((da - a) / (b - a) * n):int((fino - a) / (b - a) * n)]
+            righe = [Riga(pezzo, 0.9, ((da - x0, 90), (fino - x0, 90),
+                                       (fino - x0, 110), (da - x0, 110)))]
+            righe.append(Riga("VINO", 0.9, ((100 - x0, 150), (140 - x0, 150),
+                                            (140 - x0, 160), (100 - x0, 160))))
+            return Lettura(righe=righe, durata_s=0.5)
+
+        return leggi
+
+    def test_la_riga_tagliata_si_rilegge_intera(self, monkeypatch):
+        self.intero = self.fotogramma()
+        letture = []
+        monkeypatch.setattr(Lettore, "leggi", self.finta(letture))
+        posto = (80, 0, 220, 200)
+        prima = Lettore().leggi(self.intero[0:200, 80:220])
+        assert prima.righe[0].testo != "GRASPAROSSA DI CASTELVETRO"
+        dopo, immagine = Lettore().allarga(prima, self.intero, posto)
+        assert "GRASPAROSSA DI CASTELVETRO" in [r.testo for r in dopo.righe]
+        # fino al bordo, dalle due parti, e alto come il ritaglio
+        assert immagine.shape[:2] == (200, 300)
+        # le righe stanno nelle coordinate dell'immagine restituita
+        vino = next(r for r in dopo.righe if r.testo == "VINO")
+        assert min(p[0] for p in vino.riquadro) == 100
+        assert dopo.durata_s == pytest.approx(1.0)
+
+    def test_si_rilegge_alla_scala_della_prima_lettura(self, monkeypatch):
+        """Le lettere devono restare grandi come prima: il rilevatore ha una
+        scala sua, e un'immagine più larga si rimpicciolirebbe di più."""
+        self.intero = self.fotogramma()
+        letture = []
+        monkeypatch.setattr(Lettore, "leggi", self.finta(letture))
+        lettore = Lettore(ImpostazioniOCR(lato_rilevatore=70))
+        prima = lettore.leggi(self.intero[0:200, 80:220])
+        lettore.allarga(prima, self.intero, (80, 0, 220, 200))
+        assert letture[-1][1] == pytest.approx(70 / 140)
+
+    def test_se_niente_tocca_il_bordo_non_si_rilegge(self, monkeypatch):
+        self.intero = self.fotogramma()
+        letture = []
+        monkeypatch.setattr(Lettore, "leggi", self.finta(letture))
+        prima = Lettore().leggi(self.intero[0:200, 10:290])
+        dopo, immagine = Lettore().allarga(prima, self.intero, (10, 0, 290, 200))
+        assert immagine is None and dopo is prima and len(letture) == 1
+
+    def test_al_bordo_del_fotogramma_non_c_e_niente_da_allargare(self, monkeypatch):
+        """Il ritaglio arriva gia' al bordo: oltre non c'e' altro da leggere."""
+        self.intero = self.fotogramma()
+        letture = []
+        monkeypatch.setattr(Lettore, "leggi", self.finta(letture))
+        prima = Lettore().leggi(self.intero[0:200, 0:300])
+        prima.righe[0] = Riga("GRASPAROSSA", 0.9, ((0, 90), (300, 90), (300, 110), (0, 110)))
+        _, immagine = Lettore().allarga(prima, self.intero, (0, 0, 300, 200))
+        assert immagine is None
+
+    def test_le_cifre_sul_bordo_non_fanno_rileggere(self, monkeypatch):
+        """Un calendario appeso dietro la bottiglia mette sempre qualche
+        numero sul bordo: inseguirlo vorrebbe dire rileggere ogni volta."""
+        letture = []
+        monkeypatch.setattr(Lettore, "leggi", lambda *a, **k: letture.append(1))
+        intero = self.fotogramma()
+        prima = Lettura(righe=[Riga("16", 0.9, ((0, 5), (20, 5), (20, 25), (0, 25)))])
+        _, immagine = Lettore().allarga(prima, intero, (80, 0, 220, 200))
+        assert immagine is None and not letture
+
+    def test_senza_fotogramma_intero_non_si_fa_niente(self):
+        prima = Lettura(righe=[Riga("STI", 0.9, ((0, 5), (20, 5), (20, 25), (0, 25)))])
+        assert Lettore().allarga(prima, None, None) == (prima, None)

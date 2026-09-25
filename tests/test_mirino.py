@@ -175,6 +175,9 @@ class CameraFinta:
     def ritaglia(self, frame):
         return self.vera.ritaglia(frame)
 
+    def posto(self, frame):
+        return self.vera.posto(frame)
+
     def fotogramma(self):
         self.chieste += 1
         return self.frame
