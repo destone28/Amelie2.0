@@ -82,16 +82,14 @@ class TestLettura:
 
 
 class TestImpostazioni:
-    def test_il_classificatore_di_orientamento_resta_acceso(self):
-        """Era spento, e spegnerlo costava quasi tutto.
+    def test_il_classificatore_di_orientamento_non_serve(self):
+        """Il fotogramma arriva già dritto: il classificatore non ha niente da fare.
 
-        La motivazione era «sul supporto l'etichetta è sempre dritta, il
-        classificatore è tempo sprecato». Sbagliata due volte. Su una bottiglia
-        il testo non è quasi mai orizzontale nel fotogramma — cilindro,
-        appoggio, camera che guarda dal basso e di sbieco — e su un'etichetta
-        scritta lungo l'asse arriva ruotato di novanta gradi.
-
-        Misurato su tre scatti veri della stessa bottiglia:
+        Su una bottiglia il testo non è quasi mai orizzontale nel fotogramma
+        grezzo — cilindro, appoggio, camera che guarda dal basso e di sbieco —
+        e su un'etichetta scritta lungo l'asse arriva ruotato di novanta gradi.
+        Con la camera montata orizzontale il classificatore è indispensabile;
+        misurato su tre scatti veri della stessa bottiglia:
 
             spento    `DOLA | SILIA | NER`        vitigno, 61   6,6 s
             acceso    `D'AVOLA | SICILIA | NERO`  tipologia, 87 4,9 s
@@ -99,19 +97,19 @@ class TestImpostazioni:
         Più accurato **e** più veloce: raddrizzare un ritaglio prima di
         riconoscerlo fa risparmiare al riconoscitore il lavoro di indovinare.
 
-        **Quella misura è stata presa con la camera montata orizzontale.** Ora
-        la camera è di lato e il fotogramma si raddrizza in `capture`: il testo
-        arriva già dritto e non c'è più niente da raddrizzare. Verificato che si
-        legga lo stesso con e senza, sulla stessa etichetta.
+        **Quella misura vale per la camera montata orizzontale.** Qui la camera
+        è di lato e il fotogramma si raddrizza in `capture`: il testo arriva già
+        dritto, e sulla stessa etichetta si legge lo stesso con e senza
+        classificatore. Se il montaggio cambia, la scelta va rimisurata.
         """
         assert ImpostazioniOCR().usa_classificatore is False
 
     def test_la_risoluzione_del_rilevatore_e_un_compromesso_misurato(self):
         """Sotto sbaglia le lettere, sopra si guadagna fino a un certo punto.
 
-        «Sopra costa e basta» veniva da UN'etichetta - a 756 si leggevano le
-        stesse righe di 320 - e sulle 139 vere, con l'OCR della board, non e'
-        cosi':
+        Su UN'etichetta sola salire sembra costare e basta - a 756 si leggono
+        le stesse righe di 320 - ma sulle 139 vere, con l'OCR della board, non
+        e' cosi':
 
                            cantina letta   nome letto   riconoscimento   tempo
             lato 320          112/139        72/139         87,1%        1,02 s
@@ -128,8 +126,8 @@ class TestImpostazioni:
         assert ImpostazioniOCR().righe_massime == 10
 
     def test_la_larghezza_di_una_riga_ha_un_tetto(self):
-        """Il pacchetto non glielo mette, e una didascalia lunga costava da
-        sola quanto tutta l'etichetta."""
+        """Il pacchetto non glielo mette, e senza tetto una didascalia lunga
+        costa da sola quanto tutta l'etichetta."""
         assert ImpostazioniOCR().larghezza_riga == 320
         assert ImpostazioniOCR().altezza_riga == 48
 
@@ -143,8 +141,9 @@ class TestIlVersoDelFotogramma:
 
     Misurato nella scocca, stessa bottiglia e stesso fotogramma, dando all'OCR
     i quattro versi: a 0 gradi `ULISS | CERASUOLO | D'ABRUZZO` e il vino
-    riconosciuto; a 90 gradi solo `D'ABRUZZC`; a 180 e 270 spazzatura. Un'ora
-    di dispositivo che «non riconosce le bottiglie» era questo.
+    riconosciuto; a 90 gradi solo `D'ABRUZZC`; a 180 e 270 spazzatura. Visto
+    da fuori, un verso sbagliato è un dispositivo che «non riconosce le
+    bottiglie».
     """
 
     @staticmethod
@@ -178,9 +177,9 @@ class TestIlVersoDelFotogramma:
         """Due parole sono una lettura: il verso e' giusto, manca altro.
 
         Misurato sul dispositivo su «Azienda Agricola Brunello 1930»: letto
-        `1930 | Brunello | Affinato inboti`, e il ripiego girava tre volte per
-        4,6 secondi per poi tenere comunque la prima lettura - che era gia'
-        quella con cui il vino e' stato riconosciuto.
+        `1930 | Brunello | Affinato inboti`, che basta a riconoscere il vino.
+        Il ripiego girerebbe tre volte, per 4,6 secondi, e terrebbe comunque
+        la prima lettura.
         """
         from amelie import ocr as modulo
 
@@ -201,11 +200,11 @@ class TestIlVersoDelFotogramma:
         assert len(versi) == 1, "ha girato un'etichetta che stava dritta"
 
     def test_il_tempo_dichiarato_e_quello_di_tutti_i_versi(self):
-        """A giornale comparivano «1,1 s» per una lettura costata 4,6.
+        """`durata_s` è quella di tutta la `leggi_comunque`.
 
-        `durata_s` era quella della `leggi` che aveva vinto, non della
-        `leggi_comunque`: il costo del ripiego era invisibile proprio a chi
-        doveva accorgersene.
+        Se fosse quella della sola `leggi` che ha vinto, il giornale
+        dichiarerebbe «1,1 s» per una lettura costata 4,6, e il costo del
+        ripiego sarebbe invisibile proprio a chi deve accorgersene.
         """
         import time
 
@@ -249,7 +248,7 @@ class TestIlVersoDelFotogramma:
         gradi, `3IMER · DRZZZO · CEAVOLO` a 180. Zero righe vuol dire che
         davanti alla camera non c'è scritto niente, e girare il fotogramma non
         ci scriverà nulla. Senza questa distinzione ogni scansione a vuoto
-        costava quattro passaggi di OCR invece di uno — sul dispositivo,
+        costerebbe quattro passaggi di OCR invece di uno — sul dispositivo,
         ventiquattro secondi contro sei, abbastanza da far scadere la scansione
         e dichiarare un guasto al posto di un piatto vuoto.
         """
@@ -317,10 +316,10 @@ class TestIlVersoDelFotogramma:
 class TestIlRitaglioCheTaglia:
     """Una riga che tocca il bordo del ritaglio è un'etichetta tagliata.
 
-    Una sera, con le bottiglie tenute in mano davanti alla camera,
-    «LAMBRUSCO GRASPAROSSA DI CASTELVETRO» arrivava all'OCR come «SPAROSSA DI
-    CAS»: il titolo usciva dal ritaglio, e il fotogramma intero stava lì
-    accanto. `allarga` lo rilegge più largo, e solo quando serve.
+    Con una bottiglia tenuta in mano davanti alla camera, «LAMBRUSCO
+    GRASPAROSSA DI CASTELVETRO» può arrivare all'OCR come «SPAROSSA DI CAS»:
+    il titolo esce dal ritaglio, e il fotogramma intero sta lì accanto.
+    `allarga` lo rilegge più largo, e solo quando serve.
     """
 
     # Il fotogramma finto: 300 di larghezza, e il titolo va da 20 a 280.

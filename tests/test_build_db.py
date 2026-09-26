@@ -2,12 +2,11 @@
 
 `data/build_db.py` ripete `normalizza` di proposito: deve poter girare senza il
 pacchetto installato, perché è il primo passo di un'installazione pulita. Il
-prezzo di quella scelta è che le due copie possono divergere in silenzio — ed è
-successo: cambiando `amelie.text` e non l'altra, le forme scritte in archivio
-avrebbero smesso di corrispondere a quelle cercate a runtime, e certi produttori
-sarebbero diventati introvabili senza che nulla segnalasse un errore.
-
-Il docstring di `build_db.normalizza` prometteva questo test. Ora esiste.
+prezzo di quella scelta è che le due copie possono divergere in silenzio: se
+cambiasse `amelie.text` e non l'altra, le forme scritte in archivio smetterebbero
+di corrispondere a quelle cercate a runtime, e certi produttori diventerebbero
+introvabili senza che nulla segnalasse un errore. Questo test tiene allineate
+le due copie.
 """
 
 import importlib.util
@@ -29,9 +28,9 @@ def costruttore():
     return modulo
 
 
-# Ogni riga è un caso che in questo progetto ha già prodotto un difetto, o che
-# lo produrrebbe: acronimi, punti fra parole, abbreviazioni italiane, cifre
-# decimali, confusioni dell'OCR, accenti, apostrofi.
+# Ogni riga è un caso su cui una divergenza produrrebbe un difetto: acronimi,
+# punti fra parole, abbreviazioni italiane, cifre decimali, confusioni
+# dell'OCR, accenti, apostrofi.
 CASI = [
     "Barolo D.O.C.G. — Cannubi",
     "COMM.G.B.BURLOTTO",

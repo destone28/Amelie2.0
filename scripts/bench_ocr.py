@@ -82,7 +82,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("-n", "--numero", type=int, default=None)
     ap.add_argument("--salva", type=Path, default=None)
-    ap.add_argument("--lato", type=int, default=320, help="lato corto dato al rilevatore")
+    ap.add_argument("--lato", type=int, default=480, help="lato corto dato al rilevatore")
     ap.add_argument("--thread", type=int, default=4)
     args = ap.parse_args()
 

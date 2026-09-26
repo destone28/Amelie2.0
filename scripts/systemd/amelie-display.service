@@ -19,8 +19,8 @@ Environment=XAUTHORITY=/home/arduino/.Xauthority
 # Lo script aspetta gia' un minuto che l'uscita DisplayPort compaia. Questo e'
 # il secondo strato: se fallisce lo stesso - X non ancora in piedi, schermo
 # acceso dopo la board - si riprova, invece di lasciare il dispositivo cieco
-# fino al prossimo riavvio. Senza, un avvio andato storto restava storto: e'
-# successo, e con lui non e' partito nemmeno il chiosco che ne dipende.
+# fino al prossimo riavvio. Senza, un avvio andato storto resterebbe storto, e
+# con lui non partirebbe nemmeno il chiosco, che ne dipende (Requires=).
 Restart=on-failure
 RestartSec=10
 

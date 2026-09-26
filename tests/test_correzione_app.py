@@ -72,8 +72,8 @@ def _correggi(amelie, lingua="it", titolo="Albarossa Negroamaro",
 
 
 class TestSiRiconosceInOgniModo:
-    """«Indipendentemente dalla modalità di output scelta»: la correzione vale
-    prima dell'archivio, del modello e della carta."""
+    """Qualunque sia il modo di racconto scelto, la correzione vale prima
+    dell'archivio, del modello e della carta."""
 
     @pytest.mark.parametrize("modo", ["archivio", "generativa"])
     def test_prima_dell_archivio_e_del_modello(self, amelie, modo):
@@ -219,7 +219,7 @@ class TestLInterruttore:
 
 class TestIlTempoPerCorreggere:
     """Il pulsante serve DOPO l'ultima frase, che e' quella che dice «non e' nel
-    mio archivio»: i due secondi di CONCLUSO non bastavano ad arrivarci."""
+    mio archivio»: i due secondi di CONCLUSO non basterebbero ad arrivarci."""
 
     def _finisci(self, amelie):
         import time
@@ -232,7 +232,7 @@ class TestIlTempoPerCorreggere:
         amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato")
         assert self._finisci(amelie) > modulo.CONCLUSO_CON_CORREZIONE_S - 1
 
-    def test_a_interruttore_spento_se_ne_va_come_prima(self, amelie):
+    def test_a_interruttore_spento_se_ne_va_subito(self, amelie):
         amelie.correzioni_attive = False
         amelie._fatti = Fatti(livello=Livello.GENERICO, colore="Rosato")
         assert self._finisci(amelie) < 3
@@ -349,10 +349,10 @@ class TestLEditor:
 class TestLeRotte:
     """Le stesse cose, passando dalle rotte HTTP come fa la pagina.
 
-    Chiamare i metodi non bastava: la rotta del salvataggio prendeva il corpo
-    come `Request`, FastAPI - con le annotazioni rimandate - non lo
-    riconosceva e rispondeva 422 a ogni richiesta. I test dei metodi
-    passavano tutti, e sul dispositivo «Salva» non salvava.
+    Chiamare i metodi non basta: se la rotta del salvataggio prende il corpo
+    come `Request`, FastAPI - con le annotazioni rimandate - non lo riconosce
+    e risponde 422 a ogni richiesta. I test dei metodi passerebbero tutti, e
+    sul dispositivo «Salva» non salverebbe.
     """
 
     @pytest.fixture

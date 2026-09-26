@@ -78,7 +78,7 @@ class TestVerifica:
 class TestColoreContraddetto:
     """L'errore piu' visibile, e quello che un modello piccolo fa piu' spesso.
 
-    Sul serio, in pre-generazione, il modello ha scritto che la Falanghina -
+    Un caso vero, dalla pre-generazione: il modello scrive che la Falanghina -
     vitigno a bacca BIANCA - e' «un vino rosso di campagna con tannicita'
     bassa». Non e' un'imprecisione: e' falso, e un sommelier lo coglie subito.
     """
@@ -305,11 +305,12 @@ class TestDueLingue:
 
 
 class TestChiusura:
-    """Chiudere il database mentre qualcuno ci legge era un segmentation fault.
+    """Chiudere il database mentre qualcuno ci legge non e' un segmentation fault.
 
-    Non un'eccezione che si cattura: il processo moriva. Si vedeva solo sulla
-    board, dove i test girano nell'ambiente vero e un thread di lavoro puo'
-    essere ancora dentro `_dalla_cache` quando la fixture chiude tutto.
+    Senza il lucchetto non sarebbe un'eccezione che si cattura: il processo
+    morirebbe. Succede sulla board, dove i test girano nell'ambiente vero e un
+    thread di lavoro puo' essere ancora dentro `_dalla_cache` quando la
+    fixture chiude tutto.
     """
 
     def test_chiudere_aspetta_chi_sta_leggendo(self):
@@ -346,9 +347,9 @@ class TestUscitaSempreAperta:
     """Il flusso audio si apre una volta e non si chiude mai.
 
     Il DSP di questa board impiega **circa due secondi** a cominciare a rendere
-    il suono dopo l'apertura del flusso. Non e' una stima: si sono fatti
-    ascoltare sei bip a un secondo l'uno dall'altro e se ne sono sentiti
-    quattro. Aprendo e chiudendo `aplay` a ogni frase, una frase da un secondo
+    il suono dopo l'apertura del flusso. Non e' una stima: di sei bip a un
+    secondo l'uno dall'altro se ne sentono quattro. Aprendo e chiudendo
+    `aplay` a ogni frase, una frase da un secondo
     sparisce del tutto - se ne sente l'ultima sillaba, e sembra un guasto
     dell'amplificatore.
     """
@@ -364,7 +365,7 @@ class TestUscitaSempreAperta:
         class FintoStdin:
             """Registra e basta.
 
-            Non deve rallentare: il passo lo detta ora chi versa, con il suo
+            Non deve rallentare: il passo lo detta chi versa, con il suo
             orologio. Un finto che aspettasse a sua volta raddoppierebbe il
             ritmo e i test durerebbero il doppio del dovuto.
             """
@@ -450,8 +451,8 @@ class TestUscitaSempreAperta:
 
         Scrivendo finche' qualcuno accetta si finisce molto avanti a cio' che
         si sente: la pipe del sistema da sola tiene 64 KB, che a 22050 mono
-        sono un secondo e mezzo di parlato. Era quello il ritardo con cui la
-        voce arrivava dopo il testo.
+        sono un secondo e mezzo di parlato: il ritardo con cui la voce
+        arriverebbe dopo il testo.
         """
         import time
 
@@ -523,13 +524,13 @@ class TestDidascalia:
 
     def test_la_didascalia_compare_QUANDO_la_frase_comincia_a_sentirsi(
             self, monkeypatch):
-        """Il difetto vero: il testo compariva uno o due secondi prima della voce.
+        """Il difetto da evitare: il testo che compare uno o due secondi prima della voce.
 
         Fra lo scrivere una frase e il sentirla c'è tutto quello che è in
         viaggio: la coda, la pipe del sistema — 64 KB, cioè un secondo e mezzo
-        di parlato a 22050 mono — e il buffer di ALSA. Aspettare che si
-        svuotasse solo la coda faceva credere di aver finito con un secondo e
-        mezzo di anticipo.
+        di parlato a 22050 mono — e il buffer di ALSA. Aspettare che si svuoti
+        solo la coda fa credere di aver finito con un secondo e mezzo di
+        anticipo.
 
         Qui si verifica il conto: la frase N deve comparire dopo la latenza più
         la somma delle durate di quelle prima.
@@ -590,10 +591,13 @@ class TestDidascalia:
         assert len(spezza_in_frasi("Un Barolo D.O.C.G. del 2016.")) == 1
 
 
-class TestLeQuattroClassiUsciteDallaRilettura:
-    """Passavano tutte. Ciò che la verifica non vede diventa un'abitudine del
-    modello: il modello addestrato invocava il disciplinare senza averlo nel
-    76 % dei casi, perché il maestro lo faceva nel 55 % e nessuno lo fermava."""
+class TestLeQuattroClassiCheLaVerificaVede:
+    """Quattro classi di errore che una verifica solo sui nomi lascia passare.
+
+    Ciò che la verifica non vede diventa un'abitudine del modello: senza
+    questi controlli il modello addestrato invoca il disciplinare senza
+    averlo nel 76 % dei casi, perché il maestro lo fa nel 55 % e nessuno lo
+    ferma."""
 
     def _fatti(self, **kw):
         base = dict(livello=Livello.VINO, nome="Rosso di prova", denominazione="Prova",
@@ -611,7 +615,8 @@ class TestLeQuattroClassiUsciteDallaRilettura:
         assert ok
 
     def test_il_mezzo_grado_si_confronta_come_mezzo(self):
-        """«tredici gradi e mezzo» di un 12,5 %: l'intero tornava, il vino no."""
+        """«tredici gradi e mezzo» di un 12,5 %: col solo intero i conti
+        tornerebbero, col vino no."""
         ok, inv = verifica("Tredici gradi e mezzo, da servire fra i sedici e i diciotto.",
                            self._fatti())
         assert not ok and any("tredici gradi e mezzo" in x for x in inv)
@@ -645,9 +650,9 @@ class TestLeQuattroClassiUsciteDallaRilettura:
 
 class TestIlPromptSegueIlModello:
     """Un modello affinato su una forma e interrogato con un'altra è un modello
-    che non hai affinato. Misurato sulla board dandogli per sbaglio il prompt
-    del modello generico: 63,8 secondi invece di 27, e la prosa tornata
-    sgrammaticata — «Il Abruzzo Spumante Bianco Charmat è un solo vitigno»."""
+    che non hai affinato. Misurato sulla board dandogli il prompt del modello
+    generico: 63,8 secondi invece di 27, e la prosa sgrammaticata — «Il
+    Abruzzo Spumante Bianco Charmat è un solo vitigno»."""
 
     def _fatti(self):
         return Fatti(livello=Livello.TIPOLOGIA, denominazione="Prova",
@@ -775,7 +780,6 @@ class TestIlLimiteSiDiceSoloSeSiEDetto:
 
     Senza colore né tipo l'apertura ripiega su «provi a girare l'etichetta», e
     dirle dietro quella frase significa vantare una risposta che non c'è stata.
-    Sentito sul dispositivo, parola per parola.
     """
 
     def test_col_tipo_la_frase_c_e(self):
@@ -793,7 +797,7 @@ class TestIlLimiteSiDiceSoloSeSiEDetto:
             n.chiudi()
 
     def test_il_colore_sta_dove_lo_vuole_la_lingua(self):
-        """Accodato, in inglese usciva «a sparkling wine rosé»."""
+        """Accodato, in inglese uscirebbe «a sparkling wine rosé»."""
         from amelie.lessico import carica
         from amelie.matcher import Fatti, Livello
         from amelie.narrator import _che_tipo_di_vino, titolo_generico
@@ -829,8 +833,8 @@ class TestAlGenericoIlModelloNonScrive:
     """GENERICO vuol dire: ogni parola detta viene dalla bottiglia.
 
     Dare quei quattro fatti a un modello e chiedergli una descrizione e'
-    chiedergli di riempire il resto, e il resto se lo inventa. Visto sul
-    dispositivo su un Lambrusco Grasparossa: «Colore giallo, con sapore
+    chiedergli di riempire il resto, e il resto se lo inventa. Un esempio vero,
+    su un Lambrusco Grasparossa: «Colore giallo, con sapore
     delicato e acidita' equilibrata. In bocca e' un vino di media struttura,
     con bella acidita' e buona acidita'.» Un rosso dichiarato giallo, e
     l'acidita' detta due volte.
@@ -884,8 +888,9 @@ class TestAlGenericoIlModelloNonScrive:
 
 
 class TestLeBugieConParoleVere:
-    """Dodici testi generati sul dispositivo, riletti: cinque sbagliati, tutti
-    promossi. Non inventavano nomi, inventavano RAPPORTI fra nomi veri."""
+    """Su dodici testi generati sul dispositivo e riletti a mano, cinque sono
+    sbagliati e una verifica solo sui nomi li promuove tutti: non inventano
+    nomi, inventano RAPPORTI fra nomi veri."""
 
     def _fatti(self, **kw):
         from amelie.matcher import Fatti, Livello
@@ -952,8 +957,9 @@ class TestUnTestoTroncoSiChiudeSullaFraseIntera:
 
 
 class TestAncheLaCacheSiVerifica:
-    """La cache l'ha scritta lo stesso modello, prima: «Borgognone, ovunque nel
-    mondo» su un Franciacorta usciva da li', e nessuno l'aveva mai riletto."""
+    """La cache l'ha scritta lo stesso modello, in anticipo: un testo come
+    «Borgognone, ovunque nel mondo» su un Franciacorta ne uscirebbe senza che
+    nessuno l'abbia mai riletto."""
 
     def test_un_testo_pronto_che_inventa_si_salta(self, tmp_path, monkeypatch):
         import sqlite3
@@ -981,8 +987,8 @@ class TestAncheLaCacheSiVerifica:
 
 
 class TestLeNoteOlfattiveNonSonoNeUveNeCibi:
-    """Seconda rilettura, dopo la prima stretta: le note finivano nei posti
-    delle uve e dei cibi, in minuscolo, dove i nomi propri non si guardano."""
+    """Le note sensoriali possono finire nei posti delle uve e dei cibi, in
+    minuscolo, dove i nomi propri non si guardano."""
 
     def _fatti(self, **kw):
         from amelie.matcher import Fatti, Livello
@@ -1111,10 +1117,10 @@ class TestInArchivioIlModelloNonParlaMai:
             n.chiudi()
 
 
-class TestLaRevisioneDelRaccontoComposto:
-    """Trentatre' segnalazioni di una revisione a piu' lenti sul racconto
-    composto, riprodotte sull'archivio vero. Quelle vere stanno qui, perche'
-    non tornino."""
+class TestLeFrasiDelRaccontoComposto:
+    """Come si montano le frasi del racconto composto: parole vere
+    dell'archivio che, messe insieme male, direbbero una cosa sbagliata o
+    sgrammaticata. I casi sono riprodotti sull'archivio vero."""
 
     def _fatti(self, **kw):
         base = dict(livello=Livello.TIPOLOGIA, tipologia="Franciacorta",
@@ -1140,14 +1146,14 @@ class TestLaRevisioneDelRaccontoComposto:
         assert "Lo Chardonnay e' ovunque." in t
 
     def test_quattro_uve_si_dicono_tutte(self):
-        """Il Bardolino ne ha quattro a pari merito, e con tre si perdeva la
+        """Il Bardolino ne ha quattro a pari merito, e con tre si perderebbe la
         Corvina."""
         t = template(self._fatti(vitigni=["Molinara", "Rondinella", "Corvinone", "Corvina"],
                                  note_vitigno=None))
         assert "Corvina" in t
 
     def test_una_citazione_col_verbo_non_finisce_dopo_una_copula(self):
-        """«Il sapore e' sono asciutti armonici», letto sul dispositivo."""
+        """Non «Il sapore e' sono asciutti armonici»."""
         f = self._fatti(note_vitigno=None,
                         disciplinare={"sapore": "sono asciutti armonici con retrogusto amarognolo"})
         t = template(f)
@@ -1195,7 +1201,7 @@ class TestLaRevisioneDelRaccontoComposto:
             "rosso rubino con riflessi violacei"
 
     def test_il_seme_per_frase_mescola_anche_su_liste_pari(self):
-        """Con lo XOR uscivano quattro combinazioni su ventimila semi."""
+        """Con uno XOR uscirebbero quattro combinazioni su ventimila semi."""
         from amelie.narrator import _seme_per
         chiavi = ["disciplinare_colore", "disciplinare_sapore", "servizio_intervallo",
                   "abbinamenti", "vino_dubbio", "temperatura_intervallo"]
@@ -1203,7 +1209,7 @@ class TestLaRevisioneDelRaccontoComposto:
         assert len(combinazioni) > 500
 
 
-class TestLaVerificaDopoLaRevisione:
+class TestLaVerificaNeiCasiDiConfine:
     def _fatti(self, **kw):
         base = dict(livello=Livello.VINO, nome="Chianti", vitigni=["Sangiovese", "Canaiolo"],
                     note_sensoriali=["amarena", "prugna", "acidità viva"], colore="Rosso",
@@ -1212,8 +1218,8 @@ class TestLaVerificaDopoLaRevisione:
         return Fatti(**base)
 
     def test_l_elenco_delle_uve_si_guarda_tutto(self):
-        """«Nasce dal Sangiovese, Amarena e Canaiolo» passava: la prima
-        versione si fermava alla virgola."""
+        """«Nasce dal Sangiovese, Amarena e Canaiolo»: fermandosi alla virgola
+        passerebbe."""
         assert not verifica("Nasce dal Sangiovese, Amarena e Canaiolo.", self._fatti())[0]
 
     def test_ma_un_inciso_dopo_la_virgola_no(self):
@@ -1229,7 +1235,7 @@ class TestLaVerificaDopoLaRevisione:
 
     def test_vitigno_con_l_aggettivo_non_e_un_elenco(self):
         """La scheda della Molinara: «Vitigno veronese dal colore tenue e
-        dall'acidita' viva» - e la nota «acidita' viva» finiva letta come uva."""
+        dall'acidita' viva» - e la nota «acidita' viva» non va letta come uva."""
         f = self._fatti(vitigni=["Molinara"])
         assert verifica("Molinara: Vitigno veronese dal colore tenue e dall'acidità viva.", f)[0]
 
@@ -1269,8 +1275,9 @@ class TestInFlussoValeLaStessaRegola:
             n.chiudi()
 
 
-class TestCioCheLaVerificaLasciavaPassare:
-    """Letti sui trenta testi della misura di riferimento: passavano tutti."""
+class TestCioCheUnaVerificaIngenuaLasciaPassare:
+    """Casi presi dai trenta testi della misura di riferimento: una verifica
+    che guarda solo i nomi li lascia passare tutti."""
 
     def test_un_rosato_non_e_rosso(self):
         f = Fatti(livello=Livello.VINO, nome="Infinito Rosé", colore="Rosato",
@@ -1335,7 +1342,7 @@ class TestLaGabbia:
 
 
 class TestGliElenchiCheSiRipetono:
-    """Trovati su testi COMPOSTI, dove ogni difetto e' un difetto vero: il
+    """Capitano sui testi COMPOSTI, dove ogni difetto e' un difetto vero: il
     registro elenca le sfumature ammesse e X-Wines gli abbinamenti, e a voce
     diventano «straw yellow, deep straw yellow and light straw yellow»."""
 
@@ -1364,8 +1371,8 @@ class TestGliElenchiCheSiRipetono:
 
 class TestLoSpezzafrasiELeCitazioni:
     def test_un_iniziale_puntata_non_chiude_una_frase(self):
-        """«di M. Marengo»: la voce faceva una pausa in mezzo al nome della
-        cantina, e a schermo si illuminava la frase sbagliata."""
+        """«di M. Marengo»: spezzando li', la voce farebbe una pausa in mezzo
+        al nome della cantina, e a schermo si illuminerebbe la frase sbagliata."""
         from amelie.narrator import spezza_in_frasi
 
         assert spezza_in_frasi("Questo è il Barolo di M. Marengo. Nasce dal Nebbiolo.") == \
@@ -1374,7 +1381,7 @@ class TestLoSpezzafrasiELeCitazioni:
 
     def test_una_ripetizione_dentro_una_citazione_non_e_nostra(self):
         """Il registro enumera le sfumature ammesse: «rosso rubino più o meno
-        intenso, rosa più o meno intenso». Noi le riportiamo."""
+        intenso, rosa più o meno intenso». Il racconto le riporta e basta."""
         f = Fatti(livello=Livello.VINO, nome="Cannonau", colore="Rosato",
                   vitigni=["Cannonau"], sicurezza=95.0,
                   disciplinare={"colore": "rosso rubino più o meno intenso, "
@@ -1429,7 +1436,7 @@ class TestIlCancelloDelModello:
 
     def test_i_cibi_non_sono_profumi(self):
         """«note sensoriali tipiche di manzo, cacciagione, agnello e pasta»:
-        passava, perche' quelle parole stanno nei fatti."""
+        passerebbe, perche' quelle parole stanno nei fatti."""
         f = self._fatti(abbinamenti=["Beef", "Game Meat"], note_sensoriali=["amarena"])
         ok, inv = verifica("È un rosso con note sensoriali tipiche di manzo e "
                            "cacciagione.", f)
@@ -1439,7 +1446,7 @@ class TestIlCancelloDelModello:
 
 class TestInPurezza:
     """«Etna in purezza, il vitigno siciliano di Sicilia»: l'Etna e' la
-    denominazione, e la frase passava perche' «Etna» sta nei fatti."""
+    denominazione, e la frase passerebbe perche' «Etna» sta nei fatti."""
 
     def _fatti(self, **kw):
         base = dict(livello=Livello.VINO, nome="Etna Rosso Contrada Arcuria",
@@ -1459,7 +1466,7 @@ class TestInPurezza:
 
 class TestUnLuogoNonEUnUva:
     """«It comes from Ripa Teatina»: un paese messo dove vanno le uve.
-    Passava perche' quel nome sta nei fatti - e' la denominazione."""
+    Passerebbe perche' quel nome sta nei fatti - e' la denominazione."""
 
     def _fatti(self, **kw):
         base = dict(livello=Livello.VINO, nome="Arenile Pecorino",
@@ -1470,7 +1477,7 @@ class TestUnLuogoNonEUnUva:
         return Fatti(**base)
 
     def test_il_da_liscio_apre_un_elenco_di_uve(self):
-        """«Nasce da Barbaresco»: c'erano «dal», «dalla», «dai», non «da»."""
+        """«Nasce da Barbaresco»: non solo «dal», «dalla», «dai», anche «da»."""
         f = self._fatti(nome="Arenile Pecorino", denominazione="Ripa Teatina")
         ok, inv = verifica("Nasce da Ripa Teatina: giallo paglierino.", f)
         assert not ok and any("uve" in x for x in inv)
@@ -1501,7 +1508,7 @@ class TestUnLuogoNonEUnUva:
 
 
 class TestChiLoFaNonEDoveSiFa:
-    """«Si produce in Produttori di Manduria», letto sul dispositivo.
+    """«Si produce in Produttori di Manduria»: una frase che il modello scrive.
 
     Il modello impara la frase «Si produce in {regione}» e, quando la regione
     nei fatti non c'e', la riempie col primo nome proprio che trova.
@@ -1565,7 +1572,7 @@ class TestIlColoreNonSiBeve:
 
 
 class TestIlPostoDelleCose:
-    """Due nomi veri messi nel posto di un'altra cosa, letti sul dispositivo.
+    """Due nomi veri messi nel posto di un'altra cosa, in testi del modello.
 
     «This is the "Barbera del Monferrato" by Grignolino, Freisa, Dolcetto and
     Barbera»: quelle sono le uve, e quel record una cantina non ce l'ha
@@ -1618,9 +1625,9 @@ class TestOgniVoceDellElencoDeveEssereUnUva:
     """«Nasce dall'incontro di tre vitigni: Trebbiano, Toscano, Abruzzese e Soave».
 
     La scheda del Trebbiano dice che non e' un vitigno solo «ma una famiglia
-    numerosa: il Toscano, l'Abruzzese, quello di Soave». Il modello ne ha
-    fatto quattro uve di questo vino. Parole tutte vere, fatto falso - e
-    bastava che la parola stesse da qualche parte nei fatti perche' passasse.
+    numerosa: il Toscano, l'Abruzzese, quello di Soave». Il modello ne fa
+    quattro uve di questo vino. Parole tutte vere, fatto falso - e se
+    bastasse che la parola stesse da qualche parte nei fatti, passerebbe.
     """
 
     def _fatti(self, **kw):
@@ -1674,7 +1681,7 @@ class TestOgniVoceDellElencoDeveEssereUnUva:
         assert ok
 
     def test_nemmeno_una_cantina_che_si_chiama_uva(self):
-        """Esiste «Uva Mia di Luisella», e quell'«Uva» apriva un elenco finto."""
+        """Esiste «Uva Mia di Luisella», e quell'«Uva» non apre un elenco finto."""
         f = self._fatti(cantina="Uva Mia di Luisella")
         ok, _ = verifica("Questo è il «Casasole Orvieto Classico» di Uva Mia di "
                          "Luisella. Il disciplinare lo vuole giallo paglierino.", f)
@@ -1692,17 +1699,20 @@ class TestOgniVoceDellElencoDeveEssereUnUva:
                         "giallo paglierino.", f)[0]
 
 
-def test_un_racconto_pronto_che_nomina_un_uva_finta_si_salta(matcher):
-    """Quarantotto testi pronti dicono «Nasce da na.»: scritti quando il
-    vitigno «na» del registro passava per un'uva. Si saltano."""
+def test_un_racconto_pronto_che_nomina_un_uva_finta_si_salta(matcher, tmp_path):
+    """Un testo pronto che dice «Nasce da na.» - il vitigno «na» del registro
+    preso per un'uva - si salta."""
+    import sqlite3
     from amelie.narrator import Narratore
-    n = Narratore()
+    db = tmp_path / "a.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE racconto (ambito TEXT, ambito_id INT, lingua TEXT, testo TEXT)")
+    con.execute("INSERT INTO racconto VALUES ('tipologia', 3400, 'it', 'Nasce da na.')")
+    con.commit()
+    con.close()
+    n = Narratore(percorso_db=db)
     try:
         f = matcher.fatti_di("tipologia", 3400)
-        with n._db:
-            r = n.con.execute("SELECT testo FROM racconto WHERE ambito='tipologia'"
-                              " AND ambito_id=3400 AND lingua='it'").fetchone()
-        assert r is not None and "da na." in r["testo"]
         assert n._dalla_cache(f, solo_esatto=True) is None
     finally:
         n.chiudi()

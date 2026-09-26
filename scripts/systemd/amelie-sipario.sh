@@ -19,9 +19,8 @@
 #   · il testo gia' stampato e il cursore      -> qui sotto
 #   · il grigio del framebuffer fra una cosa e l'altra -> qui sotto
 #
-# Restano visibili i circa dodici secondi di firmware, loader e kernel. Sono
-# scritti nella guida, perche' un limite noto e' meno grave di uno scoperto in
-# sala.
+# Restano visibili i circa dodici secondi di firmware, loader e kernel: sono un
+# limite noto, e un limite noto e' meno grave di uno scoperto in sala.
 #
 # ── IL COLORE ────────────────────────────────────────────────────────────────
 #
@@ -36,11 +35,12 @@ FONDO="${AMELIE_FONDO:-3D1512}"
 #    le emergenze: se il dispositivo sta per morire, e' giusto che lo dica.
 echo "1 4 1 3" > /proc/sys/kernel/printk 2>/dev/null || true
 
-# 1b. E niente Magic SysRq. Lo imposta anche sysctl.d, ma qui si e' certi che
-#     valga PRIMA che la sessione grafica parta - e soprattutto prima che la
-#     UART di debug flottante abbia il tempo di inventarsi un comando.
-#     E' successo: root e /home sono passati in sola lettura in servizio,
-#     perche' il rumore su ttyMSM0 e' stato letto come SysRq-u (unmount).
+# 1b. E niente Magic SysRq. La UART di debug (ttyMSM0) e' flottante, e il suo
+#     rumore puo' essere letto come un comando SysRq: SysRq-u, per esempio,
+#     rimonta root e /home in sola lettura a dispositivo in servizio. Per questo
+#     SysRq si spegne. Lo imposta anche sysctl.d, ma qui si e' certi che valga
+#     PRIMA che la sessione grafica parta, e prima che il rumore abbia il tempo
+#     di inventarsi un comando.
 echo 0 > /proc/sys/kernel/sysrq 2>/dev/null || true
 
 # 2. La console di testo: pulita, senza cursore, e che non si spenga mai da

@@ -29,11 +29,11 @@ fi
 
 # L'uscita si chiama DP-1, ma non diamolo per scontato: si prende la prima
 # connessa. E si ASPETTA che compaia: ad avvio freddo il collegamento
-# DisplayPort attraverso l'ANX7625 non e' pronto nei primi secondi, e un
-# controllo solo - com'era prima - falliva. Il servizio moriva, il chiosco che
-# ne dipende non partiva nemmeno, e il dispositivo si accendeva a schermo
-# spento. E' la stessa forma di corsa gia' vista sull'audio: non si sa quando
-# l'hardware c'e', si sa solo aspettarlo.
+# DisplayPort attraverso l'ANX7625 non e' pronto nei primi secondi, e con un
+# controllo solo il servizio morirebbe, il chiosco che ne dipende non
+# partirebbe nemmeno, e il dispositivo si accenderebbe a schermo spento. E' la
+# stessa forma di corsa dell'audio (vedi amelie-audio-guard.sh): non si sa
+# quando l'hardware c'e', si sa solo aspettarlo.
 ATTESA="${AMELIE_ATTESA_VIDEO:-60}"
 USCITA=""
 for _ in $(seq "$ATTESA"); do

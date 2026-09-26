@@ -1,31 +1,33 @@
 #!/usr/bin/env bash
-# Amelie 2.0 - porta sul dispositivo quello che c'e' nel repository.
+# Amelie 2.0 - porta sulla board la copia di lavoro di un PC.
 #
-#   bash scripts/rilascio.sh                 codice, interfaccia, dati, database, test
-#   bash scripts/rilascio.sh --con-modello   e anche il modello linguistico
-#   bash scripts/rilascio.sh --host amelie2  su un'altra unita'
+#   bash scripts/rilascio.sh                               su arduino@amelie.local
+#   bash scripts/rilascio.sh --host arduino@<indirizzo-della-board>   su un'altra board
 #
-# Va eseguito sul PC di sviluppo. L'unita' si raggiunge per ssh col nome
-# configurato in ~/.ssh/config (vedi docs/01-PRIMO-AVVIO.md).
+# E' uno strumento per chi modifica il codice su un PC e vuole provarlo sul
+# dispositivo senza passare dal repository. Per aggiornare una board basta,
+# sulla board stessa, nella cartella del repository:
 #
-# Non usa `rsync`: sulla UNO Q non c'e', e una riga di rsync in mezzo a uno
-# script che si crede riuscito e' peggio di un errore. Tutto passa da `scp`, e
-# ogni file che conta si riconfronta con md5 dopo essere arrivato.
+#     git pull && bash scripts/install.sh
 #
-# Prima di sostituire database e modello se ne tiene una copia sulla board:
-# il database non sta in git, quindi quella copia e' l'unico modo di tornare
-# indietro. Vedi docs/STATO-LAVORI.md.
+# La board deve essere gia' installata con scripts/install.sh: questo script
+# copia codice, interfaccia, lessico, database e test, fa girare la suite sulla
+# board e riavvia l'applicazione e il chiosco. Il modello linguistico, le voci e
+# il firmware del microcontrollore non li tocca.
+#
+# Se ~/amelie sulla board e' un clone git, i file copiati da qui vi compaiono
+# come modifiche locali, e un `git pull` successivo puo' rifiutarsi di
+# sovrascriverli: `git checkout -- .` li riporta alla versione del repository.
+#
+# Non usa `rsync`, che sulla UNO Q non c'e': tutto passa da `scp`, e ogni file
+# copiato si riconfronta con md5 dopo essere arrivato.
 set -euo pipefail
 
 RADICE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HOST=amelie
-CON_MODELLO=0
-MODELLO="$HOME/modello/studente_v8/studente-f16.gguf"
+HOST=arduino@amelie.local
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --con-modello) CON_MODELLO=1 ;;
-        --modello) MODELLO="$2"; CON_MODELLO=1; shift ;;
         --host) HOST="$2"; shift ;;
         *) echo "argomento sconosciuto: $1" >&2; exit 2 ;;
     esac
@@ -36,93 +38,76 @@ cd "$RADICE"
 REMOTO=/home/arduino/amelie
 ora() { date +%H:%M:%S; }
 
-# Un file e' arrivato davvero solo se il suo md5 coincide. `scp` che fallisce a
+# Un file e' arrivato davvero solo se il suo md5 coincide: `scp` che fallisce a
 # meta' lascia un file troncato e un codice d'uscita che non sempre lo dice.
+# I percorsi sono relativi alla radice, che sulla board e' $REMOTO; si
+# confrontano tutti con una connessione sola.
 verifica() {
-    local locale="$1" remoto="$2"
-    local a b
-    a=$(md5sum "$locale" | cut -d' ' -f1)
-    b=$(ssh "$HOST" "md5sum $remoto 2>/dev/null | cut -d' ' -f1")
-    if [ "$a" != "$b" ]; then
-        echo "  DIVERSO dopo la copia: $remoto" >&2
+    local locali remoti
+    locali=$(md5sum "$@")
+    remoti=$(ssh "$HOST" "cd $REMOTO && md5sum $* 2>/dev/null" || true)
+    if [ "$locali" != "$remoti" ]; then
+        echo "  DIVERSI dopo la copia:" >&2
+        diff <(echo "$locali") <(echo "$remoti") | sed -n 's/^< [0-9a-f]*  /    /p' >&2
         return 1
     fi
 }
 
-echo "### $(ora) unita': $HOST"
+echo "### $(ora) board: $HOST"
 ssh -o ConnectTimeout=8 "$HOST" "test -d $REMOTO" || {
-    echo "non trovo $REMOTO su $HOST: l'unita' e' installata? (scripts/install.sh)" >&2
+    echo "non trovo $REMOTO su $HOST: la board e' installata? (scripts/install.sh)" >&2
     exit 3
 }
 
 echo "### $(ora) codice"
 scp -q src/amelie/*.py "$HOST:$REMOTO/src/amelie/"
-for f in app.py narrator.py matcher.py ocr.py speech.py; do
-    verifica "src/amelie/$f" "$REMOTO/src/amelie/$f"
-done
+verifica src/amelie/*.py
 echo "  $(ls src/amelie/*.py | wc -l) moduli"
 
-# L'interfaccia: la pagina, la schermata d'avvio, il carattere. Mancava, e per
-# due rilasci la board ha girato col server nuovo e la pagina vecchia: nessun
-# errore, solo un'interfaccia che non cambiava. I test della pagina girano
-# sulla board, quindi si copia PRIMA dei test.
+# L'interfaccia: la pagina, la schermata d'avvio, il carattere. Il server nuovo
+# con la pagina vecchia non da' errori, da' solo un'interfaccia che non cambia.
+# I test della pagina girano sulla board, quindi si copia PRIMA dei test.
 echo "### $(ora) interfaccia"
 ssh "$HOST" "mkdir -p $REMOTO/src/amelie/ui/static/fonts"
 scp -q src/amelie/ui/static/*.html "$HOST:$REMOTO/src/amelie/ui/static/"
 scp -q src/amelie/ui/static/fonts/* "$HOST:$REMOTO/src/amelie/ui/static/fonts/"
-for f in index.html avvio.html fonts/EBGaramond.woff2 fonts/EBGaramond-Italic.woff2; do
-    verifica "src/amelie/ui/static/$f" "$REMOTO/src/amelie/ui/static/$f"
-done
+verifica src/amelie/ui/static/*.html src/amelie/ui/static/fonts/*
 echo "  pagina, avvio, $(ls src/amelie/ui/static/fonts | wc -l) file del carattere"
 
-# Il lessico e' dati, non codice, e si dimentica: `frasi.json` porta le varianti
-# con cui si compone il racconto, e una board che ha il codice nuovo col lessico
-# vecchio racconta in un modo che nessuna misura ha mai visto.
+# Il lessico e' dati, non codice, ma va insieme al codice: `frasi.json` porta le
+# varianti con cui si compone il racconto, e il codice nuovo col lessico vecchio
+# racconta in un modo che nessun test ha mai visto.
 echo "### $(ora) lessico e vitigni"
 scp -q data/lessico/*.json data/lessico/*.txt "$HOST:$REMOTO/data/lessico/"
 scp -q data/vitigni.json "$HOST:$REMOTO/data/"
-verifica data/lessico/frasi.json "$REMOTO/data/lessico/frasi.json"
+verifica data/lessico/*.json data/lessico/*.txt data/vitigni.json
 echo "  lessico, vocabolari, vitigni"
 
+# Il database non sta in git: la copia di sicurezza sulla board e' l'unico modo
+# di tornare indietro. `cp -n` non la sovrascrive, quindi resta il database che
+# la board aveva prima del primo rilascio.
 echo "### $(ora) database (copia di sicurezza, poi sostituzione)"
 ssh "$HOST" "cd $REMOTO && cp -n data/amelie.db data/amelie.db.prima-del-rilascio 2>/dev/null; true"
 scp -q data/amelie.db "$HOST:$REMOTO/data/amelie.db"
-verifica data/amelie.db "$REMOTO/data/amelie.db"
+verifica data/amelie.db
 echo "  $(du -h data/amelie.db | cut -f1)"
 
 echo "### $(ora) test"
 scp -q tests/*.py "$HOST:$REMOTO/tests/"
-scp -q scripts/valuta_generativa.py scripts/prova_finale.py "$HOST:$REMOTO/scripts/" 2>/dev/null || true
+verifica tests/*.py
 
+# La suite gira sull'hardware vero. Se fallisce lo si dice, ma si riavvia lo
+# stesso: e' il codice appena copiato, e il log dice che cosa guardare.
 echo "### $(ora) suite sulla board (circa due minuti)"
-ssh "$HOST" "cd $REMOTO && venv/bin/python -m pytest -q -p no:cacheprovider tests/ 2>&1 | tail -3"
+ssh "$HOST" "cd $REMOTO && venv/bin/python -m pytest -q -p no:cacheprovider tests/ \
+        > /tmp/amelie-test.log 2>&1; esito=\$?; tail -3 /tmp/amelie-test.log; exit \$esito" \
+    || echo "  ATTENZIONE: la suite non e' passata (log completo in /tmp/amelie-test.log sulla board)" >&2
 
-if [ "$CON_MODELLO" = 1 ]; then
-    [ -f "$MODELLO" ] || { echo "non trovo il modello: $MODELLO" >&2; exit 4; }
-    NOME=$(basename "$(dirname "$MODELLO")")          # es. studente_v8
-    echo "### $(ora) modello $NOME: trasferimento di $(du -h "$MODELLO" | cut -f1)"
-    echo "     (a circa 1,5 MB/s sono una decina di minuti)"
-    scp "$MODELLO" "$HOST:$REMOTO/models/$NOME-f16.gguf"
-    verifica "$MODELLO" "$REMOTO/models/$NOME-f16.gguf"
-
-    # Si quantizza SULLA BOARD, non qui: il binario che legge il modello e
-    # quello che lo scrive devono venire dallo stesso llama.cpp, e quello che
-    # conta e' il suo. Vedi la memoria del fine-tuning.
-    echo "### $(ora) quantizzazione Q4_K_M sulla board"
-    ssh "$HOST" "cd $REMOTO/models && \
-        ~/amelie/llama.cpp/build/bin/llama-quantize $NOME-f16.gguf $NOME-q4_k_m.gguf Q4_K_M \
-            > /tmp/quant.log 2>&1 && tail -2 /tmp/quant.log && \
-        cp -n studente-q4_k_m.gguf studente-prima-del-rilascio.gguf 2>/dev/null; \
-        cp $NOME-q4_k_m.gguf studente-q4_k_m.gguf && rm -f $NOME-f16.gguf && \
-        ls -la studente-q4_k_m.gguf"
-fi
-
+# Il chiosco carica la pagina una volta sola: riavviato il server si riaggancia
+# agli eventi, ma la pagina resta quella caricata all'avvio. Ripartendo mostra
+# la schermata d'avvio finche' il server non risponde.
 echo "### $(ora) riavvio"
 ssh "$HOST" 'sudo systemctl restart amelie.service
-sudo systemctl try-restart amelie-llm.service 2>/dev/null || true
-# Il chiosco carica la pagina una volta sola e ci resta per giorni: riavviato
-# il server si riaggancia agli eventi, ma la pagina resta quella di prima.
-# Ripartendo mostra la schermata d avvio finche il server non risponde.
 sudo systemctl try-restart amelie-kiosk.service 2>/dev/null || true
 sleep 35
 echo "  servizio: $(systemctl is-active amelie.service)"

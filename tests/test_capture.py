@@ -84,7 +84,7 @@ class TestRitaglio:
         si rimette in piedi. Misurato sulla stessa bottiglia e sullo stesso
         fotogramma, a 90° si leggono otto righe fra cui `Leggiadro`,
         `Brut Rosé` e `METODO CLASSICO`, tutte dentro al fotogramma; dritta
-        (0°) la denominazione cadeva sotto il bordo.
+        (0°) la denominazione cade sotto il bordo.
         """
         assert ImpostazioniCamera().rotazione in (0, 90, 180, 270)
         assert ImpostazioniCamera().rotazione == 90
@@ -132,9 +132,9 @@ class TestImpostazioni:
         """Il buffer UVC contiene fotogrammi precedenti alla luce: senza scarto
         si legge un'immagine al buio.
 
-        Erano cinque, scelti quando un fotogramma costava 30 ms. A 90 ms
-        costavano un secondo intero, e la scena è ferma: lo scarto serve a
-        svuotare il buffer, non a mediare, e tre bastano.
+        Lo scarto serve a svuotare il buffer, non a mediare, e la scena è
+        ferma: tre bastano. A 90 ms a fotogramma, ognuno scartato in più è
+        tempo che l'ospite aspetta.
         """
         imp = ImpostazioniCamera()
         assert imp.fotogrammi_da_scartare >= 3
@@ -167,8 +167,8 @@ class TestQuantoDiverso:
         assert quanto_diverso(a, b) < 0.05
 
     def test_la_luce_che_cala_non_e_una_bottiglia(self):
-        """Il caso per cui la normalizzazione esiste: senza, l'80 % dei pixel
-        risultava cambiato abbassando la luce del 20 %, a scena identica."""
+        """Il caso per cui la normalizzazione esiste: senza, abbassando la luce
+        del 20 % risulta cambiato l'80 % dei pixel, a scena identica."""
         a = self.scena()
         for fattore in (0.7, 0.85, 1.15):
             assert quanto_diverso(a, a * fattore) < 0.05, fattore
@@ -230,7 +230,7 @@ class TestPresenzaOttica:
     def test_una_bottiglia_spostata_non_e_una_bottiglia_tolta(self):
         """Qualcuno versa da bere e riappoggia la bottiglia un dito piu' in la'.
 
-        La scena non somiglia piu' a quella di prima, ma non somiglia nemmeno
+        La scena non somiglia piu' a quella di un attimo fa, ma non somiglia nemmeno
         al piatto vuoto: il racconto non si interrompe. E' la stessa isteresi
         asimmetrica del sensore di distanza, per la stessa ragione.
         """
@@ -258,7 +258,7 @@ class TestPresenzaOttica:
         assert p.presente is False
 
     def test_acceso_con_la_bottiglia_gia_posata(self):
-        """Il caso che il sensore di distanza non aveva: la prima sbirciata
+        """Il caso che il sensore di distanza non ha: la prima sbirciata
         impara la bottiglia come se fosse lo sfondo. Lo dice l'OCR, e quando lo
         dice si butta via lo sfondo sbagliato."""
         p = PresenzaOttica()
@@ -280,10 +280,10 @@ class TestPresenzaOttica:
 
 
 class TestLaPosaSiCerca:
-    """La posa fissa era fissa alla stanza in cui è stata misurata.
+    """Una posa fissa vale solo per la stanza in cui è stata misurata.
 
     Misurato sul dispositivo, al buio, con l'anello bianco: a posa 900 l'OCR
-    non leggeva NIENTE; a 3000 leggeva la denominazione. Una sala che la sera
+    non legge NIENTE; a 3000 legge la denominazione. Una sala che la sera
     abbassa le luci è la condizione normale, non un caso limite.
     """
 
@@ -349,8 +349,8 @@ class TestLaPosaSiCerca:
         assert c.imp.esposizione > 900
 
     def test_in_piena_luce_la_posa_scende(self):
-        """Il ritocco va nei due versi: in una sala illuminata la raffica
-        finisce per costare meno di prima, non di più."""
+        """Il ritocco va nei due versi: in una sala illuminata la posa si
+        accorcia, e la raffica costa meno, non di più."""
         c, _, applicate, _ = self.cerca(4000)
         assert applicate and applicate[-1] < 4000
         assert c.imp.esposizione < 4000
@@ -371,11 +371,11 @@ class TestLaPosaSiCerca:
             assert imp.posa_minima <= p <= imp.posa_massima
 
     def test_il_ritardo_del_driver_non_manda_la_correzione_al_tetto(self):
-        """Il difetto vero, e costava il tetto ogni volta.
+        """La posa nuova arriva in ritardo, e chi non lo sa finisce al tetto.
 
         Il driver applica la posa nuova dopo tre fotogrammi. Chi rimisura prima
         legge ancora la posa vecchia, corregge una seconda volta nello stesso
-        verso, e finisce contro l'estremo qualunque fosse la luce.
+        verso, e finisce contro l'estremo qualunque sia la luce.
         """
         c, _, applicate, _ = self.cerca(900)
         assert applicate[-1] < ImpostazioniCamera().posa_massima, (
@@ -384,7 +384,7 @@ class TestLaPosaSiCerca:
     def test_con_un_ritardo_lungo_si_aspetta_invece_di_contare(self):
         """Contare i fotogrammi funziona finché il ritardo è quello misurato.
         Nel servizio, dove lo stream sta fermo fra una sbirciata e l'altra, non
-        lo era: si guarda la luce, e si corregge solo dopo averla vista muovere.
+        lo è: si guarda la luce, e si corregge solo dopo averla vista muovere.
         """
         c, _, applicate, luce = self.cerca(900, ritardo=5)
         imp = ImpostazioniCamera()
@@ -567,9 +567,10 @@ class TestIlRitaglioSegueIlRiquadro:
         assert abs(out.shape[1] - largo) <= 2, out.shape
 
     def test_il_riquadro_della_bottiglia_si_allarga_non_si_stringe(self):
-        """Si stringeva del 6 %: il bordo del vetro sembrava da buttare. Con
-        la bottiglia tenuta in mano erano proprio le lettere che mancavano -
-        «SPAROSSA» per GRASPAROSSA - e la carta non la riconosceva."""
+        """Il bordo del vetro sembra da buttare, ma con la bottiglia tenuta in
+        mano ci stanno proprio le lettere che mancano: stringendo il riquadro
+        del 6 % si legge «SPAROSSA» per GRASPAROSSA, e la carta non la
+        riconosce."""
         c = self.camera((0.2, 0.1, 0.6, 0.9))
         x0, _, x1, _ = c.posto(immagine(1000, 500))
         assert x0 < 500 * 0.2 and x1 > 500 * 0.6
@@ -595,9 +596,9 @@ class TestIlRitaglioSegueIlRiquadro:
 
 
 class TestLaCameraCheSiFerma:
-    """Una serala sala si e' fatta buia, la posa e' salita a 5000 e
-    la camera ha smesso di dare fotogrammi. Ogni riapertura riapplicava 5000:
-    solo spegnere il dispositivo la sbloccava."""
+    """In una sala buia la posa sale, e da 5000 in su la camera smette di dare
+    fotogrammi. Riaprirla con la stessa posa non la sblocca: il tetto sta sotto
+    quella soglia, e dopo due letture a vuoto si riparte dalla posa sicura."""
 
     class Muta:
         """Una camera che, come quella vera, si ferma da una posa in su."""

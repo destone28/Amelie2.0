@@ -6,15 +6,15 @@ After=network.target
 Type=simple
 User=arduino
 WorkingDirectory=/home/arduino/amelie
+# Il modello e' lo studente affinato su questo progetto, non il modello di
+# partenza. `studente-q4_k_m.gguf`, in models/, e' un nome fisso: una versione
+# nuova prende lo stesso nome, e l'unita' non cambia a ogni riaddestramento.
+#
 # --cache-reuse permette di riusare il prefisso gia' elaborato fra una richiesta
 # e l'altra. Su questa board e' la differenza fra usabile e inusabile: il
 # prefill gira a ~8 token/s, quindi le istruzioni fisse costerebbero venti
 # secondi a ogni bottiglia. Rilette una volta sola, costano zero.
 ExecStart=/home/arduino/amelie/llama.cpp/build/bin/llama-server \
-    # Lo studente affinato, non il modello di partenza: `studente-q4_k_m.gguf`
-    # e' il nome fisso, e `scripts/rilascio.sh` ci copia sopra la versione
-    # nuova tenendo da parte quella di prima. Cosi' l'unita' non cambia a
-    # ogni riaddestramento.
     --model /home/arduino/amelie/models/studente-q4_k_m.gguf \
     --host 127.0.0.1 --port 8081 \
     --threads 4 --ctx-size 2048 \

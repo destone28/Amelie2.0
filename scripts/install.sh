@@ -1,150 +1,233 @@
 #!/usr/bin/env bash
-# Amelie 2.0 - installazione completa su una UNO Q pulita.
+# Amelie 2.0 - installa il dispositivo su una Arduino UNO Q.
 #
-# Non esiste un modo affidabile di clonare la eMMC: il `dd` di una UNO Q
-# ripristinato su un'altra va in kernel panic. Questo script E' il modo di
-# riprodurre il dispositivo.
+#   git clone https://github.com/destone28/Amelie2.0 ~/amelie
+#   cd ~/amelie && bash scripts/install.sh
 #
-#   bash scripts/install.sh                 installa tutto
-#   bash scripts/install.sh --senza-modello salta lo scaricamento dell'LLM
+# Va eseguito SULLA BOARD, come utente `arduino`, con la board in rete. La guida
+# passo passo e' in docs/it/02-installazione.md (docs/en/02-install.md).
 #
-# Va eseguito SULLA BOARD, come utente arduino, con sudo senza password oppure
-# rispondendo alle richieste.
+# Si puo' rilanciare quante volte si vuole: ogni passo salta cio' che e' gia'
+# a posto. Per aggiornare un dispositivo gia' installato:
+#
+#   cd ~/amelie && git pull && bash scripts/install.sh
+#
+# Variabili facoltative:
+#   AMELIE_FUSO=Europe/Rome     imposta il fuso orario (la board nasce in UTC)
+#   AMELIE_URL_MODELLO=...      da dove scaricare il modello linguistico
 set -euo pipefail
 
-RADICE="${RADICE:-$HOME/amelie}"
-MODELLO_LLM="gemma-3-1b-it-Q4_K_M.gguf"
-URL_LLM="https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/$MODELLO_LLM"
-# Una voce per lingua. Entrambe addestrate DA ZERO su dataset liberi: vedi
-# docs/ATTRIBUZIONI.md per il perche' non si prendono le piu' diffuse.
-BASE_VOCI="https://huggingface.co/rhasspy/piper-voices/resolve/main"
+RADICE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CASA=/home/arduino/amelie
+
+# Le versioni collaudate. Ognuna e' fissata: una board installata fra un anno
+# deve essere uguale a quella di oggi.
+LLAMA_COMMIT=74a7c897f049c17e7080423aa2111776eff6ebbf
+CORE_MCU="arduino:zephyr@0.52.0"
+LIBRERIE_MCU="Arduino_RouterBridge@0.4.3"
+FQBN=arduino:zephyr:unoq
+VOCI_REV=ea046e8458f6acd997706d6e6066a022b42f6fb1
+URL_VOCI="https://huggingface.co/rhasspy/piper-voices/resolve/$VOCI_REV"
 VOCI="it/it_IT/serena/medium/it_IT-serena-medium en/en_US/ljspeech/medium/en_US-ljspeech-medium"
+MODELLO=studente-q4_k_m.gguf
+URL_MODELLO="${AMELIE_URL_MODELLO:-https://github.com/destone28/Amelie2.0/releases/download/v1.0.0/$MODELLO}"
 
-SALTA_MODELLO=0
-[ "${1:-}" = "--senza-modello" ] && SALTA_MODELLO=1
+G=$'\033[32m'; R=$'\033[31m'; N=$'\033[0m'
+PASSI=12
+passo() { echo; echo "${G}==> [$1/$PASSI]${N} $2"; }
+avviso() { echo "    ${R}!${N} $*"; }
+muori() { echo; echo "${R}ERRORE:${N} $*" >&2; exit 1; }
 
-G=$'\033[32m'; N=$'\033[0m'
-passo() { echo; echo "${G}==>${N} $*"; }
+# ---------------------------------------------------------------------------
+passo 1 "Controlli"
+[ "$(id -un)" = arduino ] || muori "va eseguito come utente arduino, non come $(id -un)"
+# Le unita' systemd puntano a /home/arduino/amelie: il repository deve stare li'.
+[ "$RADICE" = "$CASA" ] || muori "il repository deve stare in $CASA (e' in $RADICE)"
+grep -q 'VERSION_CODENAME=trixie' /etc/os-release \
+    || avviso "sistema diverso da Debian 13 (trixie): non e' la configurazione collaudata"
+curl -sfI -m 10 https://deb.debian.org >/dev/null || muori "la board non e' in rete"
+LIBERI=$(df --output=avail -BG "$HOME" | tail -1 | tr -dc 0-9)
+[ "$LIBERI" -ge 4 ] || muori "servono almeno 4 GB liberi in $HOME (ce ne sono $LIBERI)"
+echo "    utente arduino, $CASA, in rete, ${LIBERI} GB liberi"
 
-passo "1/10  Pacchetti di sistema"
+# Una sola password per tutta l'installazione: la compilazione di llama.cpp
+# dura piu' dei quindici minuti per cui sudo la ricorda.
+sudo -v
+( while kill -0 "$$" 2>/dev/null; do sudo -n true; sleep 50; done ) 2>/dev/null &
+
+cd "$RADICE"
+mkdir -p models var
+
+# ---------------------------------------------------------------------------
+passo 2 "Pacchetti di sistema"
 sudo apt-get update -qq
-# fonts-ebgaramond: l'interfaccia lo DICHIARA, e finche' non era installato il
-# testo usciva col serif generico della distribuzione. Non e' la stessa cosa: un
-# Garamond ha l'occhio medio molto piu' piccolo di un Noto Serif, quindi a
-# parita' di corpo il testo cambia di misura apparente e di dove va a capo, e
-# tutte le misure su cui e' disegnata questa interfaccia saltano.
-sudo apt-get install -y -qq \
+# fonts-ebgaramond: il carattere dell'interfaccia, anche fuori dalla pagina.
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
     python3-venv python3-pip python3-dev build-essential cmake git curl \
-    v4l-utils alsa-utils \
-    chromium unclutter x11-xserver-utils \
-    libcurl4-openssl-dev \
-    fonts-ebgaramond
+    libcurl4-openssl-dev v4l-utils alsa-utils \
+    chromium unclutter x11-xserver-utils fonts-ebgaramond >/dev/null
+echo "    fatto"
 
-passo "2/10  Correzione della corsa all'avvio dell'audio"
-# Mitigazione proposta upstream da Loic Poulain (Linaro) per la UNO Q:
-# MODULE_SOFTDEP("pre: qcom_pd_mapper"). Una riga softdep qui e' equivalente,
-# quindi il fix si applica senza ricompilare il kernel.
-sudo tee /etc/modprobe.d/amelie-audio-race.conf >/dev/null <<'EOF'
-# Carica il PD mapper prima del driver remoteproc: senza, l'ADSP puo' partire
-# prima che il servizio sia pronto, la protection domain audio non nasce e la
-# scheda audio non esiste. Misurato: succedeva in 2 avvii su 6.
+# ---------------------------------------------------------------------------
+passo 3 "Scheda audio all'avvio"
+# Il PD mapper va caricato prima del driver remoteproc: se l'ADSP parte prima
+# che il servizio sia pronto la scheda audio non nasce. Una riga softdep
+# equivale alla correzione proposta upstream da Loic Poulain (Linaro) con
+# MODULE_SOFTDEP("pre: qcom_pd_mapper"), senza ricompilare il kernel. Il resto
+# lo fa amelie-audio-guard, al passo 10.
+CONF=/etc/modprobe.d/amelie-audio-race.conf
+if [ ! -f "$CONF" ]; then
+    sudo tee "$CONF" >/dev/null <<'EOF'
+# Il PD mapper prima del driver remoteproc: senza, l'ADSP puo' partire prima
+# che il servizio sia pronto e la scheda audio non nasce.
 softdep qcom_common pre: qcom_pd_mapper
 EOF
-sudo update-initramfs -u >/dev/null 2>&1 || true
+    sudo update-initramfs -u >/dev/null 2>&1 || true
+fi
+echo "    fatto"
 
-passo "3/10  Ambiente Python"
-mkdir -p "$RADICE"
-cd "$RADICE"
-[ -d venv ] || python3 -m venv venv
+# ---------------------------------------------------------------------------
+passo 4 "Ambiente Python"
+[ -x venv/bin/python ] || python3 -m venv venv
 ./venv/bin/pip install -q --upgrade pip
-./venv/bin/pip install -q \
-    numpy opencv-python-headless onnxruntime rapidocr rapidfuzz msgpack \
-    fastapi "uvicorn[standard]" piper-tts
+./venv/bin/pip install -q -r requirements.txt
+echo "    $(./venv/bin/python --version), $(./venv/bin/pip list 2>/dev/null | wc -l) pacchetti"
 
-passo "4/10  llama.cpp"
-if [ ! -x "$RADICE/llama.cpp/build/bin/llama-server" ]; then
-    [ -d llama.cpp ] || git clone --depth 1 https://github.com/ggml-org/llama.cpp
-    cd llama.cpp
-    cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=ON >/dev/null
-    cmake --build build -j"$(nproc)" --target llama-server llama-cli llama-bench >/dev/null
-    cd "$RADICE"
+# ---------------------------------------------------------------------------
+passo 5 "Motore OCR"
+# I modelli PP-OCR li scarica RapidOCR al primo uso, dentro l'ambiente
+# virtuale. Il servizio li troverebbe in una cartella di sola lettura
+# (ProtectSystem=strict), quindi si caricano qui, una volta.
+PYTHONPATH=src ./venv/bin/python - <<'PY'
+import logging
+logging.disable(logging.WARNING)
+from amelie.ocr import Lettore
+Lettore()._carica()
+print("    modelli OCR pronti")
+PY
+
+# ---------------------------------------------------------------------------
+passo 6 "llama.cpp"
+# Il modello linguistico gira su llama-server. La compilazione richiede una
+# ventina di minuti; al secondo giro si salta.
+LLAMA="$RADICE/llama.cpp"
+if [ -x "$LLAMA/build/bin/llama-server" ] \
+        && [ "$(git -C "$LLAMA" rev-parse HEAD 2>/dev/null)" = "$LLAMA_COMMIT" ]; then
+    echo "    gia' compilato al commit ${LLAMA_COMMIT:0:7}"
+else
+    if [ ! -d "$LLAMA/.git" ]; then
+        rm -rf "$LLAMA"
+        git init -q "$LLAMA"
+        git -C "$LLAMA" remote add origin https://github.com/ggml-org/llama.cpp
+    fi
+    git -C "$LLAMA" fetch -q --depth 1 origin "$LLAMA_COMMIT"
+    git -C "$LLAMA" checkout -q --force FETCH_HEAD
+    echo "    compilo llama-server (una ventina di minuti)"
+    cmake -S "$LLAMA" -B "$LLAMA/build" -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=ON >/dev/null
+    cmake --build "$LLAMA/build" -j"$(nproc)" --target llama-server >/dev/null
+    echo "    llama-server compilato"
 fi
 
-passo "5/10  Modelli"
-mkdir -p models
-if [ "$SALTA_MODELLO" = 0 ] && [ ! -f "models/$MODELLO_LLM" ]; then
-    echo "    scarico il modello linguistico (~700 MB)"
-    curl -sL --retry 3 -o "models/$MODELLO_LLM" "$URL_LLM"
-fi
-# I Gemma Terms of Use, par. 3.1, impongono che ogni distribuzione dei pesi sia
-# accompagnata da questo avviso. Cedere un dispositivo con il modello a
-# bordo E' una distribuzione.
-cat > models/NOTICE <<'EOF'
-Gemma is provided under and subject to the Gemma Terms of Use found at
-ai.google.dev/gemma/terms
-EOF
+# ---------------------------------------------------------------------------
+passo 7 "Voci e modello linguistico"
+scarica() {   # scarica URL FILE: su un file temporaneo, e lo rinomina a fine riuscita
+    curl -fL --retry 3 --progress-bar -o "$2.parziale" "$1" && mv "$2.parziale" "$2"
+}
+controlla() { # il file c'e' e ha la somma attesa
+    [ -f "models/$1" ] && (cd models && grep " $1\$" ../scripts/modelli.sha256 | sha256sum -c --status)
+}
 for percorso in $VOCI; do
     voce="${percorso##*/}"
     for est in onnx onnx.json; do
-        [ -f "models/$voce.$est" ] || curl -sL --retry 3 \
-            -o "models/$voce.$est" "$BASE_VOCI/$percorso.$est" || true
+        controlla "$voce.$est" || scarica "$URL_VOCI/$percorso.$est" "models/$voce.$est"
     done
+    controlla "$voce.onnx" || muori "la voce $voce non corrisponde alla somma attesa"
 done
+echo "    voci: it_IT-serena-medium, en_US-ljspeech-medium"
+if ! controlla "$MODELLO"; then
+    echo "    scarico il modello linguistico (380 MB)"
+    scarica "$URL_MODELLO" "models/$MODELLO" \
+        || muori "modello non scaricato da $URL_MODELLO"
+fi
+controlla "$MODELLO" || muori "il modello non corrisponde alla somma attesa"
+echo "    modello: $MODELLO"
 
-passo "6/10  Database dei vini"
-[ -f data/amelie.db ] || ./venv/bin/python data/build_db.py
-
-passo "7/10  Librerie del microcontrollore"
-# Il firmware gira sullo STM32U585, non su Linux: si carica a parte e va
-# lanciato da un terminale vero, perche' il caricamento in rete puo' chiedere la
-# password dell'utente. Le librerie, pero', si installano bene da qui - sono
-# l'unico pezzo che manca per poter compilare, ed e' scomodo scoprirlo davanti
-# ai Modulino gia' collegati.
-if command -v arduino-cli >/dev/null 2>&1; then
-    arduino-cli lib install Arduino_RouterBridge Arduino_Modulino >/dev/null 2>&1 \
-        && echo "    Arduino_RouterBridge e Arduino_Modulino installate" \
-        || echo "    librerie non installate: rifallo a mano prima di caricare il firmware"
-    # L'indirizzo risolto, non la formula: questo comando si copia e si incolla.
-    IP_BOARD="$(hostname -I 2>/dev/null | awk '{print $1}')"
-    echo "    il firmware si carica a parte, da un terminale sulla board:"
-    echo "      arduino-cli compile -b arduino:zephyr:unoq --upload -p ${IP_BOARD:-<indirizzo>} firmware/amelie_mcu"
+# ---------------------------------------------------------------------------
+passo 8 "Database dei vini"
+# Si ricostruisce dalle sorgenti in data/ quando manca o quando le sorgenti
+# sono piu' recenti: dopo un `git pull` che le cambia, si rifa' da solo.
+DB=data/amelie.db
+if [ ! -f "$DB" ] || [ -n "$(find data src/amelie -type f -newer "$DB" \
+        \( -path 'data/sources/*' -o -path 'data/lessico/*' -o -name '*.py' -o -name vitigni.json \) \
+        -not -path '*/__pycache__/*' -print -quit)" ]; then
+    PYTHONPATH=src ./venv/bin/python data/build_db.py | tail -2
 else
-    echo "    arduino-cli non trovato: vedi firmware/amelie_mcu/README.md"
+    echo "    gia' aggiornato"
 fi
 
-passo "8/10  Servizi"
-sudo install -m755 scripts/systemd/amelie-*.sh scripts/systemd/azzera-*.sh /usr/local/bin/
-sudo install -m644 scripts/systemd/amelie-*.service /etc/systemd/system/
+# ---------------------------------------------------------------------------
+passo 9 "Firmware del microcontrollore"
+# Lo sketch gira sullo STM32U585 e parla con Linux attraverso il router. Si
+# compila e si carica da qui: `remoteocd` senza indirizzo ne' numero di serie
+# lavora in locale, con l'OpenOCD della board, e non chiede password.
+arduino-cli core update-index >/dev/null
+arduino-cli core install "$CORE_MCU" >/dev/null
+# shellcheck disable=SC2086
+arduino-cli lib install $LIBRERIE_MCU >/dev/null
+FIRMA=$( (cat firmware/amelie_mcu/*.ino; echo "$CORE_MCU $LIBRERIE_MCU") | sha256sum | cut -c1-16)
+USCITA="$RADICE/var/firmware"
+if [ "$(cat "$USCITA/.caricato" 2>/dev/null)" = "$FIRMA" ]; then
+    echo "    gia' caricato"
+else
+    arduino-cli compile -b "$FQBN" --output-dir "$USCITA" firmware/amelie_mcu >/dev/null
+    PACCHETTI="$HOME/.arduino15/packages/arduino"
+    OCD=$(find "$PACCHETTI/tools/remoteocd" -name remoteocd -type f | sort -V | tail -1)
+    CFG=$(find "$PACCHETTI/hardware/zephyr/${CORE_MCU##*@}/variants" -name flash_sketch.cfg | head -1)
+    [ -n "$OCD" ] && [ -n "$CFG" ] || muori "remoteocd o la configurazione OpenOCD non trovati"
+    "$OCD" upload -f "$CFG" "$USCITA/amelie_mcu.ino.elf-zsk.bin" >/dev/null \
+        || muori "caricamento del firmware non riuscito"
+    echo "$FIRMA" > "$USCITA/.caricato"
+    echo "    firmware caricato"
+fi
+# App Lab puo' avviare una sua app all'accensione, che sostituirebbe questo
+# firmware sul microcontrollore: nessuna app predefinita.
+arduino-app-cli properties set default none >/dev/null 2>&1 || true
+
+# ---------------------------------------------------------------------------
+passo 10 "Servizi"
+sudo install -m755 scripts/systemd/*.sh /usr/local/bin/
+sudo install -m644 scripts/systemd/*.service /etc/systemd/system/
 # Il permesso con cui l'applicazione accende e spegne il modello linguistico.
 sudo install -m644 scripts/systemd/50-amelie-llm.rules /etc/polkit-1/rules.d/
 sudo mkdir -p /var/lib/amelie /usr/share/xsessions
-# La sessione grafica del dispositivo: vedi il passo 8 per come la si sceglie.
 sudo install -m644 scripts/systemd/amelie.desktop /usr/share/xsessions/
 sudo systemctl daemon-reload
-# amelie-llm NON si abilita: lo accende l'applicazione quando il modo di
-# racconto e' «generativa», e lo spegne altrimenti. Fermo a vuoto costa un core.
-sudo systemctl disable amelie-llm 2>/dev/null || true
-sudo systemctl enable amelie-audio-guard amelie-audio-rotta \
+# amelie-llm non si abilita: lo accende l'applicazione quando il modo di
+# racconto e' «generativa», e lo spegne altrimenti. Acceso a vuoto costa un core.
+sudo systemctl disable amelie-llm >/dev/null 2>&1 || true
+sudo systemctl enable -q amelie-audio-guard amelie-audio-rotta \
     amelie-sipario amelie-display amelie amelie-kiosk amelie-scrivania
+# Su un dispositivo gia' in servizio (un aggiornamento) il codice nuovo vale
+# solo dopo il riavvio dell'applicazione, e la pagina nuova solo ricaricandola.
+if systemctl is-active -q amelie; then
+    sudo systemctl restart amelie
+    sudo systemctl try-restart amelie-kiosk
+    echo "    applicazione riavviata"
+fi
+echo "    fatto"
 
-passo "9/10  Avvio automatico della sessione grafica"
-# Senza autologin il server X appartiene al greeter e Chromium non riesce ad
-# aprirlo: fallisce con "The platform failed to initialize", che non dice quale
-# sia il problema. Con l'autologin la sessione e' di arduino e ~/.Xauthority
-# funziona.
+# ---------------------------------------------------------------------------
+passo 11 "Sessione grafica"
+# Autologin: senza, il server X appartiene al greeter e Chromium non riesce ad
+# aprirlo («The platform failed to initialize»).
 sudo mkdir -p /etc/lightdm/lightdm.conf.d
 sudo tee /etc/lightdm/lightdm.conf.d/50-amelie-autologin.conf >/dev/null <<'EOF'
 [Seat:*]
 autologin-user=arduino
 autologin-user-timeout=0
 EOF
-
-# E la sessione e' quella di Amelie, non XFCE. L'immagine della UNO Q avvia una
-# scrivania completa - sfondo, barra, icone, App Lab - e per una decina di
-# secondi a ogni accensione e' quella che si vede sul pannello. Spegnerne i
-# pezzi uno per uno era una rincorsa: qui la scrivania non parte proprio.
-#
-# Per riaverla, in sviluppo:
+# E la sessione e' quella di Amelie, non la scrivania XFCE: sul pannello
+# compare solo il dispositivo. Per riavere la scrivania:
 #     sudo rm /etc/lightdm/lightdm.conf.d/60-amelie-sessione.conf
 #     sudo systemctl restart lightdm
 sudo tee /etc/lightdm/lightdm.conf.d/60-amelie-sessione.conf >/dev/null <<'EOF'
@@ -152,49 +235,30 @@ sudo tee /etc/lightdm/lightdm.conf.d/60-amelie-sessione.conf >/dev/null <<'EOF'
 user-session=amelie
 autologin-session=amelie
 EOF
+echo "    fatto"
 
-passo "10/10  Silenzio sulla console"
-# Niente testo sul pannello durante l'avvio. Il `quiet` del kernel starebbe
-# sulla riga di comando, che qui vive dentro un'immagine unificata: rifarla per
-# dodici secondi di testo non vale il rischio di una board che non riparte. Il
-# resto si toglie senza toccare l'avvio.
+# ---------------------------------------------------------------------------
+passo 12 "Console silenziosa"
+# Niente righe «[ OK ] Started ...» sul pannello: restano nel journal.
 sudo mkdir -p /etc/systemd/system.conf.d
 sudo tee /etc/systemd/system.conf.d/50-amelie-silenzio.conf >/dev/null <<'EOF'
-# Niente righe «[ OK ] Started ...» sul pannello. Restano tutte nel journal:
-# `journalctl -b` le mostra esattamente come prima.
 [Manager]
 ShowStatus=no
 EOF
-# 99, non 50: i file di sysctl.d si applicano in ordine ALFABETICO, e Debian
-# mette il suo `kernel.sysrq = 0x01b6` in 50-default.conf. Con un 50-amelie-*
-# il nostro valore viene scritto per primo e poi sovrascritto dal loro - il file
-# c'e', sembra giusto, e non fa niente.
-sudo rm -f /etc/sysctl.d/50-amelie-silenzio.conf
+# 99, non 50: i file di sysctl.d si applicano in ordine alfabetico, e Debian
+# mette il suo kernel.sysrq in 50-default.conf, che sovrascriverebbe il nostro.
 sudo tee /etc/sysctl.d/99-amelie-silenzio.conf >/dev/null <<'EOF'
-# Solo le emergenze sulla console. Se il dispositivo sta per morire e' giusto
-# che lo dica; tutto il resto e' nel journal.
+# Solo le emergenze sulla console; tutto il resto e' nel journal.
 kernel.printk = 1 4 1 3
 
-# NIENTE MAGIC SYSRQ. Non e' irrigidimento generico: e' successo.
-#
-# Debian lascia `kernel.sysrq = 438`, che include il bit 32 - "rimonta tutti i
-# filesystem in sola lettura". La console del kernel di questa board sta su
-# ttyMSM0, la UART di debug, che sul dispositivo finito non ha niente attaccato
-# e resta flottante. Il rumore su quella linea viene letto come tasti SysRq: nel
-# log si vedono decine di `sysrq: HELP` (tasto non riconosciuto), due `Changing
-# Loglevel`, e a un certo punto e' arrivata una `u` - unmount. Root e /home sono
-# passati in sola lettura a dispositivo acceso e in servizio.
-#
-# Con lo stesso meccanismo si poteva prendere una `b` (riavvia), una `o` (spegni)
-# o una `i` (uccidi tutti i processi). Su un tavolo di ristorante non e' una
-# possibilita' accettabile, e SysRq qui non serve a niente: si spegne.
+# Niente Magic SysRq. La console del kernel sta su ttyMSM0, la UART di debug,
+# che nel dispositivo montato non ha niente collegato e resta flottante: il
+# rumore sulla linea viene letto come tasti SysRq, e fra questi ci sono
+# «rimonta tutto in sola lettura», «riavvia» e «spegni».
 kernel.sysrq = 0
 EOF
-
-# E la console di testo non si raggiunge nemmeno da tastiera. Sul tavolo di un
-# ristorante le porte USB sono raggiungibili, e Ctrl+Alt+F2 su una tastiera
-# infilata porta a un prompt di login a schermo intero. Ha effetto dal riavvio
-# successivo, perche' il server X legge questa cartella all'avvio.
+# Nemmeno da tastiera: Ctrl+Alt+F2 su una tastiera collegata a una porta USB
+# porterebbe a un prompt di login a schermo intero.
 sudo mkdir -p /etc/X11/xorg.conf.d
 sudo tee /etc/X11/xorg.conf.d/10-amelie-kiosk.conf >/dev/null <<'EOF'
 Section "ServerFlags"
@@ -202,11 +266,17 @@ Section "ServerFlags"
     Option "DontZap"      "true"
 EndSection
 EOF
+if [ -n "${AMELIE_FUSO:-}" ]; then
+    sudo timedatectl set-timezone "$AMELIE_FUSO" && echo "    fuso orario: $AMELIE_FUSO"
+fi
+echo "    fatto"
 
 echo
-echo "${G}Fatto.${N}  Riavvia per verificare l'avvio completo:  sudo reboot"
-echo "Stato dei servizi:      systemctl status 'amelie*'"
-echo "Collaudo:               bash scripts/00_diagnostica.sh"
+echo "${G}Installazione completata.${N}"
 echo
-echo "PRIMA DI LASCIARLO IN SALA, togliere sudo senza password:"
-echo "    sudo rm -f /etc/sudoers.d/010_arduino-nopasswd"
+echo "  Riavvia la board:        sudo reboot"
+echo "  Stato dei servizi:       systemctl status 'amelie*'"
+echo "  Collaudo:                bash scripts/00_diagnostica.sh"
+echo
+echo "  Per mettere il dispositivo in sicurezza prima di lasciarlo in sala"
+echo "  vedi docs/it/02-installazione.md, «Mettere in sicurezza»."

@@ -88,13 +88,12 @@ class TestLoZeroNonEUnaDistanza:
         niente davanti    distanza 0     SPAD 52368, sempre lo stesso
         mano davanti      25..176 mm     SPAD 392..51528, variabili
 
-    Lo stato resta «misura buona» in tutti e due i casi. Il firmware ora
+    Lo stato resta «misura buona» in tutti e due i casi. Per questo il firmware
     restituisce -1 per lo zero, che il ponte traduce in `None`.
 
-    La bottiglia non si riconosce più così — la guarda la camera, vedi
-    `PresenzaOttica` — ma `distanza_mm` è rimasta, la usa `scripts/bus.py` per
-    chi ha i cavetti in mano, e uno zero preso per una distanza racconterebbe
-    una bugia anche lì.
+    La presenza della bottiglia la decide la camera — vedi `PresenzaOttica` —
+    ma `distanza_mm` la usa `scripts/bus.py`, per chi ha i cavetti in mano, e
+    uno zero preso per una distanza racconterebbe una bugia anche lì.
     """
 
     def test_il_ponte_traduce_il_meno_uno(self):
@@ -127,18 +126,18 @@ class TestColore:
             "la luce dello scatto deve essere davvero piu' forte degli stati"
 
 
-class TestDifettiTrovatiDallaVerifica:
-    """I tre difetti che la verifica avversariale ha trovato, e che i test
-    precedenti non vedevano. Restano qui perche' non tornino."""
+class TestIlCicloNonSiBlocca:
+    """Modi in cui il ciclo potrebbe bloccarsi, o non riconoscere niente, senza
+    che nessun altro test se ne accorga."""
 
     def test_il_database_si_usa_da_un_altro_thread(self):
         """Il difetto bloccante: SQLite rifiuta le connessioni fra thread.
 
         L'orchestratore crea la connessione nel thread principale e la usa nel
         thread di lavoro. Senza check_same_thread=False ogni ricerca solleva
-        ProgrammingError e NESSUN vino viene mai riconosciuto. Il test
-        precedente non lo vedeva perche' passava righe vuote, e cerca()
-        ritornava prima di toccare la connessione.
+        ProgrammingError e NESSUN vino viene mai riconosciuto. Un test che
+        passi righe vuote non lo vede, perche' cerca() ritorna prima di toccare
+        la connessione: qui le righe sono vere.
         """
         import threading
 
@@ -188,9 +187,9 @@ class TestDifettiTrovatiDallaVerifica:
             assert (stato, Evento.SCADENZA) in TRANSIZIONI, f"{stato} non gestisce SCADENZA"
 
     def test_lavoro_sovrapposto_non_blocca_la_macchina(self, amelie):
-        """Ignorare e basta lasciava la macchina bloccata in SCANSIONE. Ora il
-        lavoro nuovo aspetta quello di prima e parte; se quello non finisce e'
-        un guasto (vedi test_ripristino.TestIlLavoroDiPrima)."""
+        """Ignorare e basta lascerebbe la macchina bloccata in SCANSIONE: il
+        lavoro nuovo aspetta quello precedente e parte; se quello non finisce
+        e' un guasto (vedi test_ripristino.TestIlLavoroDiPrima)."""
         import threading
         import time
 
@@ -208,13 +207,12 @@ class TestDifettiTrovatiDallaVerifica:
 class TestCicloCompleto:
     """Il ciclo vero, dalla bottiglia al racconto, con camera e OCR finti.
 
-    Questa classe esiste per un motivo preciso. Tutti gli altri test spingevano
-    la pipeline mandando gli eventi a mano DAL THREAD DEL TEST, e con quella
-    forma il dispositivo sembrava funzionare. Ma in esercizio ogni passo della
-    pipeline è avviato dal passo precedente, cioè DAL THREAD DI LAVORO: e lì
-    `_avvia` trovava vivo un thread che era sé stesso, si dichiarava occupato e
-    mandava tutto in GUASTO. Su ogni bottiglia, sempre. Il dispositivo non
-    raccontava nulla e nessun test se ne accorgeva.
+    Spingere la pipeline mandando gli eventi a mano DAL THREAD DEL TEST non
+    basta: in esercizio ogni passo della pipeline è avviato dal passo
+    precedente, cioè DAL THREAD DI LAVORO. Se lì `_avvia` trovasse vivo un
+    thread che è sé stesso, si dichiarerebbe occupato e manderebbe tutto in
+    GUASTO, su ogni bottiglia, e un test che manda gli eventi a mano non se ne
+    accorgerebbe.
 
     Il collaudo che conta è quello che percorre il ciclo come lo percorre una
     bottiglia vera: si mette la presenza, si aspetta, si guarda cosa dice.
@@ -285,7 +283,7 @@ class TestCicloCompleto:
         return amelie.macchina.stato
 
     def test_una_bottiglia_leggibile_viene_raccontata(self, amelie_con_etichetta):
-        """Il test che mancava: nessun evento a mano dopo il primo."""
+        """Nessun evento a mano dopo il primo."""
         a = amelie_con_etichetta
         a.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
         finale = self._attendi(a, {Stato.RACCONTO, Stato.CONCLUSO, Stato.GUASTO})
@@ -376,7 +374,8 @@ class TestLingua:
 
     def test_le_scritte_dello_schermo_seguono_la_lingua(self, amelie):
         """Schermo in italiano e racconto in inglese e' il modo peggiore
-        di essere bilingui: le frasi venivano da stringhe cablate nel codice."""
+        di essere bilingui: le frasi dello schermo vengono dal lessico, non da
+        stringhe cablate nel codice."""
         visti = {}
         for lingua in ("it", "en"):
             amelie.cambia_lingua(lingua)
@@ -388,11 +387,11 @@ class TestLingua:
         assert visti["en"], "manca la frase inglese"
 
     def test_il_titolo_della_carta_e_il_suo_e_non_quello_di_prima(self, amelie):
-        """Visto sul dispositivo: «Garda Cabernet 2008» scritto sopra la
-        descrizione di un Lambrusco Grasparossa.
+        """Non «Garda Cabernet 2008» scritto sopra la descrizione di un
+        Lambrusco Grasparossa.
 
-        In modo carta i fatti dell'archivio non si aggiornavano mai, e il
-        titolo veniva sempre da li': cioe' dal vino PRECEDENTE.
+        In modo carta i fatti dell'archivio possono essere ancora quelli del
+        vino PRECEDENTE: il titolo non deve venire da li'.
         """
         from amelie.carta import Voce
         from amelie.matcher import Fatti, Livello
@@ -424,8 +423,8 @@ class TestLingua:
         assert catturati[0]["titolo"] == "Lambrusco Grasparossa di Castelvetro"
 
     def test_al_generico_il_titolo_e_cio_che_dice_l_etichetta(self, amelie):
-        """Senza nome lo schermo restava senza titolo e il testo saliva in
-        cima, sotto le linguette della lingua."""
+        """Senza nome lo schermo resterebbe senza titolo e il testo salirebbe
+        in cima, sotto le linguette della lingua."""
         from amelie.matcher import Fatti, Livello
 
         f = Fatti(livello=Livello.GENERICO, colore="Rosato", sicurezza=88.0)
@@ -436,7 +435,7 @@ class TestLingua:
         amelie._mostra(Stato.RACCONTO)
         titolo = catturati[0]["titolo"]
         assert titolo.strip(), "nessun titolo al livello generico"
-        # Senza l'articolo del racconto: a schermo si leggeva «uno spumante».
+        # Senza l'articolo del racconto: a schermo non si legge «uno spumante».
         assert titolo == "Spumante rosato, brut"
 
     def _attendi(self, amelie, stato, secondi=5.0):
@@ -456,7 +455,7 @@ class TestLingua:
         assert self._attendi(amelie, Stato.RACCONTO)
 
     def test_si_puo_cambiare_lingua_mentre_parla(self, amelie):
-        """Senza la transizione (RACCONTO, RIPETI) l'evento cadeva nel vuoto.
+        """Senza la transizione (RACCONTO, RIPETI) l'evento cadrebbe nel vuoto.
 
         Si guarda il FATTO - che il racconto sia ripartito - e non lo stato in
         un istante preciso: la storia riparte, corre e finisce, e a seconda di
@@ -479,12 +478,12 @@ class TestLingua:
         assert amelie.macchina.stato in (Stato.RACCONTO, Stato.CONCLUSO)
 
     def test_il_racconto_riparte_anche_col_lavoro_vecchio_ancora_vivo(self, amelie):
-        """Il difetto vero: non un guasto, un silenzio.
+        """Il difetto da evitare non e' un guasto, e' un silenzio.
 
-        `_avvia` rifiuta il lavoro se ne trova uno gia' vivo, e rifiutandolo
-        manda ERRORE - che in RACCONTO non ha transizione. L'evento cadeva nel
-        vuoto: la lingua cambiava a schermo, il racconto non ripartiva mai, e
-        niente lo diceva.
+        Se `_avvia` rifiutasse il lavoro trovandone uno gia' vivo, manderebbe
+        ERRORE - che in RACCONTO non ha transizione - e l'evento cadrebbe nel
+        vuoto: la lingua cambierebbe a schermo, il racconto non ripartirebbe
+        mai, e niente lo direbbe.
         """
         import threading
         import time
@@ -519,12 +518,12 @@ class TestLingua:
         assert annunci, "nessun annuncio: non si puo' provare l'audio con un tocco"
 
     def test_tocchi_ravvicinati_producono_un_solo_annuncio(self, amelie):
-        """Il difetto che ha fatto sembrare rotto l'amplificatore.
+        """Il difetto che fa sembrare rotto l'amplificatore.
 
-        Le frasi durano un secondo abbondante, e ogni tocco zittiva quella in
-        corso. Otto tocchi in nove secondi - che e' come si prova un audio -
-        non producevano NESSUN suono udibile: ognuno tagliava il precedente
-        prima che uscisse. Ora parla solo l'ultimo, e parla per intero.
+        Le frasi durano un secondo abbondante: se ogni tocco zittisse quella in
+        corso, otto tocchi in nove secondi - che e' come si prova un audio -
+        non produrrebbero NESSUN suono udibile, perche' ognuno taglierebbe il
+        precedente prima che esca. Parla solo l'ultimo, e parla per intero.
         """
         import time
 
@@ -591,8 +590,8 @@ class TestLingua:
         assert catturati[0]["aiuta"] is True
 
     def test_senza_niente_da_insegnare_si_torna_all_invito(self, amelie):
-        """«Puo' togliere la bottiglia» non c'e' piu': senza il pulsante per
-        insegnarla, a tentativi finiti si torna subito all'invito."""
+        """Nessuna schermata «Puo' togliere la bottiglia»: senza il pulsante
+        per insegnarla, a tentativi finiti si torna subito all'invito."""
         amelie.correzioni_attive = False
         catturati = []
         amelie._pubblica = lambda m: catturati.append(m)
@@ -607,11 +606,10 @@ class TestLingua:
 class TestAvvio:
     """Che l'applicazione PARTA, con tutto acceso.
 
-    Il buco che questa classe chiude: nessun test montava l'applicazione con la
-    voce, e il ciclo di vita chiama metodi che nessun altro chiama. Cancellandone
-    uno per sbaglio, i test restavano tutti verdi e il servizio non si avviava
-    piu' - `AttributeError` dentro lo startup, e il chiosco su una pagina che non
-    rispondeva.
+    Il ciclo di vita chiama metodi che nessun altro chiama: cancellandone uno
+    per sbaglio, senza questa classe i test resterebbero tutti verdi e il
+    servizio non si avvierebbe - `AttributeError` dentro lo startup, e il
+    chiosco su una pagina che non risponde.
     """
 
     def test_il_ciclo_di_vita_trova_tutto_quello_che_chiama(self):
@@ -622,11 +620,10 @@ class TestAvvio:
                 f"Amelie.{nome} non esiste: l'applicazione non si avvierebbe"
 
     def test_il_ciclo_di_vita_parte_e_si_chiude(self):
-        """Il vero avvio: e' dentro qui che l'applicazione moriva.
+        """Il vero avvio: e' dentro qui che l'applicazione morirebbe.
 
         Si entra e si esce dal ciclo di vita come fa uvicorn. Non serve un
-        client HTTP: il punto e' che lo startup esegua fino in fondo, che e'
-        esattamente quello che non faceva piu'.
+        client HTTP: il punto e' che lo startup esegua fino in fondo.
         """
         import asyncio
 
@@ -647,10 +644,10 @@ class TestAvvio:
             a.narratore.chiudi()
 
     def test_il_ciclo_di_vita_parte_anche_con_la_voce(self):
-        """Il caso che mancava: con la voce accesa si chiama `_scalda_voci`.
+        """Con la voce accesa si chiama `_scalda_voci`.
 
-        E' l'unico posto che lo chiama, quindi era l'unico modo di accorgersi
-        che non c'era piu'.
+        E' l'unico posto che lo chiama, quindi e' l'unico modo di accorgersi
+        se sparisce.
         """
         import asyncio
 
@@ -686,8 +683,8 @@ class TestPonteOnesto:
 
     Il router della UNO Q gira anche quando sull'MCU non c'è lo sketch di
     Amelie: il socket esiste, si connette, e ogni chiamata fallisce con
-    «method not available». Controllare solo il socket faceva dichiarare
-    `mcu: true` a un dispositivo che non poteva né leggere il sensore né
+    «method not available». Controllare solo il socket farebbe dichiarare
+    `mcu: true` a un dispositivo che non può né leggere il sensore né
     accendere l'anello — ed è esattamente lo stato di una board appena
     preparata, prima di caricare il firmware.
     """
@@ -719,10 +716,10 @@ class TestPonteOnesto:
 class TestLaSchermataNonResta:
     """A racconto finito il dispositivo torna all'invito, da solo.
 
-    Prima restava sulla schermata del racconto per sempre, con il riproduttore
-    in vista e tutti i pulsanti inerti, finché qualcuno non toglieva la
-    bottiglia. A tavola quella schermata non dice niente e non fa niente: è il
-    dispositivo che sembra piantato.
+    Senza un tetto resterebbe sulla schermata del racconto per sempre, con il
+    riproduttore in vista e tutti i pulsanti inerti, finché qualcuno non toglie
+    la bottiglia. A tavola quella schermata non dice niente e non fa niente: è
+    il dispositivo che sembra piantato.
     """
 
     @pytest.fixture
@@ -743,7 +740,7 @@ class TestLaSchermataNonResta:
         assert t.a is Stato.ATTESA
 
     def test_non_si_racconta_due_volte_la_stessa_bottiglia(self, amelie):
-        """Il difetto che nasce dalla correzione, se non ci si pensa.
+        """Il difetto che nasce dal tornare da soli all'invito, se non ci si pensa.
 
         Tornando in attesa con la bottiglia ancora sul piatto, il rilancio che
         serve a riprendersi da un guasto farebbe ripartire una seconda lettura,
@@ -794,14 +791,13 @@ class TestLaSchermataNonResta:
 class TestIlCambioLinguaEImmediato:
     """Toccare una bandierina mentre parla l'altra vuol dire aver cambiato idea.
 
-    Prima l'annuncio in corso si sentiva per intero, e solo dopo partiva quello
-    chiesto: il tocco sembrava perso. Ora si taglia e si riparte.
+    Se l'annuncio in corso si sentisse per intero, e solo dopo partisse quello
+    chiesto, il tocco sembrerebbe perso: si taglia e si riparte.
 
-    È la seconda volta che si sceglie di interrompere. La prima era andata male
-    — gli annunci si tagliavano a vicenda e non si sentiva niente — ma la causa
-    non era l'interruzione: era che il flusso audio si apriva e chiudeva a ogni
-    frase, e il DSP di questa board impiega due secondi ad avviarsi. Da quando
-    il flusso resta aperto quel costo non c'è più.
+    Interrompere funziona perché il flusso audio resta aperto (vedi
+    `TestUscitaSempreAperta` in test_narrator.py). Se si aprisse e chiudesse a
+    ogni frase, i due secondi che il DSP di questa board impiega ad avviarsi
+    farebbero tagliare gli annunci a vicenda, e non si sentirebbe niente.
     """
 
     @pytest.fixture
@@ -848,8 +844,8 @@ class TestIlCambioLinguaEImmediato:
     def test_il_racconto_aspetta_che_l_annuncio_abbia_finito(self, amelie):
         """Scrivono nello stesso flusso audio: partendo insieme si sovrappongono.
 
-        «English language» e la prima frase del racconto uscivano una sopra
-        l'altra, e non si capiva né l'una né l'altra.
+        «English language» e la prima frase del racconto uscirebbero una sopra
+        l'altra, e non si capirebbe né l'una né l'altra.
         """
         import time as t
 
@@ -877,12 +873,12 @@ class TestIlCambioLinguaEImmediato:
 
 
 class TestLaCodaAudioNonSiTronca:
-    """Il racconto si tagliava tre quarti di secondo prima della fine.
+    """Il racconto non si taglia tre quarti di secondo prima della fine.
 
-    Non era la voce: era la coda. `_suona` esce quando l'ultimo pezzo è stato
-    CONSEGNATO all'uscita, ma fra la consegna e l'orecchio ci sono la riserva
-    della coda e la latenza di ALSA — e `ferma()`, chiamato subito dopo, li
-    buttava via. In tutte e due le lingue, perché non dipendeva dalla lingua.
+    Il rischio non è nella voce ma nella coda. `_suona` esce quando l'ultimo
+    pezzo è PASSATO all'uscita, ma fra l'uscita e l'orecchio ci sono la riserva
+    della coda e la latenza di ALSA — e un `ferma()` chiamato subito dopo li
+    butterebbe via, in tutte e due le lingue.
     """
 
     def test_il_riproduttore_sa_aspettare_la_propria_coda(self):
@@ -918,10 +914,8 @@ class TestLaCodaAudioNonSiTronca:
 class TestLaLinguaTornaACasa:
     """Tolta la bottiglia, la lingua torna quella di partenza.
 
-    Lo dichiaravano il commento di `Configurazione.lingua` e la guida di
-    montaggio, e non lo faceva nessuno: la lingua si scriveva solo all'avvio e
-    dentro `cambia_lingua`. Il tavolo dopo trovava l'inglese lasciato dal
-    precedente, senza sapere che si cambia toccando una bandierina.
+    Senza, il tavolo dopo troverebbe l'inglese lasciato dal precedente, senza
+    sapere che si cambia toccando una bandierina.
     """
 
     @pytest.fixture
@@ -944,6 +938,43 @@ class TestLaLinguaTornaACasa:
         assert amelie.narratore.lingua == "it", \
             "anche il narratore deve tornare indietro, non solo lo schermo"
 
+    def test_un_racconto_finito_con_la_bottiglia_sul_piatto_non_la_cambia(self, amelie):
+        """Stesso tavolo, stesse persone: chi ha scelto l'inglese non deve
+        ritoccare la bandierina a ogni bottiglia."""
+        amelie._presente = True
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.cambia_lingua("en")
+        amelie.macchina.invia(Evento.RACCONTO_FINITO)
+        amelie.macchina.invia(Evento.SCADENZA)
+        assert amelie.macchina.stato is Stato.ATTESA
+        assert amelie.lingua == "en"
+
+    def test_tolta_ad_attesa_gia_raggiunta_la_lingua_torna_a_casa(self, amelie):
+        import asyncio
+        amelie._presente = True
+        amelie.cambia_lingua("en")
+        amelie.macchina.stato = Stato.ATTESA
+
+        async def vuoto():
+            return False
+        amelie._chi_c_e = vuoto
+        asyncio.run(amelie._un_battito())
+        assert amelie.lingua == "it"
+
+    def test_la_bandierina_a_racconto_finito_allunga_la_schermata(self, amelie):
+        """Il racconto riparte dopo l'annuncio: la schermata finale non deve
+        scadere prima, o si torna all'invito senza racconto."""
+        import time
+        from amelie import app as modulo
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.macchina.invia(Evento.RACCONTO_FINITO)
+        # Annuncio e ripresa restano fermi: si guarda la schermata finale
+        # nell'istante in cui la lingua cambia.
+        amelie._parla_dopo = lambda **_: None
+        amelie.cambia_lingua("en")
+        assert amelie.macchina.stato is Stato.CONCLUSO
+        assert amelie._scadenza - time.monotonic() > modulo.LINGUA_A_RACCONTO_FINITO_S - 1
+
     def test_la_schermata_di_attesa_esce_gia_nella_lingua_giusta(self, amelie):
         """Prima di ridisegnare, non dopo: altrimenti l'invito comparirebbe in
         inglese e cambierebbe sotto gli occhi di chi si siede."""
@@ -961,7 +992,7 @@ class TestLaLinguaTornaACasa:
         assert detti.index(lingue[0]) < detti.index(stati[-1])
 
     def test_non_si_annuncia_a_tavolo_vuoto(self, amelie):
-        """Un dispositivo che parla da solo in sala non va bene."""
+        """Un dispositivo che parla da solo, in una sala vuota, sembra guasto."""
         chiesti = []
         amelie._chiedi_annuncio = chiesti.append
         amelie.macchina.stato = Stato.RACCONTO
@@ -983,10 +1014,10 @@ class TestFirmwareEPythonDAccordo:
     """Il firmware e il codice Python non si leggono a vicenda.
 
     Lo sketch somma dei bit, `bridge.NOMI_MODULI` li rilegge per nome, e i due
-    stanno in linguaggi diversi su processori diversi. Quando il secondo Pixels
-    è stato tolto, i bit sono passati da tre a due e la distanza da 4 a 2:
-    aggiornare uno solo dei due lati avrebbe prodotto il guasto più difficile di
-    tutti — il montaggio funziona e il dispositivo dice che il sensore non c'è.
+    stanno in linguaggi diversi su processori diversi. Se i moduli cambiano,
+    cambiano i bit, e aggiornare uno solo dei due lati produce il guasto più
+    difficile di tutti — il montaggio funziona e il dispositivo dice che il
+    sensore non c'è.
 
     Questi test leggono lo sketch come testo. È rozzo di proposito: qualunque
     cosa di più raffinato richiederebbe un compilatore C.
@@ -1013,8 +1044,9 @@ class TestFirmwareEPythonDAccordo:
 
     def test_lo_stato_tecnico_dice_che_firmware_c_e(self):
         """Si apre dal vetro tenendo premuto l'angolo, senza tastiera: montando
-        è l'unico modo di vedere da lì se sull'MCU c'è ancora il firmware di
-        prima, quello in cui i bit dei moduli significavano un'altra cosa."""
+        è l'unico modo di vedere da lì se sull'MCU c'è un firmware con un'altra
+        versione del protocollo, in cui i bit dei moduli significano un'altra
+        cosa."""
         from amelie.app import crea_app
 
         a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
@@ -1033,8 +1065,8 @@ class TestFirmwareEPythonDAccordo:
         assert corpo["moduli"] == {"anello": True, "distanza": True}
 
     def test_la_versione_del_protocollo_e_la_stessa_nei_due_linguaggi(self):
-        """È il numero che impedisce di leggere a rovescio i bit di un MCU
-        vecchio: se i due lati non concordano, non protegge da niente."""
+        """È il numero che impedisce di leggere a rovescio i bit di un MCU non
+        aggiornato: se i due lati non concordano, non protegge da niente."""
         import re
 
         from amelie.bridge import PROTOCOLLO_ATTESO
@@ -1043,7 +1075,7 @@ class TestFirmwareEPythonDAccordo:
         assert m, "lo sketch non dichiara PROTOCOLLO"
         assert int(m.group(1)) == PROTOCOLLO_ATTESO, (
             f"sketch {m.group(1)}, bridge.py {PROTOCOLLO_ATTESO}: "
-            f"il controllo di versione non protegge piu' da niente")
+            f"il controllo di versione non protegge da niente")
 
     def test_gli_indirizzi_sono_gli_stessi_nei_due_linguaggi(self):
         import re
@@ -1070,23 +1102,20 @@ class TestFirmwareEPythonDAccordo:
             f"{sorted(chiamati - dichiarati)}")
 
 
-class TestIlFlashNonTorna:
-    """Il secondo Modulino Pixels è stato tolto: che non rientri per sbaglio.
+class TestNienteFlashSeparato:
+    """Un solo Modulino Pixels, l'anello: non c'è un flash separato.
 
-    Non è pignoleria. I nomi del flash erano sparsi in nove file fra firmware,
-    orchestratore, cattura, ponte, test e documenti, e ne bastava uno rimasto
-    per mandare chi monta a cercare un modulo che non esiste — che è
-    esattamente la classe di perdita di tempo che questo progetto continua a
-    incontrare.
+    Non è pignoleria. Un nome di flash nel firmware, nell'orchestratore, nella
+    cattura o nel ponte manderebbe chi monta a cercare un modulo che non
+    esiste. Codice, sketch e distinta devono dire la stessa cosa.
     """
 
-    # I nomi che non devono più esistere come CODICE. Nei commenti si possono
-    # nominare: la nota storica che spiega perché il modulo è sparito vale più
-    # della regola che la vieta.
+    # I nomi che non devono esistere come CODICE. Nei commenti si possono
+    # nominare, per spiegare perché un flash separato non c'è.
     PROIBITI = ("set_flash", "BIANCO_FLASH", "FLASH_E_SCATTA",
                 "assestamento_flash_s", "attesa_flash")
 
-    def test_nessuno_di_quei_nomi_e_rimasto_nel_codice(self):
+    def test_nessuno_di_quei_nomi_sta_nel_codice(self):
         import re
 
         radice = Path(__file__).resolve().parents[1]
@@ -1100,27 +1129,29 @@ class TestIlFlashNonTorna:
                 for nome in self.PROIBITI:
                     if nome in spoglia:
                         colpe.append(f"{f.relative_to(radice)}:{n}  {riga.strip()}")
-        assert not colpe, "il flash è rientrato:\n  " + "\n  ".join(colpe)
+        assert not colpe, "c'è un flash nel codice:\n  " + "\n  ".join(colpe)
 
-    def test_il_ponte_non_espone_piu_un_flash(self):
+    def test_il_ponte_non_espone_un_flash(self):
         from amelie.bridge import Ponte
 
         assert not hasattr(Ponte, "flash")
 
     def test_c_e_un_solo_pixels_nella_distinta(self):
         radice = Path(__file__).resolve().parents[1]
-        distinta = (radice / "README.md").read_text(encoding="utf-8")
-        assert "2× Modulino Pixels" not in distinta
-        assert "1× Modulino Pixels" in distinta
+        for leggimi in ("README.md", "README.it.md"):
+            distinta = (radice / leggimi).read_text(encoding="utf-8")
+            pixels = [r for r in distinta.splitlines()
+                      if r.startswith("- ") and "Modulino Pixels" in r]
+            assert pixels == [r for r in pixels if r.startswith("- 1 × ")], leggimi
+            assert len(pixels) == 1, leggimi
 
 
 class TestOgniEffettoHaUnEsecutore:
     """Un effetto che nessuno esegue è uno stato che non fa niente.
 
-    `Effetto.FLASH_E_SCATTA` è diventato `ILLUMINA_E_SCATTA` in due file: se il
-    rinominio fosse rimasto a metà, la macchina a stati sarebbe entrata in
-    SCANSIONE e non avrebbe scattato mai — e nessun test l'avrebbe detto, perché
-    la transizione sarebbe stata comunque corretta.
+    Un effetto rinominato a metà — in `state.py` sì, in `app.py` no — farebbe
+    entrare la macchina a stati in SCANSIONE senza scattare mai, e nessun altro
+    test lo direbbe, perché la transizione sarebbe comunque corretta.
 
     Tre effetti però sono inerti **di proposito**, e vanno tenuti distinti da
     quelli dimenticati: le tre schermate. Lo schermo non lo disegna l'effetto, lo
@@ -1151,11 +1182,11 @@ class TestOgniEffettoHaUnEsecutore:
 
 
 class TestLuceDelloScatto:
-    """L'anello è anche la luce dello scatto, da quando il flash è stato tolto.
+    """L'anello è anche la luce dello scatto.
 
-    Ed è per questo che ora ha due padroni: la macchina a stati, che gli dà il
-    colore dello stato, e la cattura, che lo porta a bianco per la raffica. Dove
-    i due si incontrano è nato un difetto, e questi test lo tengono chiuso.
+    Per questo ha due padroni: la macchina a stati, che gli dà il colore dello
+    stato, e la cattura, che lo porta a bianco per la raffica. Dove i due si
+    incontrano può nascere un difetto, e questi test lo tengono chiuso.
     """
 
     class CameraRotta:
@@ -1211,13 +1242,13 @@ class TestLuceDelloScatto:
         return anelli[-1] if anelli else None
 
     def test_un_guasto_lascia_l_anello_rosso(self):
-        """Il difetto vero: con un `finally` l'ambra tornava DOPO il rosso.
+        """Con un `finally` l'ambra tornerebbe DOPO il rosso.
 
-        L'ordine era: la camera fallisce, la macchina a stati entra in GUASTO e
-        accende il rosso, e il `finally` lo cancellava rimettendo l'ambra. A
-        schermo restava un guasto dichiarato sopra un anello del colore
-        dell'invito — che è esattamente la cosa che schermo e anello non devono
-        mai fare.
+        L'ordine sarebbe: la camera fallisce, la macchina a stati entra in
+        GUASTO e accende il rosso, e il `finally` lo cancella rimettendo
+        l'ambra. A schermo resterebbe un guasto dichiarato sopra un anello del
+        colore dell'invito — che è esattamente la cosa che schermo e anello non
+        devono mai fare.
         """
         from amelie.bridge import ROSSO
 
@@ -1264,7 +1295,7 @@ class TestLuceDelloScatto:
     def test_senza_raffica_non_c_e_nessun_lampo(self):
         """Quando la camera e' gia' in moto, l'anello non si tocca.
 
-        Il bianco serviva a illuminare una raffica; se la raffica non c'e', un
+        Il bianco serve a illuminare una raffica; se la raffica non c'e', un
         bianco alzato e riabbassato un decimo dopo e' un lampo che non
         illumina niente. E costa: cinque livelli su 255, misurati, contro i
         quaranta che da' la posa.
@@ -1307,15 +1338,15 @@ class TestModuliVisti:
     """`moduli()` è lo strumento del montaggio: si collega un pezzo per volta e
     si chiede al dispositivo se lo vede, invece di dedurlo da un LED spento.
 
-    Perché serva a quello, deve rispondere sempre — anche a un firmware vecchio
-    che non conosce il metodo, che è uno dei guasti che si stanno cercando.
+    Perché serva a quello, deve rispondere sempre — anche con un firmware che
+    non conosce il metodo, che è uno dei guasti che si stanno cercando.
     """
 
     def _ponte(self, risposta, versione=None):
         """Un Ponte che risponde `risposta` a `moduli` e `versione` a `versione`.
 
-        La versione va finta insieme ai bit: da quando il significato dei bit è
-        cambiato, `moduli()` chiede prima con chi sta parlando.
+        La versione va finta insieme ai bit: `moduli()` chiede prima con chi
+        sta parlando, perché il significato dei bit dipende dal protocollo.
         """
         from amelie.bridge import PROTOCOLLO_ATTESO, Ponte
 
@@ -1347,10 +1378,9 @@ class TestModuliVisti:
     def test_i_nomi_sono_quelli_che_lo_sketch_dichiara(self):
         """Il numero dei bit e il numero dei nomi sono la stessa cosa.
 
-        Quando il secondo Pixels è stato tolto, i bit sono passati da tre a due
-        e la distanza da 4 a 2: una tabella rimasta indietro avrebbe detto
-        «sensore assente» a un sensore collegato, che è il guasto più difficile
-        da capire di tutti — il montaggio funziona e il dispositivo dice di no.
+        Una tabella con un nome in più, in meno o fuori posto direbbe «sensore
+        assente» a un sensore collegato, che è il guasto più difficile da
+        capire di tutti — il montaggio funziona e il dispositivo dice di no.
         """
         from amelie.bridge import NOMI_MODULI
 
@@ -1370,16 +1400,16 @@ class TestModuliVisti:
     def test_una_risposta_senza_senso_non_fa_saltare_niente(self):
         assert self._ponte(None).moduli() == {"anello": False, "distanza": False}
 
-    def test_un_firmware_di_prima_non_viene_letto_a_rovescio(self):
+    def test_un_protocollo_diverso_non_viene_letto_a_rovescio(self):
         """Il guasto peggiore che si possa avere montando.
 
-        Quando il secondo Pixels è stato tolto, il bit 2 è passato da «flash» a
-        «sensore» e il sensore ha lasciato il bit 4. Un Linux nuovo che legge un
-        MCU vecchio direbbe «sensore presente» col flash collegato, e «sensore
-        assente» col sensore: il montaggio è giusto e il dispositivo dice di no,
-        in silenzio. Meglio «non lo so» che una risposta rovesciata.
+        Nel protocollo 1 il bit 2 è un flash e il sensore sta sul bit 4. Letto
+        senza guardare la versione, un MCU col protocollo 1 direbbe «sensore
+        presente» col flash collegato, e «sensore assente» col sensore: il
+        montaggio è giusto e il dispositivo dice di no, in silenzio. Meglio
+        «non lo so» che una risposta rovesciata.
         """
-        # 0b011: per il firmware vecchio è anello + flash, sensore ASSENTE.
+        # 0b011: nel protocollo 1 è anello + flash, sensore ASSENTE.
         vecchio = self._ponte(0b011, versione=1)
         assert vecchio.moduli() == {"anello": False, "distanza": False}, \
             "i bit di un protocollo diverso non vanno interpretati"
@@ -1399,13 +1429,13 @@ class TestModuliVisti:
 
 class TestFineDelRacconto:
     def test_i_pulsanti_non_fingono_dopo_la_fine(self, amelie):
-        """Mezzo secondo in cui i tasti agivano su un riproduttore gia' morto.
+        """Mezzo secondo in cui i tasti agirebbero su un riproduttore gia' morto.
 
         Il riproduttore resta agganciato finche' l'ultimo suono non e' uscito
         davvero - tre quarti di secondo. In quella finestra i suoi thread sono
         finiti, ma lo schermo mostra ancora il racconto: un tocco su «indietro»
-        spostava la posizione, la barra tornava indietro e ci restava, perche'
-        nessuno pubblicava piu' niente.
+        sposterebbe la posizione, e la barra tornerebbe indietro e ci
+        resterebbe, perche' nessuno pubblica piu' niente.
         """
         class LettoreEsaurito:
             esaurito = True
@@ -1421,13 +1451,13 @@ class TestFineDelRacconto:
 
 
     def test_la_schermata_non_si_svuota_alla_fine(self, amelie):
-        """Due secondi di schermo vuoto alla fine di OGNI racconto.
+        """Niente due secondi di schermo vuoto alla fine di OGNI racconto.
 
-        La vista di CONCLUSO e' la stessa del racconto, ma `_mostra` riempiva
-        titolo e sottotitolo solo per RACCONTO: il client, che ripulisce a ogni
-        messaggio di stato con vista «racconto», si trovava senza titolo e
-        svuotava testo e barra. Restava uno schermo nero con sopra il solo
-        pulsante, finche' non si tornava all'invito.
+        La vista di CONCLUSO e' la stessa del racconto: se `_mostra` riempisse
+        titolo e sottotitolo solo per RACCONTO, il client, che ripulisce a ogni
+        messaggio di stato con vista «racconto», si troverebbe senza titolo e
+        svuoterebbe testo e barra, lasciando uno schermo nero con sopra il solo
+        pulsante finche' non si torna all'invito.
         """
         from amelie.matcher import Livello
 
@@ -1447,7 +1477,8 @@ class TestFineDelRacconto:
             "senza questo il client svuota il testo che si e' appena ascoltato"
 
     def test_arrivando_al_racconto_invece_si_svuota(self, amelie):
-        """L'altro lato: fra una bottiglia e l'altra il testo di prima non resta."""
+        """L'altro lato: fra una bottiglia e l'altra il testo della precedente
+        non resta."""
         from amelie.matcher import Livello
 
         amelie._fatti.livello = Livello.VINO
@@ -1462,8 +1493,8 @@ class TestFineDelRacconto:
 class TestAnnullamento:
     """Chiudere senza dover togliere la bottiglia dal piatto.
 
-    Fino a qui l'unico modo di finire era sollevarla. Va benissimo quando si e'
-    finito davvero, ma non per chi ha appena versato: il vino e' nel bicchiere,
+    Sollevarla va benissimo quando si e' finito davvero, ma non per chi ha
+    appena versato: il vino e' nel bicchiere,
     la bottiglia sta li', e nessuno la risolleva solo per far tacere il
     dispositivo.
     """
@@ -1516,7 +1547,7 @@ class TestAnnullamento:
             "un tocco caduto nel vuoto non deve zittire il racconto che verra'"
 
     def test_un_tocco_caduto_nel_vuoto_non_tocca_niente(self, amelie):
-        """Il difetto che stavo per introdurre correggendo l'altro.
+        """Un difetto facile da introdurre scrivendo l'annullamento.
 
         Chi toglie la bottiglia alza `_ferma_voce` per zittire il racconto. Se
         un tocco su «annulla» arriva un istante dopo - il dito era gia' partito
@@ -1535,13 +1566,13 @@ class TestAnnullamento:
             "il tocco in ritardo ha rimesso in moto un racconto gia' fermato"
 
     def test_fermare_e_avviare_non_possono_incrociarsi(self):
-        """Fra il controllo e l'assegnazione c'era una finestra di pochi bytecode.
+        """Fra il controllo e l'assegnazione non resta nemmeno una finestra di pochi bytecode.
 
-        `_racconta` guardava `_ferma_voce`, poi assegnava `_lettore`. Un
-        annullamento che passava in mezzo non trovava nessun riproduttore da
-        fermare, e ne lasciava partire uno subito dopo: il dispositivo
-        cominciava a parlare sopra la schermata d'invito. Stretta quanto si
-        vuole, era proprio la finestra che l'annullamento doveva chiudere.
+        `_racconta` guarda `_ferma_voce`, poi assegna `_lettore`. Un
+        annullamento che passasse in mezzo non troverebbe nessun riproduttore
+        da fermare, e ne lascerebbe partire uno subito dopo: il dispositivo
+        comincerebbe a parlare sopra la schermata d'invito. Stretta quanto si
+        vuole, e' proprio la finestra che l'annullamento deve chiudere.
 
         La prova: tenendo il lucchetto del riproduttore, `_ferma_racconto` non
         deve riuscire ad alzare la bandiera. Se ci riuscisse, vorrebbe dire che
@@ -1574,11 +1605,11 @@ class TestAnnullamento:
             a.narratore.chiudi()
 
     def test_senza_voce_annullare_non_lascia_il_lavoro_in_giro(self, amelie):
-        """Il testo scorreva con `sleep`, che nessuna bandiera puo' svegliare.
+        """Un testo che scorre con `sleep` non lo sveglia nessuna bandiera.
 
-        Il thread di lavoro restava vivo fino a sei secondi dopo che lo schermo
-        era gia' tornato all'invito, e una bottiglia rimessa dentro quella
-        finestra trovava il lavoro ancora in corso: guasto dichiarato.
+        Il thread di lavoro resterebbe vivo fino a sei secondi dopo che lo
+        schermo e' gia' tornato all'invito, e una bottiglia rimessa dentro
+        quella finestra troverebbe il lavoro ancora in corso: guasto dichiarato.
         """
         import threading
         import time
@@ -1621,7 +1652,7 @@ class TestAnnullamento:
         assert amelie.lingua == "it"
 
     def test_annullando_il_giro_non_riparte(self, amelie):
-        """Il difetto che nasce dalla correzione, se non ci si pensa.
+        """Il difetto che nasce dall'annullamento, se non ci si pensa.
 
         Tornando in attesa con la bottiglia ancora sul piatto, il rilancio che
         serve a riprendersi da un guasto fa ripartire la lettura al PRIMO
@@ -1664,11 +1695,11 @@ class TestAnnullamento:
 
 
 class TestIlDubbioNonSiChiede:
-    """Con un riconoscimento dubbio non c'e' piu' una schermata di scelta.
+    """Con un riconoscimento dubbio non c'e' una schermata di scelta.
 
-    Prima si mostravano tre candidati e si aspettavano dodici secondi: quasi
-    sempre nessuno toccava niente. Ora si dice il candidato meno specifico
-    (vedi `Matcher.il_piu_generico`) e si racconta subito.
+    Tre candidati e dodici secondi d'attesa non servono: quasi sempre nessuno
+    tocca niente. Si dice il candidato meno specifico (vedi
+    `Matcher.il_piu_generico`) e si racconta subito.
     """
 
     def _amelie(self):

@@ -9,7 +9,7 @@
 /* ===========================================================================
    LA SCHERMATA D'AVVIO.
 
-   Serve a coprire i quaranta secondi fra l'accensione e il dispositivo pronto.
+   Serve a coprire il tempo fra l'accensione e il dispositivo pronto.
    Non è una cortesia: senza, l'ospite vede la scrivania del sistema operativo,
    e poi una pagina bianca, e poi Amelie. Tre ambienti diversi per un oggetto
    che deve sembrarne uno solo.
@@ -125,8 +125,8 @@ svg { display: block; }
 .passi { visibility: hidden; margin-top: calc(var(--passo) * 2.5);
          display: flex; flex-direction: column; gap: 4px; }
 .passi .icone { height: 84px; margin-bottom: calc(var(--passo) * 1.1); }
-.passi .t { font-size: var(--t-voce); line-height: 1.15; }
-.passi .s { font-size: var(--t-piccolo); line-height: 1.25; }
+/* Una riga per passo, come `.p-frase` in index.html. */
+.passi .t { font-size: var(--t-sottotit); line-height: 1.2; }
 
 /* Se ci mette molto più del solito, lo dice. Un dispositivo che resta sul
    marchio per cinque minuti senza spiegare niente non si distingue da uno
@@ -167,7 +167,7 @@ svg { display: block; }
     </div>
     <div class="motto" aria-hidden="true">&nbsp;</div>
     <div class="filo"></div>
-    <div class="passi" aria-hidden="true"><div class="icone"></div><div class="t">&nbsp;</div><div class="s">&nbsp;<br>&nbsp;</div></div>
+    <div class="passi" aria-hidden="true"><div class="icone"></div><div class="t">&nbsp;</div></div>
   </section>
   <div id="lento">
     Ci vuole più del solito.<br>
@@ -194,9 +194,8 @@ const APP = "http://127.0.0.1:8080/";
 const PRONTO = "http://127.0.0.1:8080/pronto";
 const PERIODO_MS = 400;
 /* Quanto si aspetta prima di ammettere che ci sta mettendo troppo. Un avvio
-   sano arriva in cinquanta secondi scarsi, di cui una trentina per le due
-   voci; novanta secondi sono il doppio abbondante, quindi qui c'è davvero
-   qualcosa che non va. */
+   sano arriva in meno di un minuto, di cui buona parte per preparare le due
+   voci; novanta secondi vogliono dire che qualcosa non va davvero. */
 const PAZIENZA_MS = 90000;
 
 setTimeout(() => document.getElementById("lento").classList.add("visibile"),

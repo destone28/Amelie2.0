@@ -3,9 +3,11 @@
 
 Serve quando cambia `amelie.text.normalizza`. Le colonne `*_norm` e la tabella
 `ricerca` sono derivate: si ricavano dai nomi originali, che restano nel
-database. Ricostruirle da lì evita di riscaricare le sorgenti (centomila vini)
-e soprattutto **non tocca gli identificativi**, a cui sono agganciati i testi
-già pre-generati nella cache dei racconti.
+database. Ricavarle di nuovo da lì evita di rifare il database dalle sorgenti
+(centomila vini) e soprattutto **non tocca gli identificativi**, a cui sono
+agganciati i racconti pronti della tabella `racconto` (vedi
+`scripts/genera_corpus.py`) e le correzioni collegate a una bottiglia
+dell'archivio.
 
     python3 scripts/reindicizza.py [data/amelie.db]
 
@@ -21,6 +23,10 @@ RADICE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RADICE / "src"))
 
 from amelie.text import normalizza  # noqa: E402
+
+# Il peso di ogni ambito nell'indice. Il matcher lo somma alla somiglianza, in
+# centesimi: vedi `Candidato.punteggio`.
+PESO = {"vino": 100, "denominazione": 70, "tipologia": 50, "vitigno": 30}
 
 
 def reindicizza(con: sqlite3.Connection) -> tuple[int, int]:
@@ -45,19 +51,22 @@ def reindicizza(con: sqlite3.Connection) -> tuple[int, int]:
                                 (atteso, ident))
                     cambiati += 1
 
+    # L'indice e' l'accordo fra chi costruisce il database e il matcher.
+    # Il testo e' normalizzato come lo normalizza il dispositivo, e il peso
+    # dice quanto il record e' specifico: a parita' di somiglianza un vino
+    # batte una denominazione, e la denominazione batte le sue tipologie -
+    # «Barolo» letto su un'etichetta e' la denominazione, non la prima delle
+    # sue tipologie. Ogni record si indicizza col suo nome e basta.
     righe = []
     for vid, nome, cantina in con.execute(
             "SELECT id, nome, COALESCE(cantina,'') FROM vino"):
-        righe.append((f"{cantina} {nome}".strip(), "vino", vid, 100))
-    for tid, nome, den in con.execute(
-            "SELECT t.id, t.nome, d.nome FROM tipologia t"
-            " JOIN denominazione d ON d.id = t.denominazione_id"):
-        righe.append((nome if normalizza(den) in normalizza(nome) else f"{den} {nome}",
-                      "tipologia", tid, 70))
+        righe.append((f"{cantina} {nome}".strip(), "vino", vid, PESO["vino"]))
     for did, nome in con.execute("SELECT id, nome FROM denominazione"):
-        righe.append((nome, "denominazione", did, 50))
+        righe.append((nome, "denominazione", did, PESO["denominazione"]))
+    for tid, nome in con.execute("SELECT id, nome FROM tipologia"):
+        righe.append((nome, "tipologia", tid, PESO["tipologia"]))
     for gid, nome in con.execute("SELECT id, nome FROM vitigno"):
-        righe.append((nome, "vitigno", gid, 30))
+        righe.append((nome, "vitigno", gid, PESO["vitigno"]))
 
     con.execute("DELETE FROM ricerca")
     con.executemany(

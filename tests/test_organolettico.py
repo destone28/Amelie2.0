@@ -25,8 +25,9 @@ DB = RADICE / "data" / "amelie.db"
 
 
 def c_e_il_registro() -> bool:
-    """Le citazioni arrivano dalla fusione: un archivio più vecchio non ha
-    ancora la tabella, e il test di copertura non ha niente da contare."""
+    """Le citazioni arrivano dalla fusione col registro UE: un archivio
+    costruito senza quel passo non ha la tabella, e il test di copertura non
+    ha niente da contare."""
     if not DB.exists():
         return False
     c = sqlite3.connect(DB)
@@ -106,8 +107,8 @@ class TestAmbiti:
     def test_vivace_cambia_senso_col_campo(self, voc):
         """Alla vista è un colore vivido; in bocca è vivacità di gusto.
 
-        Era «lightly sparkling», e su un Menfi bianco fermo il racconto
-        inglese dichiarava un'effervescenza che né il disciplinare né i fatti
+        Reso «lightly sparkling», su un Menfi bianco fermo il racconto inglese
+        dichiarerebbe un'effervescenza che né il disciplinare né i fatti
         affermano: 110 citazioni del registro hanno «vivace» nel sapore, quasi
         tutte su tipologie ferme. «Lively» è vero per tutte e due.
         """
@@ -156,7 +157,7 @@ class TestNonSiInventa:
         assert not r.tradotto
 
     def test_l_inglese_e_dichiarato_traduzione(self, voc):
-        """«rosso rubino» reso «ruby red» è parola nostra, non del consorzio:
+        """«rosso rubino» reso «ruby red» è parola del dispositivo, non del consorzio:
         chi lo mostra deve poterlo dire."""
         assert voc.rendi("rosso rubino", "colore").tradotto
 

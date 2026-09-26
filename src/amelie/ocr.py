@@ -11,20 +11,19 @@ Due decisioni contro-intuitive, entrambe misurate:
 
 - **Si passa l'immagine a colori nativa**, non un canale singolo. L'idea di
   usare il canale blu (perché su etichetta rossa con testo bianco il rosso è
-  saturo) si è rivelata sbagliata: su etichetta oro su rosso scuro — combinazione
+  saturo) è sbagliata: su etichetta oro su rosso scuro — combinazione
   comunissima nei vini italiani di fascia alta — il canale blu produce **zero
   rilevamenti**, perché oro e rosso scuro riflettono entrambi poco blu. I
   modelli PP-OCR sono addestrati su tre canali e un canale replicato è un
   ingresso fuori distribuzione.
 
-- **Ridurre `limit_side_len` non riduceva niente.** Per un anno il parametro è
-  stato girato da 736 a 160 senza che il tempo cambiasse di un millesimo, e il
-  motivo sta nel pacchetto: con `limit_type="min"` il ridimensionamento
-  interviene solo `if min(h, w) < limit_side_len`, cioè **solo per ingrandire**.
-  Un ritaglio 756x1824 ha il lato corto già sopra qualunque soglia, e arrivava
-  alla rete intero. Misurato: 3960 ms, identici a 736 e a 160.
+- **Ridurre `limit_side_len` non riduce niente.** Il motivo sta nel
+  pacchetto: con `limit_type="min"` il ridimensionamento interviene solo
+  `if min(h, w) < limit_side_len`, cioè **solo per ingrandire**. Un ritaglio
+  756x1824 ha il lato corto già sopra qualunque soglia, e arriva alla rete
+  intero. Misurato: 3960 ms, identici con 736 e con 160.
 
-Da lì la forma attuale, che è **in due fasi** e vale quattro secondi:
+Per questo la lettura è **in due fasi**:
 
 1. **si trova** dove sta il testo su un'immagine che rimpiccioliamo NOI, perché
    il costo del rilevatore va col numero di pixel: 2835 ms a 768x1824, 198 ms a
@@ -34,10 +33,10 @@ Da lì la forma attuale, che è **in due fasi** e vale quattro secondi:
    dipende dalla risoluzione di partenza: si può cercare sul piccolo e leggere
    sul grande senza pagare niente.
 
-Misurato sul dispositivo, stessa etichetta: **3960 ms -> 585 ms**, con le
-stesse tre righe lette (`Leggiadro`, `Brut Rosé`, `METODO CLASSICO`).
+Misurato sul dispositivo, stessa etichetta: **3960 ms in una fase, 585 ms in
+due**, con le stesse tre righe lette (`Leggiadro`, `Brut Rosé`, `METODO CLASSICO`).
 
-Due trappole trovate per strada, e vanno ricordate perché non danno errore:
+Due trappole, da ricordare perché non danno errore:
 
 - **I parametri si danno alla costruzione, mai alla chiamata.** Passare
   `box_thresh` o `unclip_ratio` a `motore(...)` fa ricostruire il motore a ogni
@@ -46,9 +45,9 @@ Due trappole trovate per strada, e vanno ricordate perché non danno errore:
   ingresso lungo, e una sola riga di didascalia costava quanto tutta
   l'etichetta. Qui si normalizza a mano prima di leggere.
 
-Il classificatore di orientamento è disattivato: la camera ora è montata di
-lato e il fotogramma si raddrizza a monte, quindi sul supporto l'etichetta
-arriva dritta, e ogni riga risparmiata è tempo guadagnato su un Cortex-A53.
+Il classificatore di orientamento è disattivato: la camera è montata di lato e
+il fotogramma si raddrizza a monte, quindi l'etichetta arriva dritta, e ogni
+riga risparmiata è tempo guadagnato su un Cortex-A53.
 """
 
 from __future__ import annotations
@@ -71,20 +70,15 @@ class ImpostazioniOCR:
 
     # Lato corto a cui si riduce l'immagine PRIMA di cercarci dentro il testo.
     #
-    # Si chiamava `lato_massimo` e non era un massimo: finiva in
-    # `Det.limit_side_len` che con `limit_type="min"` è un MINIMO, e serviva
-    # solo a ingrandire. Il nome nuovo dice quello che il numero fa davvero.
-    #
-    # 320 è misurato, non scelto. Sotto, il rilevatore comincia a sbagliare le
-    # lettere - a 224 la stessa etichetta dà `SERARUOLS` dove a 320 dà
-    # `CERASUOLO` - e sopra costa e basta:
+    # Il numero e' misurato, non scelto. Sotto 320 il rilevatore comincia a
+    # sbagliare le lettere - a 224 la stessa etichetta dà `SERARUOLS` dove a
+    # 320 dà `CERASUOLO` - e sopra, a guardare UN'etichetta, costa e basta:
     #
     #     224   trova in 110 ms   `CERARUOLO` `SEARRUZZO`
     #     320   trova in 274 ms   `CERASUOLO` `DABRUZZO`
     #     756   trova in 2835 ms  le stesse due righe
     #
-    # Quel «sopra costa e basta» veniva da UN'etichetta. Sulle 139 vere, con
-    # l'OCR della board, non e' cosi':
+    # Sulle 139 etichette vere, con l'OCR della board, non e' cosi':
     #
     #                    cantina letta   nome letto   riconoscimento   tempo
     #     lato 320          112/139        72/139         87,1%        1,02 s
@@ -99,11 +93,11 @@ class ImpostazioniOCR:
     # VINICOLANLSALENTO`, con le parole incollate e il vitigno perso. Il
     # rilevatore ha una scala sua, e piu' pixel non vuol dire meglio.
     #
-    # E' stato provato anche a pagarli solo «quando serve» - un secondo colpo
-    # da vicino se il primo raccoglieva poco - e non serve a niente: un
-    # etichetta che si legge da' quasi sempre le tre parole che bastano, il
-    # secondo colpo non scatta mai, e la misura e' identica a 320 fino
-    # all'ultima cifra. Meglio un numero solo, misurato.
+    # Pagarli solo «quando serve» - un secondo colpo da vicino se il primo
+    # raccoglie poco - non serve a niente: un'etichetta che si legge da' quasi
+    # sempre le tre parole che bastano, il secondo colpo non scatta mai, e la
+    # misura e' identica a 320 fino all'ultima cifra. Meglio un numero solo,
+    # misurato.
     lato_rilevatore: int = 480
 
     # Quante righe si leggono, delle tante che il rilevatore trova.
@@ -123,28 +117,28 @@ class ImpostazioniOCR:
 
     # Quanto deve essere sicura una regione per diventare una riga, e di quanto
     # si allarga il riquadro prima di ritagliarlo. Sono i default di PP-OCR:
-    # provato ad allargare fino a 2,5 per recuperare le prime lettere mangiate
-    # («OSECCO» per PROSECCO), e non serviva - a 320 il riquadro è già giusto,
-    # era la risoluzione a mancare.
+    # allargare fino a 2,5 per recuperare le prime lettere mangiate («OSECCO»
+    # per PROSECCO) non serve - il riquadro è già giusto, quello che manca in
+    # quei casi è la risoluzione.
     soglia_riquadro: float = 0.5
     allargamento: float = 1.5
 
     # Le reti piccole invece di quelle normali.
     #
-    # Misurato sulla stessa etichetta, dopo aver sistemato tutto il resto:
+    # Misurato sulla stessa etichetta, a parità di tutto il resto:
     #
     #     PP-OCRv5 mobile   trova 381 ms   legge 786 ms
     #     PP-OCRv6 small    trova 374 ms   legge 905 ms
     #     PP-OCRv6 tiny     trova 261 ms   legge 255 ms
     #
-    # Le tre righe lette sono le stesse. Il dizionario non c'entra: provato a
-    # sostituire il riconoscitore cinese - seimila ideogrammi nell'ultimo
-    # strato - con quello latino, e si risparmiavano sessanta millesimi su
+    # Le tre righe lette sono le stesse. Il dizionario non c'entra:
+    # sostituendo il riconoscitore cinese - seimila ideogrammi nell'ultimo
+    # strato - con quello latino si risparmiano sessanta millesimi su
     # seicentonovanta. È la taglia della rete, non l'alfabeto.
     reti_piccole: bool = True
 
     # Quante parole utili bastano per non provare altri versi del fotogramma.
-    # Tre è il minimo che sull'etichetta vera ha dato un riconoscimento:
+    # Tre è il minimo che sull'etichetta vera basta a un riconoscimento:
     # «ULISS CERASUOLO D'ABRUZZO». Con meno, girare costa qualche secondo e
     # può far passare il dispositivo dal non riconoscere niente al
     # riconoscere.
@@ -158,8 +152,8 @@ class ImpostazioniOCR:
     #     etichetta letta a meta' `1930 | Brunello | Affinato inboti` 2 parole
     #
     # Nel primo caso girare recupera tutto e vale i secondi che costa; nel
-    # secondo non recupera niente - la lettura buona era gia' la prima, e il
-    # vino e' stato riconosciuto lo stesso. Una parola sola non e' una lettura,
+    # secondo non recupera niente - la lettura buona e' gia' la prima, e il
+    # vino si riconosce lo stesso. Una parola sola non e' una lettura,
     # e' un frammento, e un frammento e' proprio cio' che da' un verso
     # sbagliato.
     parole_che_sono_una_lettura: int = 2
@@ -169,35 +163,30 @@ class ImpostazioniOCR:
     # non si sta guardando un'etichetta, si sta guardando una stanza.
     righe_che_bastano: int = 8
 
-    # Il classificatore di orientamento. Era spento, poi acceso, ora di nuovo
-    # spento - e le tre volte per ragioni diverse, che vale la pena distinguere.
+    # Il classificatore di orientamento. Spento, perché la camera è montata
+    # di lato e il fotogramma si raddrizza in `capture`: il testo arriva già
+    # dritto, e il classificatore non ha niente da raddrizzare. Con e senza si
+    # legge lo stesso - `Leggiadro`, `Brut Rosé`, `METODO CLASSICO`.
     #
-    # Era spento con la motivazione che la bottiglia sta in piedi e il testo non
-    # può essere capovolto.
+    # Non è spento perché «la bottiglia sta in piedi e il testo non può essere
+    # capovolto»: con la camera montata dritta quella premessa è falsa, e
+    # spegnerlo costa quasi tutto. Su una bottiglia il testo dell'etichetta
+    # non è quasi mai orizzontale nel fotogramma: la bottiglia è cilindrica e
+    # appoggiata, la camera la guarda dal basso e di sbieco, e su un'etichetta
+    # come «NERO D'AVOLA / SICILIA» scritta lungo l'asse il testo arriva
+    # ruotato di novanta gradi.
     #
-    # **La motivazione era sbagliata, e spegnerlo costava quasi tutto.** Su una
-    # bottiglia il testo dell'etichetta non è quasi mai orizzontale nel
-    # fotogramma: la bottiglia è cilindrica e appoggiata, la camera la guarda
-    # dal basso e di sbieco, e su un'etichetta come «NERO D'AVOLA / SICILIA»
-    # scritta lungo l'asse il testo arriva ruotato di novanta gradi.
-    #
-    # Misurato sugli stessi tre scatti:
+    # Misurato con la camera montata dritta, sugli stessi tre scatti:
     #
     #     spento    `DOLA | SILIA | NER`        vitigno, 61   6,6 s
     #     acceso    `D'AVOLA | SICILIA | NERO`  tipologia, 87 4,9 s
     #
     # Più accurato **e** più veloce: il classificatore raddrizza il ritaglio
     # prima di riconoscerlo, e un ritaglio dritto si legge meglio e prima di uno
-    # storto. Non era un costo, era un risparmio.
+    # storto. Lì non è un costo, è un risparmio.
     #
-    # Quella misura è stata presa con la camera montata orizzontale. Ora la
-    # camera è montata di lato e il fotogramma si raddrizza in `capture`: il
-    # testo arriva già dritto, e il classificatore non ha più niente da
-    # raddrizzare. Rimesso a spento e verificato che si legga lo stesso -
-    # `Leggiadro`, `Brut Rosé`, `METODO CLASSICO` con e senza.
-    #
-    # Resta acceso come opzione, e resta collegato: se un giorno la camera
-    # tornasse dritta, basta questo campo.
+    # Resta collegato: con la camera montata dritta basta accendere questo
+    # campo.
     usa_classificatore: bool = False
 
     # Sotto questa confidenza la riga è quasi sempre rumore (bordi
@@ -281,9 +270,9 @@ class Lettura:
 
         E' la lettura che conta come lettura. Un calendario dietro al piatto
         da' cinque righe di numeri a ogni scatto: righe, ma niente da
-        riconoscere. Contarle come una lettura riuscita azzerava i tentativi,
-        e il dispositivo scandiva ogni sei secondi per sempre - visto sul
-        dispositivo, con carico a 3, davanti a un piatto vuoto.
+        riconoscere. Contarle come una lettura riuscita azzererebbe i
+        tentativi, e davanti a un piatto vuoto il dispositivo scandirebbe ogni
+        sei secondi per sempre, con il carico a 3.
         """
         return _parole_utili(self) > 0
 
@@ -417,8 +406,8 @@ class Lettore:
         letto = motore.recognize_txt(ritagli)
         # I due numeri separati, perche' si curano in modi diversi: il primo
         # scende abbassando la risoluzione del provino, il secondo leggendo
-        # meno righe. Confonderli ha gia' fatto perdere un anno - vedi la
-        # premessa del modulo.
+        # meno righe. Confonderli porta a girare la manopola sbagliata - vedi
+        # la premessa del modulo.
         log.info("OCR: %d righe trovate in %.0f ms, %d lette in %.0f ms",
                  len(riquadri), trovate_in * 1000, len(scelti),
                  (time.perf_counter() - inizio) * 1000)
@@ -442,19 +431,18 @@ class Lettore:
     def allarga(self, lettura: Lettura, intero, posto) -> tuple[Lettura, Any]:
         """Rilegge più largo quando il ritaglio ha tagliato l'etichetta.
 
-        Sul dispositivo,con le bottiglie tenute in mano
-        davanti alla camera: in più di metà delle scansioni il titolo
-        dell'etichetta toccava il bordo del ritaglio. «LAMBRUSCO GRASPAROSSA DI
-        CASTELVETRO» arrivava all'OCR come «SPAROSSA DI CAS», l'Asti come
-        «STI». Il ritaglio c'è per buone ragioni - fuori c'è la stanza, e la
-        stanza costa - ma quando una riga di parole ne tocca il bordo, il
-        ritaglio ha sbagliato, e il fotogramma intero sta lì accanto.
+        Con le bottiglie tenute in mano davanti alla camera, in più di metà
+        delle scansioni il titolo dell'etichetta tocca il bordo del ritaglio.
+        «LAMBRUSCO GRASPAROSSA DI CASTELVETRO» arriva all'OCR come «SPAROSSA DI
+        CAS», l'Asti come «STI». Il ritaglio c'è per buone ragioni - fuori c'è
+        la stanza, e la stanza costa - ma quando una riga di parole ne tocca il
+        bordo, il ritaglio ha sbagliato, e il fotogramma intero sta lì accanto.
 
         Si rilegge il ritaglio allargato fino al bordo del fotogramma, dalla
         parte dove le righe toccano, e alla stessa scala della prima lettura:
         le lettere restano grandi come prima. Rileggere solo la fascia delle
-        righe tagliate è stato provato, e non conviene: sulla board costa 1,5 s
-        invece di 2,8, ma perde le righe rimaste fuori del tutto - «ASTI» sopra
+        righe tagliate non conviene: sulla board costa 1,5 s invece di 2,8,
+        ma perde le righe rimaste fuori del tutto - «ASTI» sopra
         un «VINO SPUMANTE» che si leggeva - e in simulazione, su 74 scansioni
         vere ristrette apposta, riconosce 15 bottiglie invece di 18.
 
@@ -512,8 +500,8 @@ class Lettore:
         """Una riga portata all'altezza di lettura, con un tetto alla larghezza.
 
         Il tetto è la parte che il pacchetto non mette: lì la larghezza segue il
-        rapporto del ritaglio senza limiti, e una didascalia lunga costava da
-        sola quanto tutta l'etichetta. Tagliata a 320 si legge uguale - stesso
+        rapporto del ritaglio senza limiti, e una didascalia lunga costerebbe
+        da sola quanto tutta l'etichetta. Tagliata a 320 si legge uguale - stesso
         testo, misurato riga per riga - e costa come le altre.
         """
         import cv2
@@ -529,20 +517,19 @@ class Lettore:
     def leggi_comunque(self, immagine) -> Lettura:
         """Legge, e se il raccolto è povero riprova girando il fotogramma.
 
-        Il verso giusto dipende da come la camera è montata, e il montaggio
-        cambia: sul banco era una cosa, nella scocca stampata un'altra. Con la
-        rotazione sbagliata l'OCR non legge quasi niente — misurato sulla
-        stessa bottiglia, stesso fotogramma:
+        Il verso giusto dipende da come la camera è montata, e un montaggio
+        diverso da quello che dice `ImpostazioniCamera.rotazione` basta a
+        sbagliarlo. Con la rotazione sbagliata l'OCR non legge quasi niente —
+        misurato sulla stessa bottiglia, stesso fotogramma:
 
             0 gradi     ULISS · CERASUOLO · D'ABRUZZO   -> riconosciuto, 87
             90 gradi    D'ABRUZZC                       -> niente
             180 gradi   3IMER · DRZZZO · CEAVOLO        -> niente
             270 gradi   3引8到3                          -> niente
 
-        Un'ora di dispositivo che «non riconosce le bottiglie» era questo. Si
-        può correggere il parametro, e si fa; ma il parametro può tornare
-        sbagliato al prossimo montaggio, e allora il dispositivo torna muto
-        senza dire perché.
+        Un dispositivo che «non riconosce le bottiglie» può essere solo questo.
+        Il parametro si corregge; ma può tornare sbagliato al prossimo
+        montaggio, e allora il dispositivo ammutolisce senza dire perché.
 
         Qui si prova, e si prova solo QUANDO SERVE: se il primo verso dà già
         parole utili non si gira niente e non si paga nulla. Quando invece non
@@ -572,9 +559,9 @@ class Lettore:
             #
             # Misurato sul dispositivo su «Azienda Agricola Brunello 1930»:
             # letto `1930 | Brunello | Affinato inboti`, due parole utili
-            # contro le tre che bastano per fermarsi, e il ripiego girava tre
-            # volte per 4,6 secondi - per poi tenere comunque la prima lettura,
-            # che era gia' quella che ha fatto riconoscere il vino.
+            # contro le tre che bastano per fermarsi. Senza questo controllo il
+            # ripiego gira tre volte per 4,6 secondi - per poi tenere comunque
+            # la prima lettura, che e' gia' quella che fa riconoscere il vino.
             return migliore
         if not _c_e_una_lettera(migliore):
             # Righe, ma nemmeno una lettera: numeri e frammenti. Girare il
@@ -582,8 +569,9 @@ class Lettore:
             #
             # Misurato sul dispositivo, piatto vuoto e un calendario dietro:
             # l'OCR legge `20 21 19 22 24`, nessuna di queste conta come parola
-            # utile, e il ripiego girava tre volte per **5,7 secondi** su una
-            # scena senza etichette. Un verso sbagliato non dà cifre, dà
+            # utile, e senza questo controllo il ripiego gira tre volte per
+            # **5,7 secondi** su una scena senza etichette. Un verso sbagliato
+            # non dà cifre, dà
             # spazzatura fatta di lettere — `D'ABRUZZC`, `3IMER · DRZZZO` —
             # ed è su quella che vale la pena riprovare.
             return migliore
@@ -593,7 +581,7 @@ class Lettore:
             # Il verso sbagliato non dà il vuoto, dà spazzatura - misurato:
             # `D'ABRUZZC` a 90 gradi, `3IMER · DRZZZO · CEAVOLO` a 180. Il
             # vuoto è il piatto vuoto, ed è il caso più frequente di tutti:
-            # senza questa riga ogni scansione a vuoto costava quattro
+            # senza questa riga ogni scansione a vuoto costa quattro
             # passaggi di OCR invece di uno, e sul dispositivo sono ventiquattro
             # secondi contro sei - abbastanza da far scadere la scansione e
             # dichiarare un guasto al posto di un piatto vuoto.
@@ -607,10 +595,10 @@ class Lettore:
                     break
         # Il tempo dichiarato e' quello di TUTTO, non dell'ultimo giro.
         #
-        # Non e' una finezza: a giornale comparivano «1,1 s» per una lettura
-        # che ne era costati 4,6, perche' `durata_s` era quella della `leggi`
-        # che aveva vinto. Il costo del ripiego era invisibile proprio a chi
-        # doveva accorgersene.
+        # Non e' una finezza: con la `durata_s` della sola `leggi` che ha
+        # vinto, a giornale comparirebbe «1,1 s» per una lettura costata 4,6,
+        # e il costo del ripiego resterebbe invisibile proprio a chi deve
+        # accorgersene.
         migliore.durata_s = time.perf_counter() - inizio
         return migliore
 
@@ -643,7 +631,7 @@ def _contrasto_normalizzato(immagine):
 BORDO_CHE_TAGLIA = 0.03
 # Quante lettere deve avere una riga perché valga la pena inseguirla oltre il
 # bordo. Due e non tre: una parola tagliata è spesso solo il suo inizio, e
-# «ST» sul bordo era l'«ASTI» di un'etichetta tenuta di sbieco.
+# «ST» sul bordo può essere l'«ASTI» di un'etichetta tenuta di sbieco.
 LETTERE_DI_UNA_RIGA = 2
 
 

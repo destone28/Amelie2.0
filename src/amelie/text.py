@@ -13,7 +13,7 @@ Due lavori distinti, che vanno tenuti separati:
 
 - `estrai_annata()` fa il contrario: cerca le cifre, e per trovarle deve
   *riparare* le lettere che l'OCR ha messo al posto dei numeri. "2Ol7" è un
-  1 su 4 nelle nostre prove e senza riparazione non viene letto affatto.
+  caso su 4 nelle prove, e senza riparazione non viene letto affatto.
 """
 
 from __future__ import annotations
@@ -53,10 +53,10 @@ def spoglia_accenti(s: str) -> str:
 # Quante forme normalizzate si tengono a mente.
 #
 # Non e' un'ottimizzazione di principio, e' una misura: cercare tre parole in
-# archivio chiamava `normalizza` cinquecentoventi volte, quasi sempre sulle
+# archivio chiama `normalizza` cinquecentoventi volte, quasi sempre sulle
 # stesse stringhe - i nomi dei candidati, ripassati a ogni livello della
-# cascata - e quelle cinquecentoventi volte costavano centoundici millesimi
-# sui quattrocento della ricerca intera. La funzione e' pura e l'archivio non
+# cascata - e senza memoria quelle cinquecentoventi chiamate costano
+# centoundici millesimi sui quattrocento della ricerca intera. La funzione e' pura e l'archivio non
 # cambia mentre il dispositivo e' acceso: ricordare e' lecito.
 #
 # Il tetto tiene il ricordo largo quanto un archivio di candidati e non di
@@ -97,12 +97,13 @@ def _normalizza(s: str, collassa_confusioni: bool) -> str:
 def _sciogli_punti(s: str) -> str:
     """Toglie i punti dagli acronimi, ma non incolla parole diverse.
 
-    Togliere ogni punto sbriciolava «D.O.C.G.» in quattro token da una lettera,
-    quindi si toglievano tutti. Ma allora «COMM.G.B.BURLOTTO», che l'OCR legge
-    senza spazi, diventava l'unico token «commgbburlotto», mentre lo stesso
-    produttore nel database - scritto «Comm. G.B. Burlotto», con gli spazi -
-    era «comm gb burlotto». Lo stesso nome, due forme diverse, nessun riscontro:
-    il Barolo Vigneto Cannubi di Burlotto era in archivio e non veniva trovato.
+    Trattare ogni punto come un separatore sbriciola «D.O.C.G.» in quattro
+    token da una lettera. Toglierli tutti non va meglio: «COMM.G.B.BURLOTTO»,
+    che l'OCR legge senza spazi, diventerebbe l'unico token «commgbburlotto»,
+    mentre lo stesso produttore nel database - scritto «Comm. G.B. Burlotto»,
+    con gli spazi - e' «comm gb burlotto». Lo stesso nome, due forme diverse,
+    nessun riscontro: il Barolo Vigneto Cannubi di Burlotto, che in archivio
+    c'e', non si troverebbe.
 
     La regola: il punto incolla fra sigle di una lettera e davanti a un
     troncamento breve - «F.lli» sta per Fratelli, «S.to» per Santo, e vanno

@@ -32,7 +32,7 @@ def test_ogni_indirizzo_della_pagina_ha_una_rotta(rotte):
     pulsante semplicemente non fa niente. Per quelli composti - «/lingua/» piu'
     il codice - basta che esista una rotta con quel prefisso."""
     chiamate = re.findall(r'fetch\("([^"]+)"(\s*\+)?', PAGINA)
-    assert len(chiamate) >= 10, "la ricerca dei fetch non trova piu' niente"
+    assert len(chiamate) >= 10, "la ricerca dei fetch non trova le chiamate della pagina"
     for indirizzo, composto in chiamate:
         if "?" in indirizzo:
             # «/correzione/cerca?q=» + il testo: la parte variabile e' la query.
@@ -44,8 +44,8 @@ def test_ogni_indirizzo_della_pagina_ha_una_rotta(rotte):
 
 
 def test_il_pulsante_della_correzione_sta_nell_intestazione():
-    """In coda al racconto finiva sotto la sfumatura, o fuori vista finche' il
-    testo non scorreva fino in fondo."""
+    """In coda al racconto finirebbe sotto la sfumatura, o fuori vista finche'
+    il testo non scorre fino in fondo."""
     intestazione = re.search(r'<header class="intestazione">(.*?)</header>', PAGINA, re.S)
     assert intestazione and 'id="r-correggi"' in intestazione.group(1)
 
@@ -58,7 +58,7 @@ def test_la_tastiera_ha_tutte_le_accentate():
 
 def test_segui_conosce_la_sfumatura_vera():
     """`segui()` tiene la frase detta fra le due sfumature: se la maschera
-    cambia e le sue costanti no, la frase torna a finire dietro ai comandi."""
+    cambia e le sue costanti no, la frase finisce dietro ai comandi."""
     su, giu = map(int, re.search(r"const SFUMA_SU = (\d+), SFUMA_GIU = (\d+);",
                                  PAGINA).groups())
     maschera = re.search(r"\.testo\.scorso \{\s*mask-image: linear-gradient\((.*?)\);",
@@ -72,12 +72,11 @@ def test_segui_conosce_la_sfumatura_vera():
 
 
 def test_la_maiuscola_non_ricostruisce_la_tastiera():
-    """Ricostruire i tasti a ogni cambio di maiuscola faceva sparire il ⌫ da
-    sotto il dito: un tocco che svuotava il campo riaccendeva la maiuscola, il
-    ripetitore del tasto vecchio partiva dopo 450 ms e non lo fermava piu'
-    nessuno. Sul dispositivo: «il cancella sembra sempre premuto, non riesco a
-    scrivere». Le maiuscole cambiano le scritte; i tasti si ricostruiscono solo
-    cambiando strato, lettere o simboli."""
+    """Ricostruire i tasti a ogni cambio di maiuscola farebbe sparire il ⌫ da
+    sotto il dito: un tocco che svuota il campo riaccende la maiuscola, il
+    ripetitore del tasto vecchio parte dopo 450 ms e non lo ferma nessuno, e
+    il cancella sembra sempre premuto. Le maiuscole cambiano le scritte; i
+    tasti si ricostruiscono solo cambiando strato, lettere o simboli."""
     maiuscola = re.search(r"function aggiornaMaiuscola\(\) \{(.*?)\n\}", PAGINA, re.S).group(1)
     assert "disegnaTastiera" not in maiuscola
     batti = re.search(r"function batti\(t\) \{(.*?)\n\}", PAGINA, re.S).group(1)
@@ -104,7 +103,7 @@ def test_la_home_riceve_motto_e_tre_passi():
             assert m["motto"].strip(), lingua
             assert len(m["passi"]) == 3
             assert all(p["verbo"].strip() and p["resto"].strip() for p in m["passi"]), lingua
-        # Le tre frasi della home, col verbo in grassetto.
+        # Le tre frasi della home in italiano, col verbo in grassetto.
         a.lingua = "it"
         a._manda_lingua()
         assert [f"{p['verbo']} {p['resto']}" for p in detti[-1]["passi"]] == [
@@ -114,9 +113,9 @@ def test_la_home_riceve_motto_e_tre_passi():
         a.narratore.chiudi()
 
 
-def test_nessuna_goccia_rimasta():
-    """La goccia rossa si leggeva come sangue: il motivo e' il calice. Il
-    colore della goccia non deve sopravvivere in nessuna delle due pagine."""
+def test_nessuna_goccia_nelle_pagine():
+    """Una goccia rossa si legge come sangue: il motivo e' il calice. La
+    goccia e il suo colore non compaiono in nessuna delle due pagine."""
     avvio = (RADICE / "src/amelie/ui/static/avvio.html").read_text(encoding="utf-8")
     for testo in (PAGINA, avvio):
         assert "--goccia" not in testo and 'class="goccia"' not in testo
@@ -133,8 +132,8 @@ def test_le_proposte_stanno_al_posto_della_descrizione():
 
 
 def test_il_calice_della_home_sta_fermo():
-    """Il vino che ondeggiava e' stato tolto: anche a scatti teneva acceso un
-    5 % di core a schermata ferma - a sessanta fotogrammi erano 80 - e la
+    """Il vino nel calice non si anima: un'onda, anche a scatti, tiene acceso
+    un 5 % di core a schermata ferma - a sessanta fotogrammi sono 80 - e la
     schermata d'attesa resta accesa tutta la sera, a batteria. Misurato sulla
     board."""
     assert "ondeggia" not in PAGINA
@@ -148,7 +147,8 @@ def test_il_pulsante_per_insegnare_la_bottiglia_sta_nell_avviso():
 
 
 def test_nessuna_schermata_puo_togliere_la_bottiglia():
-    """«Puo' togliere la bottiglia» non c'e' piu', in nessuna lingua."""
+    """Nessuna frase invita l'ospite a togliere la bottiglia, in nessuna
+    lingua."""
     import json
     frasi = json.loads((RADICE / "data/lessico/frasi.json").read_text(encoding="utf-8"))
     assert "rinuncia" not in frasi["schermo"]

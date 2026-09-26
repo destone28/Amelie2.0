@@ -2,9 +2,9 @@
 
 Quando una bottiglia non viene riconosciuta, il caso sparisce. L'ospite tocca
 qualcosa o se ne va, il tavolo dopo arriva con un'altra bottiglia, e chi deve
-correggere non sa nemmeno che è successo. Il pulsante «nessuno di questi»
-copre il caso in cui qualcuno se ne accorge e lo segnala; questo copre tutti
-gli altri, che sono la maggioranza.
+correggere non sa nemmeno che è successo. Le correzioni a mano coprono il
+caso in cui qualcuno se ne accorge sul momento; il giornale copre tutti gli
+altri, che sono la maggioranza.
 
 Si annota **ogni** scansione, riuscita o no. Una riga per scansione in un file
 che si legge da fuori, e accanto il fotogramma vero: senza l'immagine si sa
@@ -113,7 +113,7 @@ class Giornale:
 
         base = quando.strftime("%Y%m%d-%H%M%S-%f")[:-3]
         nome = base + ".jpg"
-        # Due scatti nello stesso millesimo si sovrascrivevano: sulla board
+        # Due scatti nello stesso millesimo si sovrascriverebbero: sulla board
         # non succede, su un PC il test lo fa sei volte di fila.
         n = 1
         while (self.cartella / nome).exists():

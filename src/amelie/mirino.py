@@ -19,11 +19,11 @@ mostra le tre cose che decidono se l'etichetta verrà letta.
    parte e mostra le righe trovate, poi le passa al riconoscitore e mostra che
    cosa cerca nel database e cosa trova.
 
-Questo modulo sta nel pacchetto, e non nello script che lo usava, perché adesso
+Questo modulo sta nel pacchetto, e non nello script `scripts/mirino.py`, perché
 lo usa anche il dispositivo: il mirino si accende dallo schermo, dal pannello
 delle impostazioni, e si vede sul vetro senza un PC e senza un cavo. Una sola
 copia della logica, perché due copie divergono e quella che diverge è sempre
-quella che sta sul dispositivo in sala.
+quella che sta sul dispositivo installato.
 
 **L'OCR non può girare dentro al flusso video.** Su questa board costa alcuni
 secondi: bloccherebbe l'immagine. Gira su un filo suo, sull'ultimo fotogramma
@@ -60,12 +60,12 @@ class LetturaContinua:
         self._matcher = matcher
         # Chi ce li presta se li riprende. Ma il caso normale è che nessuno li
         # presti: **il mirino apre i suoi**, e non è uno spreco, è correttezza.
-        # Riusare quelli del dispositivo sembrava un risparmio — un motore OCR
-        # in meno in memoria, una connessione al database in meno — e sul
-        # dispositivo vero è durato dodici secondi: accendendo il mirino mentre
-        # una scansione era ancora in corso, due fili si sono trovati dentro
-        # allo stesso motore ONNX e alla stessa connessione SQLite, che non è
-        # una cosa che si fa. Il mirino resta muto, e non si capisce perché.
+        # Riusare quelli del dispositivo sembra un risparmio — un motore OCR
+        # in meno in memoria, una connessione al database in meno — ma
+        # accendendo il mirino mentre una scansione è ancora in corso, due fili
+        # si troverebbero dentro allo stesso motore ONNX e alla stessa
+        # connessione SQLite, che non è una cosa che si fa. Il mirino resta
+        # muto, e non si capisce perché.
         self._miei = lettore is None or matcher is None
         self._ultimo = None
         self._lucchetto = threading.Lock()
@@ -152,10 +152,10 @@ def disegna(frame, camera):
 
     Restituisce `(jpeg, ritaglio, nitidezza)`. Il ritaglio è una **copia**, e
     non è un dettaglio: il ritaglio è una vista sullo stesso blocco di memoria,
-    quindi il rettangolo e la scritta disegnati qui finivano dentro
-    all'immagine che l'OCR stava per leggere. La prima riga riconosciuta era
-    «nitidezza 60 (soglia 40)», cioè la sovrimpressione di questo strumento:
-    uno strumento di misura che misura se stesso.
+    e senza la copia il rettangolo e la scritta disegnati qui finirebbero
+    dentro all'immagine che l'OCR sta per leggere. La prima riga riconosciuta
+    sarebbe «nitidezza 60 (soglia 40)», cioè la sovrimpressione di questo
+    strumento: uno strumento di misura che misura se stesso.
     """
     import cv2
 
@@ -186,10 +186,10 @@ def disegna(frame, camera):
 class Mirino:
     """Tiene un filo che acquisisce, e tutti gli altri leggono l'ultimo pronto.
 
-    Prima i fotogrammi li produceva chi guardava il video, e da lì venivano due
-    difetti: l'OCR non partiva finché non si apriva la pagina — restava a
-    «attendo il primo fotogramma» — e due finestre aperte si contendevano la
-    camera prendendo mezzi fotogrammi a testa.
+    I fotogrammi non li produce chi guarda il video. Se fosse così, l'OCR non
+    partirebbe finché non si apre la pagina — resterebbe a «attendo il primo
+    fotogramma» — e due finestre aperte si contenderebbero la camera prendendo
+    mezzi fotogrammi a testa.
     """
 
     def __init__(self, camera, lettura: LetturaContinua | None = None,
@@ -197,7 +197,7 @@ class Mirino:
         self.camera = camera
         self.lettura = lettura
         # Chi sa dove sta la bottiglia. Col mirino acceso il ciclo e' fermo e
-        # nessuno glielo chiede piu': glielo si chiede da qui, altrimenti il
+        # nessun altro glielo chiede: glielo si chiede da qui, altrimenti il
         # rettangolo disegnato sarebbe quello fisso mentre il dispositivo, a
         # ciclo acceso, ne userebbe un altro - e si tarerebbe contro una linea
         # che non decide niente.

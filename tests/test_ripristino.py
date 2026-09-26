@@ -1,7 +1,8 @@
-"""Il ripristino: cio' che prima si otteneva solo staccando la corrente.
+"""Il ripristino: riportare il dispositivo all'invito senza staccare la corrente.
 
-Una serala camera ha smesso di dare fotogrammi e ogni bottiglia e'
-finita in guasto per un'ora, finche' qualcuno non ha spento e riacceso.
+Una camera che smette di dare fotogrammi manda in guasto ogni bottiglia,
+finche' qualcuno non spegne e riaccende. Il ripristino fa lo stesso senza
+toccare la spina: a comando, o da solo quando i guasti si ripetono.
 """
 from __future__ import annotations
 
@@ -52,8 +53,9 @@ class TestRipristinare:
         assert any(m.get("tipo") == "stato" and m.get("vista") == "attesa" for m in detti)
 
     def test_un_lavoro_che_non_torna_si_lascia_andare(self, amelie, monkeypatch):
-        """Col lavoro «in corso» ogni bottiglia era un guasto: `_avvia` non ne
-        faceva partire un altro. Dopo il ripristino la pipeline e' libera."""
+        """Con un lavoro rimasto «in corso» ogni bottiglia sarebbe un guasto,
+        perche' `_avvia` non ne fa partire un altro: dopo il ripristino la
+        pipeline e' libera."""
         fermo = threading.Event()
         appeso = threading.Thread(target=fermo.wait, daemon=True)
         appeso.start()
@@ -121,7 +123,8 @@ def test_la_rotta_c_e(amelie):
 
 class TestIlLavoroDiPrima:
     """La bottiglia «sparisce» un istante durante una lettura e torna: la
-    lettura di prima sta ancora finendo. Era un guasto al primo colpo."""
+    lettura precedente sta ancora finendo, e non deve diventare un guasto al
+    primo colpo."""
 
     def _occupa(self, amelie, secondi):
         fine = threading.Event()
@@ -137,7 +140,7 @@ class TestIlLavoroDiPrima:
         amelie._avvia(fatto.set)
         assert amelie.macchina.stato is Stato.SCANSIONE, "non e' un guasto"
         fine.set()
-        assert fatto.wait(3), "finito quello di prima, il nuovo parte"
+        assert fatto.wait(3), "finito il lavoro precedente, il nuovo parte"
 
     def test_se_non_finisce_e_un_guasto(self, amelie, monkeypatch):
         from amelie import app as modulo

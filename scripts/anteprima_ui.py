@@ -6,14 +6,13 @@
 Prende `index.html`, sostituisce il flusso di eventi vero con uno finto che
 riproduce una sequenza di messaggi, e rende la pagina con Chromium senza
 finestra. Serve per le viste che dal vetro non si raggiungono a comando: il
-racconto col player, il guasto, il caso in cui la
-lingua scelta non ha una voce.
+racconto col player, il guasto, il caso in cui la lingua scelta non ha una
+voce.
 
 Il carattere e' quello vero: EB Garamond viaggia con la pagina, in
-`ui/static/fonts`, e qui lo si carica da li'. Prima l'anteprima usciva col font
-di ripiego della macchina che la eseguiva - e il dispositivo col suo, un altro
-ancora - quindi nessuna delle due mostrava il disegno. Adesso sono la stessa
-cosa, e la prova sulla board serve per la luce e per il dito, non per il testo.
+`ui/static/fonts`, e qui lo si carica da li'. Anteprima e dispositivo mostrano
+lo stesso testo con lo stesso disegno, quindi la prova sulla board serve per la
+luce e per il dito, non per il testo.
 """
 from __future__ import annotations
 
@@ -387,7 +386,7 @@ FINTA = """
 <script>
 // I messaggi partono a carattere caricato, come sul dispositivo, dove il
 // racconto arriva secondi dopo la pagina: misurato col carattere di ripiego,
-// lo scorrimento del testo si fermava a righe che col Garamond non ci sono.
+// lo scorrimento del testo si fermerebbe a righe che col Garamond non ci sono.
 class EventSource {
   constructor() {
     const manda = () => MESSAGGI.forEach(m => {

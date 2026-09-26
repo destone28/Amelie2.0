@@ -1,11 +1,39 @@
 #!/usr/bin/env python3
 """Costruisce il database locale dei vini.
 
-    python3 data/build_db.py            -> data/amelie.db
+    python3 data/build_db.py                    -> data/amelie.db, tutto
+    python3 data/build_db.py --senza-racconti   solo i fatti, senza `racconto`
+    python3 data/build_db.py --solo-vitigni     riapplica solo data/vitigni.json
 
 Il dispositivo non si connette mai a nulla: tutto quello che sa deve stare qui
 dentro. Il database si ricostruisce dagli snapshot versionati in data/sources/,
 quindi fra un anno lo si rifà identico anche se gli endpoint non rispondono più.
+Serve solo la libreria standard di Python, senza pacchetti da installare: e' il
+primo passo di un'installazione pulita.
+
+I passi, nell'ordine, e perche' l'ordine conta:
+
+1. denominazioni e tipologie DOP da figshare;
+2. vini commerciali da X-Wines, ciascuno agganciato alla sua denominazione;
+3. le schede dei vitigni scritte a mano, e i nomi italiani dei vitigni di
+   X-Wines che mancano («Moscato»);
+4. le denominazioni del registro UE che figshare non ha - quasi tutte IGP - e la
+   menzione DOCG, DOC o IGT di ognuna. Vengono DOPO i vini: l'aggancio dei vini
+   resta quello alle sole DOP, e gli identificativi delle denominazioni figshare
+   non si spostano;
+5. la regione di ogni denominazione, dalla mappa in data/geografia.py;
+6. colore, odore e sapore ufficiali di ogni tipologia, dai documenti unici UE;
+7. le forme normalizzate e l'indice di ricerca (scripts/reindicizza.py);
+8. il racconto composto di ogni denominazione, tipologia e vitigno, nelle due
+   lingue (scripts/genera_corpus.py). Lo legge solo il modo «generativa»: il
+   modo predefinito compone il racconto al momento, e senza questa tabella
+   funziona uguale. `--senza-racconti` salta questo passo.
+
+Gli identificativi dipendono solo dalle sorgenti e dall'ordine dei passi:
+ricostruire con le stesse sorgenti da' gli stessi numeri. Con
+`--senza-racconti`, e la stessa versione di SQLite, il file che esce e'
+identico byte per byte a ogni costruzione; i racconti invece portano l'ora in
+cui sono stati scritti.
 
 ## La scelta che regge tutto: i fatti separati dallo stile
 
@@ -25,21 +53,27 @@ i vitigni `principale`.
 - `PDO_wine_data_IT_FR.csv` (CC BY 4.0, Candiago et al. 2024): denominazioni e
   tipologie italiane con colore, categoria, vitigni imposti e ammessi, rese.
 - `xwines_italia.csv` (X-Wines, dal repository ufficiale): i vini commerciali
-  italiani con cantina, regione, vitigni, abbinamenti, annate.
+  italiani con cantina, regione, vitigni, abbinamenti.
+- `eambrosia_it_wine.tsv`, `documenti_unici.jsonl` (© Unione europea, CC BY
+  4.0): il registro delle indicazioni geografiche e il testo dei documenti
+  unici. Vedi data/fonti_ue.py.
+- `docg.txt`: l'elenco delle DOCG, che il registro UE non distingue dalle DOC.
 - `vitigni.json`: scritto a mano, perché una descrizione organolettica
   affidabile non si trova in una fonte aperta riutilizzabile.
 
-Vedi docs/ATTRIBUZIONI.md per le licenze.
+Vedi data/sources/LEGGIMI.md e docs/it/08-attribuzioni.md per provenienza e licenze.
 """
 
 from __future__ import annotations
 
+import argparse
 import ast
 import csv
 import json
 import re
 import sqlite3
 import sys
+import time
 import unicodedata
 import pathlib
 from pathlib import Path
@@ -54,7 +88,10 @@ XWINES = SORGENTI / "xwines_italia.csv"
 VITIGNI = RADICE / "data" / "vitigni.json"
 
 sys.path.insert(0, str(RADICE / "scripts"))
+sys.path.insert(0, str(RADICE / "data"))
 from reindicizza import reindicizza                            # noqa: E402
+import fonti_ue                                                # noqa: E402
+from geografia import regione_di                               # noqa: E402
 
 # Suffisso di colore della bacca nei nomi del registro UE: "Corvina N".
 COLORE_BACCA = {
@@ -146,11 +183,13 @@ CREATE TABLE fonte (
 
 CREATE TABLE denominazione (
     id        INTEGER PRIMARY KEY,
-    codice    TEXT UNIQUE,              -- PDO-IT-A0435
+    codice    TEXT UNIQUE,              -- numero di fascicolo UE: PDO-IT-A0435
     nome      TEXT NOT NULL,
     nome_norm TEXT NOT NULL,
     tipo      TEXT NOT NULL,            -- DOP | IGP
-    fonte_id  TEXT REFERENCES fonte(id)
+    fonte_id  TEXT REFERENCES fonte(id),
+    menzione  TEXT,                     -- DOCG | DOC | IGT
+    regione   TEXT                      -- NULL se il nome non basta a dirla
 );
 CREATE INDEX i_den_norm ON denominazione(nome_norm);
 
@@ -216,6 +255,8 @@ CREATE TABLE vino (
 );
 CREATE INDEX i_vino_norm ON vino(nome_norm);
 CREATE INDEX i_vino_cantina ON vino(cantina_norm);
+-- Per ordinare i vitigni di una denominazione per quanti suoi vini li usano.
+CREATE INDEX i_vino_den ON vino(denominazione_id);
 
 CREATE TABLE vino_vitigno (
     vino_id    INTEGER NOT NULL REFERENCES vino(id),
@@ -227,13 +268,32 @@ CREATE TABLE vino_abbinamento (
     abbinamento TEXT NOT NULL,          -- chiave del lessico
     PRIMARY KEY (vino_id, abbinamento)
 );
-CREATE TABLE vino_annata (
-    vino_id INTEGER NOT NULL REFERENCES vino(id),
-    anno    INTEGER NOT NULL,
-    PRIMARY KEY (vino_id, anno)
-);
 
--- I racconti pre-generati dall'LLM locale, indicizzati per cio' che descrivono.
+-- Le tipologie come le descrive il documento unico UE: colore, odore e sapore
+-- scritti dal disciplinare, e i minimi di legge. Non si fondono con `tipologia`,
+-- che viene da figshare: le due fonti non hanno una chiave in comune, e si
+-- accostano solo per denominazione e colore (vedi il matcher).
+-- `nome_incerto` = 1 quando il nome e' ricostruito o ipotizzato e non
+-- distingue una tipologia dall'altra; `colore` e' Rosso | Bianco | Rosato.
+CREATE TABLE tipologia_ue (
+    id               INTEGER PRIMARY KEY,
+    denominazione_id INTEGER REFERENCES denominazione(id),
+    nome             TEXT,
+    nome_incerto     INTEGER NOT NULL DEFAULT 0,
+    menzione         TEXT,
+    colore           TEXT,
+    desc_colore      TEXT,
+    desc_odore       TEXT,
+    desc_sapore      TEXT,
+    titolo_alcol_min REAL,
+    acidita_min      REAL,
+    estratto_min     REAL,
+    fonte_id         TEXT REFERENCES fonte(id)
+);
+CREATE INDEX i_tue_den ON tipologia_ue(denominazione_id, colore);
+
+-- I racconti pronti, indicizzati per cio' che descrivono. `modello` dice da
+-- dove vengono: 'template' se composti dai fatti, altrimenti il modello.
 CREATE TABLE racconto (
     id          INTEGER PRIMARY KEY,
     ambito      TEXT NOT NULL CHECK (ambito IN ('vino','tipologia','denominazione','vitigno')),
@@ -266,6 +326,14 @@ FONTI = [
      "https://github.com/rogerioxavier/X-Wines", "vedi LICENSE del repository",
      "https://github.com/rogerioxavier/X-Wines/blob/main/LICENSE",
      "de Azambuja, Morais, Filipe (2023), Big Data Cogn. Comput. 7(1):20"),
+    ("eambrosia", "Registro UE delle indicazioni geografiche (eAmbrosia)",
+     "https://ec.europa.eu/geographical-indications-register/", "CC BY 4.0",
+     "https://creativecommons.org/licenses/by/4.0/",
+     "© Unione europea. Riuso ai sensi della Decisione 2011/833/UE."),
+    ("documento_unico_ue", "Documenti unici delle DOP e IGP (eAmbrosia)",
+     "https://ec.europa.eu/geographical-indications-register/", "CC BY 4.0",
+     "https://creativecommons.org/licenses/by/4.0/",
+     "© Unione europea. Il testo riproduce il disciplinare di produzione."),
     ("amelie", "Conoscenza enologica del progetto",
      None, "GPL-3.0 / CC BY 4.0", None, "Emilio Destratis"),
 ]
@@ -289,7 +357,7 @@ class Costruttore:
             "INSERT OR IGNORE INTO vitigno(nome, nome_norm, colore_bacca) VALUES (?,?,?)",
             (nome, chiave, colore),
         )
-        if cur.lastrowid:
+        if cur.rowcount:                  # vedi carica_denominazioni: rowcount
             self.vitigni[chiave] = cur.lastrowid
         else:
             (vid,) = self.con.execute(
@@ -322,6 +390,14 @@ class Costruttore:
             nome = r["WineNam"].strip()
             if not nome:
                 continue
+            # Il nome della tipologia ripete quello della denominazione, a
+            # volte con le maiuscole cambiate («Costa Dell'Argentario»): vale
+            # la grafia della denominazione.
+            for parte in r["PDOnam"].split("/"):
+                parte = parte.strip()
+                if parte and nome.lower().startswith(parte.lower()):
+                    nome = parte + nome[len(parte):]
+                    break
             # Il dataset ripete la stessa tipologia con categorie diverse: la
             # chiave UNIQUE la deduplica, e l'INSERT OR IGNORE non fallisce.
             cur = self.con.execute(
@@ -334,7 +410,12 @@ class Costruttore:
                  _numero(r["Max_yield_hl"]), _numero(r["Min_density"]),
                  (r.get("Info") or "").strip() or None, "figshare_pdo"),
             )
-            tid = cur.lastrowid
+            # `rowcount`, non `lastrowid`: su una riga ignorata `lastrowid`
+            # resta quello dell'ultimo inserimento sulla connessione - una riga
+            # di `tipologia_vitigno` - e i vitigni del doppione finirebbero su
+            # una tipologia qualunque: il Lizzano Negroamaro nascerebbe anche
+            # da Aleatico.
+            tid = cur.lastrowid if cur.rowcount else None
             if not tid:
                 riga = self.con.execute(
                     "SELECT id FROM tipologia WHERE denominazione_id=? AND nome=?"
@@ -403,9 +484,9 @@ class Costruttore:
                  _numero(r.get("ABV")), r.get("Body"), r.get("Acidity"),
                  r.get("Website"), den, "xwines"),
             )
-            vid = cur.lastrowid
-            if not vid:
+            if not cur.rowcount:              # WineID gia' visto
                 continue
+            vid = cur.lastrowid
             n += 1
 
             for g in lista_python(r.get("Grapes")):
@@ -416,10 +497,8 @@ class Costruttore:
             for a in lista_python(r.get("Harmonize")):
                 self.con.execute(
                     "INSERT OR IGNORE INTO vino_abbinamento VALUES (?,?)", (vid, str(a)))
-            for anno in lista_python(r.get("Vintages")):
-                if isinstance(anno, int) or (isinstance(anno, str) and anno.isdigit()):
-                    self.con.execute(
-                        "INSERT OR IGNORE INTO vino_annata VALUES (?,?)", (vid, int(anno)))
+            # Le annate di X-Wines non si caricano: il dispositivo non le usa,
+            # l'annata la legge sull'etichetta.
         return n
 
     # ------------------------------------------- conoscenza scritta a mano
@@ -483,6 +562,31 @@ class Costruttore:
                     (voce["colore_bacca"], *(normalizza(x) for x in nomi)))
         return n
 
+    def aggiungi_nomi_italiani(self, nomi: list[str]) -> int:
+        """I nomi italiani dei vitigni di X-Wines che l'archivio non ha ancora.
+
+        Si riapplica poi vitigni.json, perche' un nome appena aggiunto puo'
+        essere l'alias di una scheda scritta a mano («Moscato» di «Moscato
+        Bianco») e deve averne la descrizione.
+        """
+        n = fonti_ue.aggiungi_vitigni_mancanti(self.con, nomi, normalizza)
+        if n:
+            self.arricchisci_vitigni()
+        return n
+
+    # ------------------------------------------------------------ registro UE
+
+    def carica_registro_ue(self, voci: list[fonti_ue.VoceRegistro]) -> int:
+        """Le denominazioni che figshare non ha, e la menzione di tutte."""
+        return fonti_ue.carica_registro(self.con, voci, normalizza)
+
+    def assegna_regioni(self) -> int:
+        """La regione di ogni denominazione, dal nome. Vedi data/geografia.py."""
+        righe = [(regione_di(nome), did) for did, nome in
+                 self.con.execute("SELECT id, nome FROM denominazione").fetchall()]
+        self.con.executemany("UPDATE denominazione SET regione = ? WHERE id = ?", righe)
+        return sum(1 for r, _ in righe if r)
+
 
 def _numero(v) -> float | None:
     if v is None or v == "":
@@ -496,9 +600,8 @@ def _numero(v) -> float | None:
 def solo_vitigni() -> None:
     """Riapplica data/vitigni.json a un database gia' costruito.
 
-    Serve perche' le sorgenti CSV pesano centinaia di megabyte e non stanno nel
-    repository: chi aggiunge un vitigno o una traduzione non deve riscaricarle,
-    e soprattutto non deve rifare gli identificativi, a cui sono agganciati i
+    Chi aggiunge un vitigno o una traduzione non deve ricostruire tutto, e
+    soprattutto non deve rifare gli identificativi, a cui sono agganciati i
     testi gia' pre-generati.
     """
     if not USCITA.exists():
@@ -515,17 +618,40 @@ def solo_vitigni() -> None:
     print(f"  {n} voci di vitigno aggiornate")
 
 
-def main() -> None:
-    if "--solo-vitigni" in sys.argv:
-        return solo_vitigni()
-    # Si costruisce a lato e si sostituisce solo a fine riuscita. Prima si
-    # scriveva dritto su `amelie.db`, e una costruzione che si fermava a meta'
-    # lasciava al suo posto un database vuoto - il database non sta in git, e
-    # quello era tutto quel che c'era. Successo, misurato su me stesso.
-    IN_CORSO.unlink(missing_ok=True)
-    for extra in ("-wal", "-shm"):
-        pathlib.Path(str(IN_CORSO) + extra).unlink(missing_ok=True)
+def _togli(percorso: Path) -> None:
+    for extra in ("", "-wal", "-shm", "-journal"):
+        pathlib.Path(str(percorso) + extra).unlink(missing_ok=True)
 
+
+def scrivi_racconti(percorso: Path) -> tuple[int, int]:
+    """Riempie `racconto` con scripts/genera_corpus.py. Ritorna (scritti, saltati).
+
+    Usa il matcher e il lessico del dispositivo, cioe' il pacchetto in src/:
+    per questo si importa qui, e solo se il passo non e' saltato.
+    """
+    sys.path.insert(0, str(RADICE / "src"))
+    import genera_corpus                                       # noqa: E402
+    return genera_corpus.genera(percorso, stampa=lambda *_: None)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Costruisce data/amelie.db dalle sorgenti.")
+    ap.add_argument("--senza-racconti", action="store_true",
+                    help="non scrive la tabella `racconto` (scripts/genera_corpus.py)")
+    ap.add_argument("--solo-vitigni", action="store_true",
+                    help="riapplica solo data/vitigni.json al database esistente")
+    args = ap.parse_args()
+    if args.solo_vitigni:
+        return solo_vitigni()
+    for fonte in (FIGSHARE, fonti_ue.REGISTRO, fonti_ue.DOCUMENTI):
+        if not fonte.exists():
+            sys.exit(f"manca {fonte}")
+    inizio = time.monotonic()
+
+    # Si costruisce a lato e si sostituisce solo a fine riuscita: una
+    # costruzione che si ferma a meta' lascia al suo posto il database di
+    # prima, non uno vuoto.
+    _togli(IN_CORSO)
     con = sqlite3.connect(IN_CORSO)
     con.executescript(SCHEMA)
     con.executemany(
@@ -535,20 +661,37 @@ def main() -> None:
     c = Costruttore(con)
     print("Costruzione del database:")
     nd, nt = c.carica_denominazioni()
-    print(f"  {nd:>6} denominazioni   {nt:>6} tipologie")
+    print(f"  {nd:>6} denominazioni DOP   {nt:>6} tipologie (figshare)")
     nv = c.carica_vini()
-    print(f"  {nv:>6} vini commerciali")
+    print(f"  {nv:>6} vini commerciali (X-Wines)")
     ng = c.arricchisci_vitigni()
     print(f"  {ng:>6} vitigni descritti a mano")
-    _, ni = reindicizza(con)
-    print(f"  {ni:>6} voci nell'indice di ricerca")
-
+    nomi_vitigni = fonti_ue.vitigni_xwines(XWINES)
+    ni = c.aggiungi_nomi_italiani(nomi_vitigni)
+    print(f"  {ni:>6} nomi italiani di vitigno aggiunti")
+    voci = fonti_ue.leggi_registro()
+    nr = c.carica_registro_ue(voci)
+    print(f"  {nr:>6} denominazioni dal registro UE, su {len(voci)}")
+    ng = c.assegna_regioni()
+    print(f"  {ng:>6} denominazioni con la regione")
+    nu, du = fonti_ue.carica_tipologie_ue(con, voci, nomi_vitigni)
+    print(f"  {nu:>6} tipologie dai documenti unici, su {du} denominazioni")
+    _, nix = reindicizza(con)
+    print(f"  {nix:>6} voci nell'indice di ricerca")
     con.commit()
+
+    if not args.senza_racconti:
+        con.close()
+        scritti, vuoti = scrivi_racconti(IN_CORSO)
+        print(f"  {scritti:>6} racconti composti ({vuoti} saltati: nessun fatto da dire)")
+        con = sqlite3.connect(IN_CORSO)
+
     con.execute("PRAGMA journal_mode = DELETE")   # un file solo, piu' facile da copiare
     con.execute("VACUUM")
     con.close()
     IN_CORSO.replace(USCITA)
-    print(f"\n  {USCITA}  ({USCITA.stat().st_size / 1e6:.1f} MB)")
+    print(f"\n  {USCITA}  ({USCITA.stat().st_size / 1e6:.1f} MB,"
+          f" {time.monotonic() - inizio:.0f} s)")
 
 
 if __name__ == "__main__":

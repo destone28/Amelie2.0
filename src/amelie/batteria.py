@@ -22,11 +22,11 @@ La potenza si stima come una base fissa piu' una parte che segue la CPU:
     CPU piena +2,5 W   quattro Cortex-A53 a pieno carico
     voce      +0,6 W   amplificatore che suona
 
-La base e' quella stimata nel documento di progetto (~5 W medi, oltre 12 ore)
-e non e' ancora stata misurata col tester USB: quando lo sara', il numero va
-qui e basta. La CPU si legge da `/proc/stat`, che e' l'unica misura vera che
-la board offre di quanto sta lavorando - e il modello linguistico, l'OCR e la
-sintesi vocale passano tutti di li'.
+La base e' stimata a progetto (~5 W medi, oltre 12 ore di autonomia), non
+misurata col tester USB: una misura vera va messa qui al suo posto, e basta.
+La CPU si legge da `/proc/stat`, che e' l'unica misura vera che la board
+offre di quanto sta lavorando - e il modello linguistico, l'OCR e la sintesi
+vocale passano tutti di li'.
 
 ## Quando si azzera
 

@@ -2,7 +2,7 @@
 
 Il database porta, per ogni tipologia di una denominazione, le tre descrizioni
 ufficiali del disciplinare: colore, odore, sapore. Sono la cosa piu' preziosa
-che abbiamo - nessuno le ha inventate, le ha scritte il consorzio - ma sono
+dell'archivio - nessuno le ha inventate, le ha scritte il consorzio - ma sono
 scritte solo in italiano, e il dispositivo racconta anche in inglese.
 
 Tradurle a mano non si puo': sono 6.363 citazioni, con 3.124 valori distinti.
@@ -27,7 +27,7 @@ Gli intervalli sono trattati come un pezzo solo proprio per questo: mezzo «da
 secco a dolce» direbbe una cosa falsa.
 
 La seconda: il risultato non e' una citazione. «rosso rubino» reso «ruby red»
-e' una nostra traduzione, non una parola del disciplinare, e va presentato
+e' una traduzione, non una parola del disciplinare, e va presentato
 come tale. Chi usa questo modulo deve dirlo (vedi `Reso`).
 """
 
@@ -538,7 +538,8 @@ def _elenca(pezzi: list[str]) -> str:
     """L'inglese vuole «and» prima dell'ultimo - ma non se l'ultimo ce l'ha
     gia' dentro, altrimenti esce «intense and persistent and harmonious»."""
     # Senza doppioni: «erbaceo» e «erbacea» sono due frammenti e una resa
-    # sola, e usciva «herbaceous, herbaceous». Visto su 360 racconti composti.
+    # sola, e uscirebbe «herbaceous, herbaceous». Il caso compare su un
+    # campione di 360 racconti composti.
     pezzi = list(dict.fromkeys(pezzi))
     if len(pezzi) == 1:
         return pezzi[0]

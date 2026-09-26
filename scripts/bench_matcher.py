@@ -32,9 +32,10 @@ def main() -> None:
     fasce = collections.Counter()
     giusti = sbagliati = 0
     # La misura che conta davvero: una figuraccia dichiarata CERTA viene
-    # raccontata al tavolo come un fatto. Una figuraccia DUBBIA passa dalla
-    # schermata di conferma, dove una persona la corregge. Sono due errori di
-    # gravita' incomparabile e vanno contati separati.
+    # raccontata al tavolo come un fatto. Una DUBBIA si racconta al livello
+    # piu' generico che il dispositivo puo' sostenere, come fa l'applicazione
+    # (`Matcher.il_piu_generico`). Sono due errori di gravita' incomparabile e
+    # vanno contati separati.
     sbagliati_certi = 0
     esempi_sbagliati = []
 
@@ -44,8 +45,10 @@ def main() -> None:
             livelli["nessun testo"] += 1
             continue
         f = m.cerca(righe)
-        livelli[f.livello.value] += 1
         fasce["certo" if f.certo else "dubbio" if f.dubbio else "sotto soglia"] += 1
+        if f.dubbio:
+            f = m.il_piu_generico(f, righe)
+        livelli[f.livello.value] += 1
 
         # Il metro deve rispettare la cascata: scendere al livello giusto e' un
         # SUCCESSO, non un errore. "Tenuta Il Poggione / Brunello di Montalcino"
@@ -79,7 +82,8 @@ def main() -> None:
     print(f"    di cui DICHIARATE CERTE   {sbagliati_certi:4}/{n}  {100*sbagliati_certi/n:5.1f}%"
           "   <- raccontate senza chiedere")
     print("\n  dove si ferma la cascata:")
-    for liv in ("vino", "tipologia", "denominazione", "vitigno", "nulla", "nessun testo"):
+    for liv in ("vino", "tipologia", "denominazione", "vitigno", "generico", "nulla",
+                "nessun testo"):
         if livelli[liv]:
             print(f"    {liv:14} {livelli[liv]:4}  {100*livelli[liv]/n:5.1f}%")
     print(f"\n  sicurezza (>={SOGLIA_CERTA} certo, >={SOGLIA_DUBBIA} dubbio):")

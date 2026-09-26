@@ -37,8 +37,7 @@ SOCKET = "/run/arduino-router.sock"
 
 # Indirizzi I2C dei Modulino, in forma a 7 bit. Un solo Pixels, quindi
 # l'indirizzo di fabbrica va bene com'è e non c'è niente da riprogrammare prima
-# di montare: era il passo più fragile di tutto l'assemblaggio, ed è sparito
-# insieme al secondo modulo.
+# di montare.
 ANELLO = 0x36     # l'anello sotto la bottiglia
 DISTANZA = 0x29   # VL53L4CD, indirizzo fisso
 
@@ -46,15 +45,13 @@ DISTANZA = 0x29   # VL53L4CD, indirizzo fisso
 NOMI_MODULI = ("anello", "distanza")
 
 # La versione del PROTOCOLLO, non del firmware: si alza quando cambia il
-# significato di qualcosa. Alla 2 il secondo Pixels è stato tolto e il bit 2 di
-# `moduli()` è passato da «flash» a «sensore», mentre il sensore lasciava il
-# bit 4.
+# significato di qualcosa, per esempio dei bit di `moduli()`.
 #
-# Serve perché quel cambiamento è **silenzioso e rovesciato**: un Linux alla 2
-# che interroga un MCU alla 1 legge «sensore presente» quando c'è il flash, e
-# «sensore assente» con il sensore collegato. È il guasto peggiore che si possa
-# avere montando — il montaggio è giusto e il dispositivo dice di no — e senza
-# questo numero non c'è modo di accorgersene.
+# Serve perché un cambiamento del genere è **silenzioso e rovesciato**: un
+# Linux e un MCU con due versioni diverse leggerebbero gli stessi bit con due
+# significati, e un sensore collegato risulterebbe assente. È il guasto
+# peggiore che si possa avere montando — il montaggio è giusto e il dispositivo
+# dice di no — e senza questo numero non c'è modo di accorgersene.
 PROTOCOLLO_ATTESO = 2
 
 
@@ -75,18 +72,18 @@ class Colore:
 
 # L'anello resta basso in permanenza — otto LED accesi tutta la sera su un
 # cavetto Qwiic da 28 AWG — e sale a bianco SOLO per la raffica. È l'unica luce
-# rimasta da quando il secondo Pixels, che faceva da flash, è stato tolto.
+# del dispositivo.
 #
-# «Solo per la raffica» sono **circa 1,7 secondi**, non un lampo: `Camera.scatta`
-# apre il device, aspetta 0,15 s che la luce si assesti, butta cinque fotogrammi
-# e ne legge altri cinque (misura in docs/03-COLLAUDO.md). È un dettaglio che
-# conta per l'alimentazione: 22 di luminosità per ore e 90 per quasi due secondi
-# sono due carichi diversi da quelli che sembrano leggendo «flash».
+# «Solo per la raffica» sono **secondi**, non un lampo: circa 1,7 per lo scatto,
+# di più quando la luce della sala è cambiata
+# e la posa va ricercata (vedi `Effetto.ILLUMINA_E_SCATTA` in `amelie.state`).
+# È un dettaglio che conta per l'alimentazione: 22 di luminosità per ore e 90
+# per qualche secondo sono due carichi diversi da quelli che sembrano leggendo
+# «flash».
 #
-# Quanto serva davvero è una domanda aperta e va misurata sul banco: il grosso
-# del segnale non l'hanno mai dato i LED, viene dalla posa lunga a guadagno
-# zero che questa geometria si può permettere perché bottiglia e camera sono
-# ferme entrambe (vedi `amelie.capture`).
+# Il grosso del segnale, comunque, non lo danno i LED: viene dalla posa lunga a
+# guadagno zero che questa geometria si può permettere perché bottiglia e
+# camera sono ferme entrambe (vedi le misure in `amelie.capture`).
 AMBRA = Colore(255, 150, 40, 22)      # attesa: caldo, discreto
 BIANCO_SCATTO = Colore(255, 255, 255, 90)   # solo durante la raffica
 VERDE = Colore(60, 220, 90, 30)
@@ -114,10 +111,10 @@ class Ponte:
 
         Non basta che il socket del router esista: il router c'e' anche quando
         sull'MCU non gira lo sketch di Amelie, e in quel caso ogni chiamata
-        fallisce con "method not available". Controllare solo il socket faceva
-        dichiarare `mcu: true` a un dispositivo che non poteva ne' leggere il
-        sensore ne' accendere l'anello - ed e' esattamente lo stato in cui si
-        trova una board appena preparata, prima di caricare il firmware.
+        fallisce con "method not available". Controllando solo il socket, un
+        dispositivo che non puo' ne' leggere il sensore ne' accendere l'anello
+        dichiarerebbe `mcu: true` - ed e' esattamente lo stato in cui si trova
+        una board appena preparata, prima di caricare il firmware.
         """
         try:
             # Si chiede la distanza non perche' serva - la bottiglia la
@@ -177,8 +174,8 @@ class Ponte:
     def versione(self) -> int | None:
         """La versione del protocollo dichiarata dall'MCU, o None se non la dice.
 
-        `None` significa firmware anteriore alla 2, cioè di quando c'erano due
-        Modulino Pixels: i bit di `moduli()` avevano un altro significato.
+        `None` significa un firmware che non dichiara il protocollo, e i cui
+        bit di `moduli()` non si possono interpretare (vedi `PROTOCOLLO_ATTESO`).
         """
         try:
             return int(self.chiama("versione"))
@@ -219,10 +216,9 @@ class Ponte:
         «un altro Modulino», senza inventarsi quale: dire il nome sbagliato
         sarebbe peggio che non dirlo.
         """
-        noti = {ANELLO: "Modulino Pixels — l'anello di luce. È QUESTO che serve",
-                DISTANZA: "Modulino Distance — il sensore ToF. NON serve "
-                          "piu': la bottiglia la riconosce la camera",
-                0x37: "Pixels riprogrammato: era il flash, non serve più",
+        noti = {ANELLO: "Modulino Pixels — la luce del dispositivo",
+                DISTANZA: "Modulino Distance — il sensore che vede arrivare "
+                          "la bottiglia",
                 0x6C: "indirizzo «Modulino» di un Pixels: lo sketch usa 0x36"}
         return {a: noti.get(a, "un altro Modulino — non serve a questo "
                                "dispositivo, toglilo dalla catena")
@@ -231,15 +227,17 @@ class Ponte:
     def moduli(self) -> dict[str, bool]:
         """Quali Modulino il microcontrollore vede in questo momento.
 
-        Serve a montare: si collega un pezzo per volta e si chiede al
-        dispositivo se lo vede, invece di dedurlo da un LED che non si accende.
+        Serve a montare: si chiede al dispositivo se vede i moduli, invece di
+        dedurlo da un LED che non si accende. Il firmware li cerca solo
+        all'accensione del microcontrollore, quindi un modulo collegato dopo
+        risulta assente fino alla prossima accensione.
 
         Non solleva mai. Chi chiede questo sta cercando un guasto, e un firmware
-        vecchio che non conosce il metodo è uno dei guasti possibili: rispondere
+        che non conosce il metodo è uno dei guasti possibili: rispondere
         «non vedo niente» lo racconta meglio di un'eccezione.
 
-        E **prima chiede la versione**. I bit di `moduli()` hanno cambiato
-        significato quando il secondo Pixels è stato tolto: interpretarli senza
+        E **prima chiede la versione**. I bit di `moduli()` non significano la
+        stessa cosa in tutte le versioni del protocollo: interpretarli senza
         sapere con chi si sta parlando vuol dire dire il contrario del vero
         proprio a chi sta montando. Meglio «non lo so» che una risposta
         rovesciata.
@@ -357,9 +355,9 @@ class PonteSimulato(Ponte):
 class Presenza:
     """Decide se c'è una bottiglia dal sensore di distanza.
 
-    Era stata tolta quando la presenza la decideva la camera, ed è tornata:
-    guardare costa secondi — una lettura dell'etichetta, il riquadro, la
-    sagoma — e il sensore risponde in millesimi. Per far comparire il testo in
+    Affianca la camera invece di sostituirla, e fa da innesco: guardare costa
+    secondi — una lettura dell'etichetta, il riquadro, la sagoma — e il
+    sensore risponde in millesimi. Per far comparire il testo in
     meno di un secondo da quando la bottiglia si appoggia, l'innesco deve
     costare quasi niente, e questo è il solo pezzo che lo sa fare.
 

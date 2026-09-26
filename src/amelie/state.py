@@ -81,12 +81,11 @@ class Effetto(enum.Enum):
     ANELLO_LAVORO = "anello_lavoro"        # elaborazione: rotazione lenta
     ANELLO_ATTENZIONE = "anello_attenzione"  # serve qualcosa dall'utente
     ANELLO_SPENTO = "anello_spento"
-    # Si chiamava FLASH_E_SCATTA, quando c'era un secondo Pixels che faceva da
-    # flash. Ora la luce dello scatto è l'anello stesso, che sale a bianco per
-    # tutta la raffica — misurati 2 s quando la posa è già quella giusta, fino
-    # a 8 quando la luce della sala è cambiata e va ricercata. Non un lampo. Un
-    # nome che promette un flash che non c'è manderebbe a cercare un modulo
-    # inesistente.
+    # La luce dello scatto è l'anello stesso, che sale a bianco per tutta la
+    # raffica — misurati 2 s quando la posa è già quella giusta, fino a 8
+    # quando la luce della sala è cambiata e va ricercata. Non un lampo, e per
+    # questo non si chiama «flash»: un nome che promette un flash manderebbe a
+    # cercare un modulo che non c'è.
     ILLUMINA_E_SCATTA = "illumina_e_scatta"
     INTERROGA_DATABASE = "interroga_database"
     AVVIA_RACCONTO = "avvia_racconto"
@@ -99,15 +98,13 @@ class Effetto(enum.Enum):
 # Quanto si resta in uno stato prima che scatti SCADENZA. `None` = si resta
 # finché non arriva un altro evento.
 DURATE_S: dict[Stato, float | None] = {
-    # Il tempo che serve alla bottiglia per smettere di oscillare — e adesso
-    # è solo il minimo, non l'attesa.
+    # Il minimo, non l'attesa: il tempo che serve alla bottiglia per smettere
+    # di oscillare non si aspetta a orologio.
     #
-    # Erano 600 ms fissi, spesi sempre, perché era l'unico modo di non
-    # fotografare il movimento: si scattava una volta sola e quella doveva
-    # essere buona. Ora la camera resta in moto e lo scatto si prende dal
-    # flusso, quindi l'assestamento si può GUARDARE invece che aspettare: si
-    # tiene il primo fotogramma abbastanza nitido, e chi appoggia la bottiglia
-    # piano non paga l'oscillazione che non c'è. Vedi `Camera.al_volo`.
+    # La camera resta in moto e lo scatto si prende dal flusso, quindi
+    # l'assestamento si può GUARDARE invece che aspettare: si tiene il primo
+    # fotogramma abbastanza nitido, e chi appoggia la bottiglia piano non paga
+    # l'oscillazione che non c'è. Vedi `Camera.al_volo`.
     #
     # Quel che resta qui è il tempo perché la schermata «fammi guardare» non
     # sia un lampo, e perché la mano che ha appoggiato la bottiglia esca
@@ -118,7 +115,7 @@ DURATE_S: dict[Stato, float | None] = {
     # gira. Succede davvero, togliendo e rimettendo la bottiglia mentre parla.
     # Cinquanta secondi, ed e' un cane da guardia, non un limite di qualita':
     # deve scattare quando il lavoro NON torna, mai sul lavoro piu' lento che
-    # puo' tornare davvero. Era 25, e scattava: misurato sul dispositivo, un
+    # puo' tornare davvero, e quello e' lungo: misurato sul dispositivo, un
     # fotogramma pieno di scritte - un calendario dietro al piatto vuoto - da'
     # trentotto righe e **39 secondi** di OCR, perche' ogni regione trovata
     # passa poi dal modello che la riconosce. Piu' lo scatto, che con la luce
@@ -132,10 +129,9 @@ DURATE_S: dict[Stato, float | None] = {
     # l'ultima frase si posi, e perche' sparire nell'istante in cui la voce tace
     # e' brusco - e poi si torna in attesa.
     #
-    # Prima era `None`: si restava li' per sempre, con il riproduttore in vista e
-    # tutti i pulsanti inerti, finche' qualcuno non toglieva la bottiglia. A
-    # tavola quella schermata non dice niente e non fa niente: e' il dispositivo
-    # che sembra piantato.
+    # Non `None`: restare li' per sempre, con il riproduttore in vista e tutti
+    # i pulsanti inerti finche' qualcuno non toglie la bottiglia, a tavola non
+    # dice niente e non fa niente: e' il dispositivo che sembra piantato.
     Stato.CONCLUSO: 2.0,
     Stato.ATTESA: None,
 }
@@ -174,14 +170,14 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
     # vitigno, o si chiede di girare l'etichetta. Decide il narratore.
     (Stato.RICONOSCIMENTO, Evento.MATCH_ASSENTE): Stato.RACCONTO,
     # Il riconoscimento puo' concludere che non c'e' NULLA da dire: senza questa
-    # transizione l'evento cadeva nel vuoto e la macchina restava a girare fino
-    # allo scadere del tetto, per poi dichiarare guasto.
+    # transizione l'evento cadrebbe nel vuoto e la macchina resterebbe a girare
+    # fino allo scadere del tetto, per poi dichiarare guasto.
     (Stato.RICONOSCIMENTO, Evento.LETTURA_FALLITA): Stato.RIPOSIZIONA,
 
     (Stato.RACCONTO, Evento.RACCONTO_FINITO): Stato.CONCLUSO,
 
     (Stato.CONCLUSO, Evento.RIPETI): Stato.RACCONTO,
-    # Passati i quattro secondi si torna alla schermata d'invito, anche se la
+    # Passati i due secondi si torna alla schermata d'invito, anche se la
     # bottiglia e' ancora sul piatto. Non riparte una seconda lettura: quella la
     # governa l'orchestratore, che ricomincia solo quando la bottiglia viene
     # tolta e rimessa.
@@ -220,15 +216,14 @@ TRANSIZIONI: dict[tuple[Stato, Evento], Stato] = {
 
     # ANNULLA — l'unica via d'uscita che non passi da un fatto fisico.
     #
-    # Fino a qui l'unico modo di chiudere era TOGLIERE LA BOTTIGLIA. E' la
-    # scelta giusta per il caso normale - attrito zero, nessun pulsante - ma
-    # lascia scoperto chi ha appena versato: il vino e' nel bicchiere, la
-    # bottiglia sta sul piatto e nessuno vuole risollevarla per far tacere il
+    # Il modo normale di chiudere e' TOGLIERE LA BOTTIGLIA. E' la scelta
+    # giusta per il caso comune - attrito zero, nessun pulsante - ma lascia
+    # scoperto chi ha appena versato: il vino e' nel bicchiere, la bottiglia
+    # sta sul piatto e nessuno vuole risollevarla per far tacere il
     # dispositivo.
     #
     # Solo da questi due stati, e sono esattamente i due in cui c'e' un
-    # pulsante a schermo (la scelta fra candidati, che era il terzo, non c'e'
-    # piu'). CONCLUSO c'e' perche' la vista «racconto» resta
+    # pulsante a schermo. CONCLUSO c'e' perche' la vista «racconto» resta
     # accesa anche nei due secondi che seguono la fine (VISTA[CONCLUSO] in
     # app.py): li' il pulsante si vede, quindi deve funzionare. Dagli stati di
     # lavoro NO: quelle schermate non hanno pulsanti, e annullare in SCANSIONE
@@ -265,9 +260,9 @@ class Transizione:
         scritta apposta verso lo stesso stato - `(RACCONTO, RIPETI)` - deve
         eseguire uscita e ingresso, altrimenti dichiararla non serve a niente.
 
-        E' successo davvero: la riga c'era, e ripetere il racconto o cambiare
-        lingua mentre parlava non faceva assolutamente nulla. Nessun errore,
-        nessun messaggio: la storia semplicemente non ripartiva.
+        Senza questa distinzione la riga c'e', ma ripetere il racconto o
+        cambiare lingua mentre parla non fa assolutamente nulla. Nessun errore,
+        nessun messaggio: la storia semplicemente non riparte.
         """
         return not self.cambia_stato and bool(self.effetti)
 

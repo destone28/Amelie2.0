@@ -19,7 +19,7 @@ sys.path.insert(0, str(RADICE / "src"))
 
 from amelie.llm import Modello, ModelloNonDisponibile   # noqa: E402
 from amelie.matcher import Matcher                       # noqa: E402
-from amelie.narrator import _ripulisci, prompt, verifica # noqa: E402
+from amelie.narrator import _ripulisci, prompt, prompt_addestrato, verifica  # noqa: E402
 
 CASI = [
     ["AMARONE DELLA VALPOLICELLA", "Classico", "Tommasi"],
@@ -29,9 +29,12 @@ CASI = [
 ]
 
 
-def prova(m: Matcher, mod: Modello, righe: list[str], giri: int = 2) -> None:
+def prova(m: Matcher, mod: Modello, righe: list[str], giri: int = 2,
+          addestrato: bool = True) -> None:
     f = m.cerca(righe)
-    p = prompt(f)
+    # La stessa forma di prompt che usa il dispositivo: il modello installato
+    # e' quello affinato, e vuole il prompt compatto (vedi `Narratore`).
+    p = prompt_addestrato(f) if addestrato else prompt(f)
     print(f"\n{'='*70}")
     print(f"{' '.join(righe)[:60]}")
     print(f"  livello {f.livello.value}, sicurezza {f.sicurezza:.0f}, "
@@ -55,6 +58,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--tutti", action="store_true")
     ap.add_argument("--giri", type=int, default=2)
+    ap.add_argument("--prompt-generico", action="store_true",
+                    help="usa il prompt lungo, per un modello non affinato")
     args = ap.parse_args()
 
     mod = Modello()
@@ -62,7 +67,7 @@ def main() -> None:
         sys.exit("llama-server non risponde: systemctl status amelie-llm")
     m = Matcher()
     for righe in (CASI if args.tutti else CASI[:1]):
-        prova(m, mod, righe, args.giri)
+        prova(m, mod, righe, args.giri, addestrato=not args.prompt_generico)
     m.chiudi()
 
 

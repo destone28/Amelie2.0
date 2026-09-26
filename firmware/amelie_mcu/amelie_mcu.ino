@@ -11,22 +11,18 @@
  * né per il sensore né per l'anello. Ogni transazione I2C è scritta qui sotto,
  * e ognuna o riesce o fallisce.
  *
- * ── PERCHE': UN PUNTATORE NULLO, NON QUELLO CHE SEMBRAVA ─────────────────────
+ * ── PERCHE': UN PUNTATORE NULLO NASCOSTO NELLA LIBRERIA ──────────────────────
  *
- * Per tre giri di banco il blocco è stato attribuito al driver del VL53L4CD, che
- * in `platform.cpp` ritenta i trasferimenti I2C con un `do {...} while (status)`
- * senza uscita. È vero che quel ciclo esiste. NON era la causa: riscrivere il
- * sensore da capo e aggiungere il recupero del bus non ha cambiato niente, e
- * quello avrebbe dovuto far sospettare la diagnosi molto prima.
- *
- * La causa vera sta in `Arduino_Modulino`, ed è dimostrabile leggendo il binario:
+ * Senza `Modulino.begin()`, `Arduino_Modulino` salta a un indirizzo casuale e
+ * i suoi valori di ritorno non permettono di accorgersene. È dimostrabile
+ * leggendo il binario:
  *
  *   · `ModulinoClass` non ha costruttore. Il suo unico campo, `HardwareI2C*
  *     _wire`, è scritto SOLO da `ModulinoClass::begin()`. L'oggetto globale
  *     `Modulino` finisce quindi in `.bss`, che l'avvio azzera: `_wire == nullptr`
- *     a ogni accensione, garantito.
- *   · Questo sketch non ha mai chiamato `Modulino.begin()`. Tutti gli esempi
- *     della libreria lo fanno come prima riga di `setup()`; qui mancava.
+ *     a ogni accensione, garantito, finché qualcuno non chiama
+ *     `Modulino.begin()` (tutti gli esempi della libreria lo fanno come prima
+ *     riga di `setup()`).
  *   · `Module::write()` — cioè ogni `show()` sull'anello — fa
  *     `Modulino._wire->beginTransmission(...)`, e `HardwareI2C` ha i metodi
  *     tutti virtuali. Nel binario compilato sono tre istruzioni:
@@ -40,15 +36,19 @@
  *     si legge il valore iniziale dello stack pointer e lo si usa come vtable.
  *     Si salta a un indirizzo che cambia di istante in istante: a volte torna, e
  *     prima o poi è un hard fault. Il gestore fatale di Zephyr ferma tutto, il
- *     thread del Bridge compreso — ed ecco perché da Linux andavano in timeout
- *     TUTTI i metodi, `versione()` compreso, e perché si riprendeva solo
- *     togliendo corrente.
+ *     thread del Bridge compreso: da Linux vanno in timeout TUTTI i metodi,
+ *     `versione()` compreso, e ci si riprende solo togliendo corrente.
  *
- * Due dettagli della libreria hanno tenuto nascosta la causa per giorni:
+ * Il sintomo somiglia a quello di un altro difetto, che pure esiste: il driver
+ * del VL53L4CD, in `platform.cpp`, ritenta i trasferimenti I2C con un
+ * `do {...} while (status)` senza uscita. Anche per questo il sensore è scritto
+ * qui sotto a mano, con ogni attesa limitata.
+ *
+ * Due dettagli della libreria nascondono il guasto invece di segnalarlo:
  *
  *   · `Module::begin()` con un indirizzo esplicito ritorna `true` SENZA toccare
- *     il bus. Quindi `moduli()` rispondeva «anello presente» a un anello che non
- *     era mai stato scritto una sola volta.
+ *     il bus. Quindi `moduli()` risponderebbe «anello presente» a un anello mai
+ *     scritto una sola volta.
  *   · `Module::write()` ritorna `true` sempre, comunque vada.
  *
  * Per questo qui sotto l'anello si scrive a mano e `c_anello` diventa vero solo
@@ -57,17 +57,18 @@
  *
  * ── DUE MODULI, NON TRE ──────────────────────────────────────────────────────
  *
- * C'era un secondo Pixels che faceva da flash per la camera. Tolto: i Pixels
- * nascono tutti a 0x36, quindi il secondo andava riprogrammato una volta per
- * sempre, e da fuori i due sono identici. L'etichetta si illumina lo stesso —
- * l'anello sale a bianco per la durata della raffica.
+ * L'anello e il sensore, e nessun secondo Pixels come flash per la camera: i
+ * Pixels nascono tutti a 0x36, quindi un secondo andrebbe riprogrammato a un
+ * altro indirizzo, e da fuori i due sarebbero identici. L'etichetta la illumina
+ * l'anello, che sale a bianco per la durata della raffica.
  *
  * ── DUE VINCOLI CHE FANNO FALLIRE IN SILENZIO ────────────────────────────────
  *
  * 1. Chiamare Bridge.call() o Monitor.print() DENTRO un gestore registrato con
  *    provide() manda in stallo il canale. È documentato. Per questo i gestori
- *    qui sotto non fanno altro che scrivere in una variabile, e ogni accesso a
- *    Wire1 avviene nel loop().
+ *    qui sotto non chiamano mai il ponte e non stampano: scrivono in una
+ *    variabile che applica il loop(), o al più leggono il bus sotto
+ *    `lucchetto_bus`.
  *
  * 2. Un .ino non è un .cpp: Arduino gli genera i prototipi e li infila subito
  *    PRIMA della prima definizione di funzione. Un tipo dichiarato dopo quel
@@ -85,8 +86,8 @@
 /* ─── tutto ciò che si dichiara, prima di qualsiasi funzione (vincolo 2) ────── */
 
 /* Versione del PROTOCOLLO fra questo firmware e Linux. Si alza quando cambia il
- * SIGNIFICATO di qualcosa, non il codice. Alla 2 il secondo Pixels è stato
- * tolto e il bit 2 di moduli() è passato da "flash" a "sensore". */
+ * SIGNIFICATO di qualcosa, non il codice. Nella 2 il bit 2 di moduli() è il
+ * sensore (vedi PROTOCOLLO_ATTESO in amelie.bridge). */
 static const int PROTOCOLLO = 2;
 
 static const uint8_t IND_ANELLO   = 0x36;   /* indirizzo hardware, non 0x6C */
@@ -188,16 +189,15 @@ static uint32_t ultimo_invio = 0;
  *
  * I gestori registrati con `Bridge.provide()` NON girano nel `loop()`: la
  * libreria crea un thread suo, chiamato "bridge", ed e' li' che vengono
- * chiamati. Finche' i gestori si limitavano a scrivere in una variabile non
- * importava - ed e' la ragione per cui questo sketch lo faceva. Da quando
- * `scansiona()` e `registro_tof()` LEGGONO il bus, due thread ci parlano
- * insieme.
+ * chiamati. Un gestore che scrive soltanto in una variabile non tocca il bus;
+ * ma `scansiona()` e `registro_tof()` lo LEGGONO, e allora due thread ci
+ * parlano insieme.
  *
- * Il risultato si e' visto nei dati, e non si dimentica: le letture tornavano
- * con i byte di un ALTRO registro. 2313 e' 0x0909, cioe' il byte di stato
- * ripetuto; 4354 e' 0x1102, un byte del registro della polarita' seguito da un
- * altro. Non erano misure sbagliate: erano risposte di una transazione
- * consegnate a chi ne aveva chiesta un'altra.
+ * Senza lucchetto il risultato si vede nei dati: le letture tornano con i byte
+ * di un ALTRO registro. 2313 e' 0x0909, cioe' il byte di stato ripetuto; 4354
+ * e' 0x1102, un byte del registro della polarita' seguito da un altro. Non sono
+ * misure sbagliate: sono risposte di una transazione arrivate a chi ne aveva
+ * chiesta un'altra.
  *
  * Da qui in giu' ogni transazione prende questo lucchetto. Il mutex di Zephyr
  * e' ricorsivo per chi lo possiede gia', quindi annidarli e' sicuro. */
@@ -213,13 +213,12 @@ static K_MUTEX_DEFINE(lucchetto_bus);
  * tiene SDA a zero. Il bus e' occupato per sempre, e ogni transazione - anche
  * verso un ALTRO dispositivo - non parte nemmeno.
  *
- * E' successo qui, ed e' la spiegazione del sintomo che non tornava: dopo un
- * blocco del sensore, l'anello non si accendeva PIU' NEMMENO LUI. Non era rotto
- * l'anello, era il bus. Il microcontrollore si fermava sulla primissima
- * transazione, prima ancora di poter far respirare la luce, e da Linux il
- * dispositivo sembrava senza firmware. Ricaricare il firmware non bastava:
- * resetta il microcontrollore, non il sensore che tiene giu' la linea. Serviva
- * togliere corrente a tutto.
+ * Il sintomo inganna: dopo un blocco del sensore non si accende PIU' NEMMENO
+ * l'anello. Non e' rotto l'anello, e' il bus. Il microcontrollore si ferma
+ * sulla primissima transazione, prima ancora di poter far respirare la luce, e
+ * da Linux il dispositivo sembra senza firmware. Ricaricare il firmware non
+ * basta: resetta il microcontrollore, non il sensore che tiene giu' la linea.
+ * Senza la manovra qui sotto serve togliere corrente a tutto.
  *
  * `i2c_recover_bus()` fa la manovra prevista dallo standard: batte SCL finche'
  * lo schiavo finisce il byte che crede di star mandando e rilascia SDA, poi
@@ -400,7 +399,7 @@ static int tof_misura() {
 
   /* L'interrupt si azzera PRIMA di leggere il risultato. E' l'ordine che usa la
    * libreria Modulino, che funziona; leggendo prima e azzerando dopo si legge
-   * un risultato che il sensore non ha ancora finito di consegnare. */
+   * un risultato che il sensore non ha ancora finito di preparare. */
   /* Le quattro transazioni di una misura si tengono INSIEME: fra lo stato e la
    * distanza non deve infilarsi la lettura di qualcun altro, o si mettono
    * insieme pezzi di due misure diverse. */
@@ -432,11 +431,11 @@ static int tof_misura() {
    * oggetto appoggiato sulla finestrella darebbe qualche millimetro e uno stato
    * di errore, non zero con stato buono.
    *
-   * Prenderlo per buono aveva una conseguenza che sembrava un guasto diverso:
-   * zero e' sotto la soglia del vicino, quindi per Linux c'era SEMPRE una
-   * bottiglia. Non la vedeva mai arrivare - manca il fronte di salita - e dopo
-   * il primo racconto restava in attesa che venisse tolta, cosa che non
-   * succedeva mai. Un solo numero mal interpretato, due sintomi. */
+   * Prenderlo per buono ha una conseguenza che sembra un guasto diverso: zero
+   * e' sotto la soglia del vicino, quindi per Linux c'e' SEMPRE una bottiglia.
+   * Non la vede mai arrivare - manca il fronte di salita - e dopo il primo
+   * racconto resta in attesa che venga tolta, cosa che non succede mai. Un
+   * solo numero mal interpretato, due sintomi. */
   if (mm == 0) return -1;
 
   return (int)mm;
@@ -518,8 +517,8 @@ int scansiona(int blocco) {
  * cinque bit, cioè 0-31, e arriva qui in centesimi.
  *
  * Restituisce se il trasferimento è riuscito. `Module::write()` della libreria
- * ritornava `true` sempre, e quel `true` è ciò che faceva dire al dispositivo di
- * vedere un anello che non aveva mai acceso. */
+ * ritorna `true` sempre, e con quel `true` il dispositivo direbbe di vedere un
+ * anello che non ha mai acceso. */
 static bool anello_grezzo(uint8_t r, uint8_t g, uint8_t b, uint8_t l5) {
   if (l5 > 31) l5 = 31;
   k_mutex_lock(&lucchetto_bus, K_FOREVER);
@@ -584,9 +583,10 @@ static void respira() {
  *
  * cioe' ASPETTA CHE LINUX APRA LA SERIALE, che succede quando parte
  * `arduino-router`: una quarantina di secondi dopo l'accensione. Finche' quella
- * riga non passa, `setup()` non finisce e `loop()` non gira - e l'anello
- * restava spento fino a tre o quattro secondi prima dello schermo, mentre la
- * matrice di LED della board mostra il logo Arduino da subito.
+ * riga non passa, `setup()` non finisce e `loop()` non gira - e senza un filo a
+ * parte l'anello resterebbe spento fino a tre o quattro secondi prima dello
+ * schermo, mentre la matrice di LED della board mostra il logo Arduino da
+ * subito.
  *
  * Il microcontrollore, invece, e' pronto in millisecondi. Qui l'anello si
  * accende PRIMA di chiamare il ponte, e lo fa respirare un filo separato mentre
@@ -605,8 +605,8 @@ void setup() {
   /* PRIMA la luce, poi il ponte. In quest'ordine e non nell'altro. */
   libera_il_bus();
   Wire1.begin();
-  /* 100 kHz: e' cio' che faceva `ModulinoClass::begin()`, e i Modulino sono
-   * tarati su quello. Tolta di mezzo la libreria, il clock va rimesso a mano. */
+  /* 100 kHz: e' cio' che imposta `ModulinoClass::begin()`, e i Modulino sono
+   * tarati su quello. Senza la libreria, il clock va impostato a mano. */
   Wire1.setClock(100000);
 
   /* L'anello subito: e' l'unica cosa che dice "sono vivo" nei quaranta secondi
@@ -630,10 +630,10 @@ void setup() {
   anima = false;
   k_thread_join(&dati_respiro, K_MSEC(500));
 
-  /* I metodi si dichiarano appena il ponte e' pronto. Prima si dichiaravano
-   * anche prima di toccare l'I2C, perche' un modulo che non rispondeva poteva
-   * impedire a `setup()` di finire; ora ogni transazione e' limitata, e
-   * comunque `Bridge.begin()` non ritorna finche' Linux non c'e'. */
+  /* I metodi si dichiarano appena il ponte e' pronto: ogni transazione I2C e'
+   * limitata, quindi un modulo che non risponde non puo' impedire a `setup()`
+   * di arrivare fin qui, e comunque `Bridge.begin()` non ritorna finche' Linux
+   * non c'e'. */
   Bridge.provide("set_anello", set_anello);
   Bridge.provide("distanza", distanza);
   Bridge.provide("moduli", moduli);

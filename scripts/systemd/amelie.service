@@ -12,11 +12,12 @@ User=arduino
 WorkingDirectory=/home/arduino/amelie
 Environment=PYTHONPATH=/home/arduino/amelie/src
 Environment=PYTHONUNBUFFERED=1
-# Com'e' installato: il modello e' disponibile (lo accende il modo
-# «generativa»), e' quello addestrato su questo progetto, e la carta dei vini
-# sta accanto al codice. Senza `--con-modello` il modo «generativa» non si
-# puo' scegliere e un modo salvato torna in silenzio all'archivio: e'
-# successo reinstallando questo file.
+# Il modello e' installato e si puo' scegliere (lo accende il modo
+# «generativa»), ed e' quello addestrato su questo progetto. Un'installazione
+# nuova parte comunque nel modo «archivio»: l'applicazione lo usa quando in
+# var/modo non c'e' un modo salvato. La carta dei vini e' il vini.csv accanto
+# al codice. Senza `--con-modello` il modo «generativa» non si puo' scegliere,
+# e un modo «generativa» salvato torna in silenzio all'archivio.
 ExecStart=/home/arduino/amelie/venv/bin/python -m amelie.app --porta 8080 \
     --con-modello --modello-addestrato --carta /home/arduino/amelie/vini.csv
 Restart=always

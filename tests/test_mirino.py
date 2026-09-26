@@ -115,10 +115,10 @@ class TestIlDisegno:
         """IL test.
 
         `ritaglia_centro` restituisce una VISTA sullo stesso blocco di memoria.
-        Disegnandoci sopra il rettangolo e la scritta, quelli finivano dentro
-        all'immagine che l'OCR stava per leggere: la prima riga riconosciuta
-        era «nitidezza 60 (soglia 40)», cioè la sovrimpressione di questo
-        strumento.
+        Disegnandoci sopra il rettangolo e la scritta, quelli finirebbero
+        dentro all'immagine che l'OCR sta per leggere, e la prima riga
+        riconosciuta sarebbe «nitidezza 60 (soglia 40)»: la sovrimpressione di
+        questo strumento.
         """
         import numpy as np
 
@@ -154,7 +154,7 @@ class TestIlDisegno:
 
 
 class CameraFinta:
-    """Una camera che consegna sempre lo stesso fotogramma.
+    """Una camera che restituisce sempre lo stesso fotogramma.
 
     Il ritaglio lo delega a una camera VERA: `disegna` chiede alla camera il
     riquadro in uso, e riscriverne qui una copia vorrebbe dire provare il

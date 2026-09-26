@@ -114,5 +114,28 @@
     "Cake":                {"it": {"etichetta": "torte"}, "en": {"etichetta": "cake"}},
     "Cookies":             {"it": {"etichetta": "biscotti"}, "en": {"etichetta": "cookies"}},
     "Chocolate":           {"it": {"etichetta": "cioccolato"}, "en": {"etichetta": "chocolate"}}
+  },
+  "regione": {
+    "_fonte": "le regioni italiane, come le scrive l'archivio",
+    "Abruzzo":              {"it": {"etichetta": "Abruzzo"}, "en": {"etichetta": "Abruzzo"}},
+    "Basilicata":           {"it": {"etichetta": "Basilicata"}, "en": {"etichetta": "Basilicata"}},
+    "Calabria":             {"it": {"etichetta": "Calabria"}, "en": {"etichetta": "Calabria"}},
+    "Campania":             {"it": {"etichetta": "Campania"}, "en": {"etichetta": "Campania"}},
+    "Emilia-Romagna":       {"it": {"etichetta": "Emilia-Romagna"}, "en": {"etichetta": "Emilia-Romagna"}},
+    "Friuli-Venezia Giulia":{"it": {"etichetta": "Friuli-Venezia Giulia"}, "en": {"etichetta": "Friuli-Venezia Giulia"}},
+    "Lazio":                {"it": {"etichetta": "Lazio"}, "en": {"etichetta": "Lazio"}},
+    "Liguria":              {"it": {"etichetta": "Liguria"}, "en": {"etichetta": "Liguria"}},
+    "Lombardia":            {"it": {"etichetta": "Lombardia"}, "en": {"etichetta": "Lombardy"}},
+    "Marche":               {"it": {"etichetta": "Marche"}, "en": {"etichetta": "Marche"}},
+    "Molise":               {"it": {"etichetta": "Molise"}, "en": {"etichetta": "Molise"}},
+    "Piemonte":             {"it": {"etichetta": "Piemonte"}, "en": {"etichetta": "Piedmont"}},
+    "Puglia":               {"it": {"etichetta": "Puglia"}, "en": {"etichetta": "Apulia"}},
+    "Sardegna":             {"it": {"etichetta": "Sardegna"}, "en": {"etichetta": "Sardinia"}},
+    "Sicilia":              {"it": {"etichetta": "Sicilia"}, "en": {"etichetta": "Sicily"}},
+    "Toscana":              {"it": {"etichetta": "Toscana"}, "en": {"etichetta": "Tuscany"}},
+    "Trentino-Alto Adige":  {"it": {"etichetta": "Trentino-Alto Adige"}, "en": {"etichetta": "Trentino-Alto Adige"}},
+    "Umbria":               {"it": {"etichetta": "Umbria"}, "en": {"etichetta": "Umbria"}},
+    "Valle d'Aosta":        {"it": {"etichetta": "Valle d'Aosta"}, "en": {"etichetta": "Aosta Valley"}},
+    "Veneto":               {"it": {"etichetta": "Veneto"}, "en": {"etichetta": "Veneto"}}
   }
 }

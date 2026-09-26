@@ -1,8 +1,8 @@
 """La bottiglia cambiata mentre il dispositivo sta raccontando.
 
-Il comportamento voluto: quando la bottiglia sul piatto viene sollevata e
-sostituita con un'altra, la descrizione deve cambiare subito, e la nuova si
-comincia a leggere mentre la voce parla ancora della vecchia. Ma se la
+Quando la bottiglia sul piatto viene sollevata e sostituita con un'altra, la
+descrizione deve cambiare subito, e la nuova si comincia a leggere mentre la
+voce parla ancora della vecchia. Ma se la
 bottiglia rimessa e' la STESSA - sollevata per versare - il racconto non si
 interrompe. Qui si prova la decisione, con camera e OCR finti e il resto vero:
 la macchina a stati, le correzioni, l'archivio.
@@ -179,7 +179,7 @@ class TestUnAltraBottiglia:
 
     def test_se_non_si_capisce_il_racconto_continua(self, amelie):
         """Nessuna parola letta: non si interrompe niente, e la bottiglia si
-        rilegge a racconto finito, come prima."""
+        rilegge quando il racconto finisce."""
         _racconta(amelie)
         a = _posa(amelie, "2024|75 cl", 11)
         amelie._decidi_in_anticipo(a)

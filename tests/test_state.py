@@ -101,7 +101,7 @@ class TestDeviazioni:
         m = porta_a(Stato.RIPOSIZIONA)
         assert m.invia(Evento.SCADENZA).a is Stato.SCANSIONE
 
-    def test_non_c_e_piu_una_scelta_fra_candidati(self):
+    def test_nessuna_scelta_fra_candidati(self):
         """Un riconoscimento dubbio non si chiede all'ospite: dal
         riconoscimento si va solo al racconto, o a riposizionare."""
         m = porta_a(Stato.RICONOSCIMENTO)
@@ -203,10 +203,10 @@ class TestCoerenzaDelleTabelle:
                     f"{stato} scade dopo {durata}s ma non gestisce SCADENZA"
                 )
 
-    def test_l_assestamento_non_si_aspetta_piu_a_occhi_chiusi(self):
-        """Era 0,6 s spesi sempre, per il caso peggiore.
+    def test_l_assestamento_non_si_aspetta_a_occhi_chiusi(self):
+        """L'assestamento non e' un'attesa fissa tarata sul caso peggiore.
 
-        Adesso la camera resta in moto e lo scatto si prende dal flusso
+        La camera resta in moto e lo scatto si prende dal flusso
         tenendo il primo fotogramma abbastanza nitido: l'oscillazione la si
         guarda, e chi appoggia la bottiglia piano non la paga. Quello che resta
         qui e' solo il tempo perche' la schermata non sia un lampo e perche'
@@ -218,14 +218,14 @@ class TestCoerenzaDelleTabelle:
 class TestRientro:
     """Una regola verso lo stesso stato deve fare qualcosa, o non serve scriverla.
 
-    La macchina trattava allo stesso modo due cose diverse: un evento che nello
-    stato corrente non significa niente, e una transizione scritta apposta verso
-    lo stesso stato. La prima deve restare inerte, la seconda no.
+    Sono due cose diverse: un evento che nello stato corrente non significa
+    niente, e una transizione scritta apposta verso lo stesso stato. La prima
+    deve restare inerte, la seconda no.
 
-    Il difetto non si vedeva: `(RACCONTO, RIPETI) -> RACCONTO` era dichiarata e
-    non produceva alcun effetto, quindi ripetere il racconto o cambiare lingua
-    mentre parlava non faceva assolutamente nulla. Nessun errore, nessun
-    messaggio, nessuna traccia nei registri.
+    Confonderle produce un difetto che non si vede: `(RACCONTO, RIPETI) ->
+    RACCONTO` resterebbe dichiarata ma senza alcun effetto, e ripetere il
+    racconto o cambiare lingua mentre parla non farebbe assolutamente nulla.
+    Nessun errore, nessun messaggio, nessuna traccia nei registri.
     """
 
     def test_un_evento_senza_regola_resta_inerte(self):

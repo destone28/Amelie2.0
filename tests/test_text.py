@@ -90,7 +90,7 @@ class TestEstraiAnnata:
         assert estrai_annata(["8001234201900"]) is None
 
     def test_non_inventa_un_annata_dentro_una_parola(self):
-        """Il caso trovato su un'etichetta vera: «Grigio» diventava 1910.
+        """Un caso da un'etichetta vera: senza questa regola «Grigio» sarebbe 1910.
 
         La riparazione delle cifre trasforma G->6, i->1, g->9, i->1, o->0, e
         dentro «6r1910» compare un anno che non esiste. Un'annata vera è

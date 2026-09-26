@@ -31,8 +31,8 @@ def racconta(p) -> str:
                 "volta.")
     v = p.versione()
     if v is None:
-        return ("firmware anteriore al protocollo 2: non sa scandire il bus.\n"
-                "  Carica firmware/amelie_mcu.")
+        return ("il firmware non dichiara la versione del protocollo: non sa "
+                "scandire il bus.\n  Carica firmware/amelie_mcu.")
 
     trovati = p.scansiona()
     if trovati is None:

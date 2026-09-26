@@ -5,10 +5,10 @@ denominazione e il suo racconto già scritto, da leggere così com'è. Niente
 cascata, niente composizione dai fatti, niente modello: si riconosce il titolo
 e si legge la descrizione.
 
-**È una prova, non la strada.** Si accende con `--carta vini.csv` e il
-dispositivo dimentica l'archivio per tutto il tempo che resta accesa; si spegne
-togliendo l'opzione. Serve a vedere, su bottiglie vere, che effetto fa un testo
-scritto da una persona al posto di uno composto dai dati.
+È uno dei tre modi di racconto, accanto all'archivio e al modello: si carica
+con `--carta vini.csv` e si sceglie dalle impostazioni. Serve al locale che
+vuole raccontare i propri vini con parole proprie, scritte da una persona,
+invece che con un testo composto dai dati.
 
 Quello che NON cambia è la regola: **non si nomina ciò che non si è letto.**
 Vale qui come nell'archivio, e vale di più: le descrizioni sono lunghe e
@@ -37,17 +37,6 @@ log = logging.getLogger(__name__)
 # due titoli che condividono una parola sola non si contendono la bottiglia.
 SOMIGLIANZA_MINIMA = 55.0
 
-# Le parole che un titolo può contenere senza che l'etichetta le scriva.
-#
-# I marchi di denominazione, perché una bottiglia dice «Soave» e il «DOC» sta
-# scritto piccolo o non si legge. E «annata», che nel Chianti Classico è il
-# nome del gradino base e sull'etichetta non compare mai — chi imbottiglia
-# un'Annata scrive «Chianti Classico» e basta.
-#
-# Tutto il resto no: se il titolo dice «Extra Brut», «Riserva» o «Classico»,
-# quelle parole devono essere sul vetro. Promettono un vino diverso, e
-# prometterlo senza averlo letto è l'errore che la carta rende peggiore —
-# perché qui la descrizione è lunga, dettagliata e convincente.
 # Quanto deve somigliare un pezzo di parola per ritrovare la parola intera,
 # quando il titolo si accetta parola per parola: vedi `_somiglianza`. I pezzi
 # veri, lasciati dal vetro curvo, stanno sopra - «parossa» per «grasparossa»
@@ -70,6 +59,17 @@ PAROLE_DI_LEGAME = frozenset((
     "des", "les", "sur", "aux", "von", "und", "and", "the",
 ))
 
+# Le parole che un titolo può contenere senza che l'etichetta le scriva.
+#
+# I marchi di denominazione, perché una bottiglia dice «Soave» e il «DOC» sta
+# scritto piccolo o non si legge. E «annata», che nel Chianti Classico è il
+# nome del gradino base e sull'etichetta non compare mai — chi imbottiglia
+# un'Annata scrive «Chianti Classico» e basta.
+#
+# Tutto il resto no: se il titolo dice «Extra Brut», «Riserva» o «Classico»,
+# quelle parole devono essere sul vetro. Promettono un vino diverso, e
+# prometterlo senza averlo letto è l'errore che la carta rende peggiore —
+# perché qui la descrizione è lunga, dettagliata e convincente.
 TACITE = frozenset((
     "doc", "docg", "dop", "igt", "igp", "aoc", "aop", "ava", "doca", "vdp",
     "qba", "annata",
@@ -100,7 +100,7 @@ class Voce:
 
         `None` e' un'informazione, non un guasto: vuol dire che questa bottiglia
         va raccontata da un'altra parte. Senza questa distinzione, all'ospite
-        che aveva scelto l'inglese arrivava la prima frase tradotta e poi tutto
+        che ha scelto l'inglese arriverebbe la prima frase tradotta e poi tutto
         il resto in italiano - scritto **e letto**, con la voce inglese che
         compita l'italiano.
         """
@@ -125,8 +125,8 @@ class Carta:
         # titolo si è letto: il filtro butta via «classico», «riserva» e
         # «superiore» — parole che non identificano un vino ma distinguono
         # benissimo un Chianti da un Chianti Classico. Contare senza di loro
-        # faceva pareggiare i due titoli, e vinceva quello che veniva prima
-        # nel file.
+        # farebbe pareggiare i due titoli, e vincerebbe quello che viene
+        # prima nel file.
         self._token: list[list[str]] = []
         self._tutte: list[list[str]] = []
         # Quali voci contengono ciascuna parola. Serve a capire cosa una parola
@@ -234,17 +234,17 @@ class Carta:
             # dell'etichetta. La somiglianza da sola non basta e sceglie male:
             # su «CHIANTI CLASSICO DOCG» sia «Chianti DOCG» sia «Chianti
             # Classico DOCG Annata» fanno cento, perché il primo è un
-            # sottoinsieme del secondo, e vinceva quello che capitava prima nel
-            # file. Ma «classico» sulla bottiglia c'era scritto, e un Chianti
+            # sottoinsieme del secondo, e vincerebbe quello che capita prima
+            # nel file. Ma «classico» sulla bottiglia c'è scritto, e un Chianti
             # Classico non è un Chianti: contare le parole del titolo che si
             # sono davvero lette sceglie il più specifico fra i veri.
             lette_qui = [p for p in parole if _si_e_letta(p, tutte_lette)]
             # Ma l'implicazione ha un limite: le parole date per scontate non
             # possono essere più di quelle che identificano e si sono lette.
             # «Brunello» si porta dietro «Montalcino», una per una. «TOSCANA»,
-            # che in carta sta in una voce sola, si portava dietro «Maremma» e
-            # «Vermentino»: due parole mai lette per una che sta sull'etichetta
-            # di mezza regione. La carta sa quali vini ha, non quali esistono.
+            # che in carta sta in una voce sola, si porterebbe dietro «Maremma»
+            # e «Vermentino»: due parole mai lette per una che sta
+            # sull'etichetta di mezza regione. La carta sa quali vini ha, non quali esistono.
             mute_implicate = [p for p in parole if p not in TACITE
                               and p not in PAROLE_DI_LEGAME and p not in lette_qui]
             identificanti = [p for p in lette_qui if p not in TACITE
@@ -268,9 +268,9 @@ class Carta:
     def _implicate(self, lette: Sequence[str]) -> set[str]:
         """Le parole che non serve leggere, perché la carta le dà per scontate.
 
-        Sul dispositivo, etichetta vera: l'OCR ha letto «Brunello» e tre
-        frammenti, e la regola ha scartato «Brunello di Montalcino DOCG»
-        perché «Montalcino» sul vetro non c'era. Ma in carta **non esiste un
+        Per esempio, su un'etichetta vera l'OCR legge «Brunello» e tre
+        frammenti, e la regola scarterebbe «Brunello di Montalcino DOCG»
+        perché «Montalcino» sul vetro non c'è. Ma in carta **non esiste un
         altro Brunello**: ogni voce che contiene quella parola contiene anche
         «Montalcino», e dirlo non aggiunge nessun rischio.
 
@@ -286,12 +286,12 @@ class Carta:
         # restringesse anche «brut», leggere «CHAMPAGNE BRUT» lascerebbe in
         # piedi il solo «Champagne Extra Brut» e da li' «extra» risulterebbe
         # implicato - cioe' la regola si smentirebbe da sola proprio sul caso
-        # che l'ha fatta nascere. Provato, e succedeva.
+        # per cui esiste.
         #
         # E nemmeno le parole di legame. «del» sta in venti voci della carta, e
-        # su «CORTE DEL BORGO · OSSA DI CASTELVETRO» intersecava a vuoto la
-        # famiglia di «castelvetro», che e' una voce sola: la bottiglia aveva
-        # scritto il suo nome per intero e non se ne implicava niente.
+        # su «CORTE DEL BORGO · OSSA DI CASTELVETRO» intersecherebbe a vuoto la
+        # famiglia di «castelvetro», che e' una voce sola: la bottiglia ha
+        # scritto il suo nome per intero e non se ne implicherebbe niente.
         insiemi = [self._dove[p] for p in lette
                    if p in self._dove and p not in PAROLE_GENERICHE
                    and p not in PAROLE_DI_LEGAME]
@@ -327,34 +327,34 @@ def _somiglianza(testo: str, chiavi: Sequence[str], lette: Sequence[str],
 
     `token_set_ratio` da sola è tutto-o-niente sulle parole, e un'etichetta
     letta a pezzi la manda sotto la soglia anche quando ogni parola del titolo
-    c'è. Sul dispositivo, un Lambrusco tenuto in mano davanti alla camera:
-    «LAMBRUSCO / PAROSSA DI CASTELVETN» faceva 54 con «Lambrusco Grasparossa
-    di Castelvetro», e il titolo non arrivava nemmeno alla regola che l'avrebbe
-    accettato - «parossa» e «castelvetn» sono proprio le parole del titolo, con
+    c'è. Per esempio, su un Lambrusco tenuto in mano davanti alla camera,
+    «LAMBRUSCO / PAROSSA DI CASTELVETN» fa 54 con «Lambrusco Grasparossa di
+    Castelvetro», e il titolo non arriverebbe nemmeno alla regola che lo
+    accetta - «parossa» e «castelvetn» sono proprio le parole del titolo, con
     la curva del vetro che se ne mangia un pezzo.
 
     La seconda misura è quella dell'archivio, parola per parola: ogni parola
     del titolo cerca la sua fra quelle lette. Ma vale solo a tre condizioni,
-    e ognuna viene da un errore visto rigiocando milleduecento letture del
-    giornale: il titolo ha almeno due parole, le ritrova TUTTE, e almeno una
-    l'ha letta esatta. Senza, una parola sola somigliante bastava: «SALENTO»
-    diventava «Alentejo DOC», «MARO» diventava «Marino DOC». Con due parole
-    di cui una esatta, il resto può essere un pezzo di parola: è ciò che il
-    vetro curvo lascia leggere.
+    e ognuna è misurata rigiocando milleduecento letture del giornale: il
+    titolo ha almeno due parole, le ritrova TUTTE, e almeno una l'ha letta
+    esatta. Senza, basterebbe una parola sola somigliante: «SALENTO»
+    diventerebbe «Alentejo DOC», «MARO» diventerebbe «Marino DOC». Con due
+    parole di cui una esatta, il resto può essere un pezzo di parola: è ciò
+    che il vetro curvo lascia leggere.
 
     Il pezzo deve somigliare un po' più di quanto chieda la regola sulle
-    parole: a settanta, «raccolta» della retroetichetta ritrovava
-    «franciacorta», e con «BRUT» esatto uno spumante pugliese diventava un
+    parole: a settanta, «raccolta» della retroetichetta ritroverebbe
+    «franciacorta», e con «BRUT» esatto uno spumante pugliese diventerebbe un
     Franciacorta. Vedi `RISCONTRO_PEZZO`.
 
     Una parola che la carta dà per scontata - vedi `Carta._implicate` - conta
     come un pezzo appena sufficiente, ma solo se almeno due parole del titolo
     si sono ritrovate davvero: «OSSA DI CASTELVETRO · AMBRUSCO» è un
-    Grasparossa anche se «Grasparossa» è caduto oltre la curva. Con una sola,
-    rigiocando il giornale, una parola che sta in una voce sola si portava
-    dietro tutto il titolo: «TOSCANA» diventava «Maremma Toscana DOC
-    Vermentino», «BAROSSA» letto da un'etichetta di Albarossa diventava
-    «Barossa Valley Shiraz».
+    Grasparossa anche se «Grasparossa» è caduto oltre la curva. Con una sola
+    - misurato rigiocando il giornale - una parola che sta in una voce sola
+    si porterebbe dietro tutto il titolo: «TOSCANA» diventerebbe «Maremma
+    Toscana DOC Vermentino», «BAROSSA» letto da un'etichetta di Albarossa
+    diventerebbe «Barossa Valley Shiraz».
     """
     from rapidfuzz import fuzz
 

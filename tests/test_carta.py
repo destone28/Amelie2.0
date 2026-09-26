@@ -116,9 +116,8 @@ class TestSiSceglieIlPiuSpecificoFraIVeri:
 
 class TestLOcrSbagliaLeLettere:
     def test_un_refuso_non_fa_perdere_il_vino(self, carta):
-        """Misurato sul dispositivo: l'OCR ha letto «CERUOLO» e la bottiglia è
-        stata riconosciuta lo stesso. Il riscontro è per parola e un refuso
-        vale ottanta su cento."""
+        """L'OCR sbaglia spesso una lettera, e la bottiglia va riconosciuta lo
+        stesso: il riscontro è per parola, e un refuso vale ottanta su cento."""
         assert carta.cerca(["BAROLC", "DOCG"]).titolo == "Barolo DOCG"
 
     def test_ma_una_parola_diversa_si(self, carta):
@@ -128,9 +127,9 @@ class TestLOcrSbagliaLeLettere:
 class TestLEtichettaLettaAPezzi:
     """Il vetro curvo si mangia l'inizio e la fine delle parole.
 
-    Sul dispositivo,un Lambrusco tenuto in mano: ogni
-    parola del titolo era sul vetro, ma a pezzi, e la somiglianza dell'intera
-    stringa restava a 54 - sotto la soglia - anche con tutte le parole lette.
+    Un Lambrusco tenuto in mano: ogni parola del titolo è sul vetro, ma a
+    pezzi, e la somiglianza dell'intera stringa resta a 54 - sotto la soglia -
+    anche con tutte le parole lette.
     """
 
     VOCI = [
@@ -156,15 +155,16 @@ class TestLEtichettaLettaAPezzi:
         assert lambrusco.cerca(righe).titolo == "Lambrusco Grasparossa di Castelvetro DOC"
 
     def test_ma_una_parola_sola_che_somiglia_no(self, lambrusco):
-        """Senza una parola letta esatta e una seconda che la conferma, basta
-        una somiglianza: «SALENTO» faceva «Alentejo», «MARO» faceva «Marino»."""
+        """Serve una parola letta esatta e una seconda che la conferma: se
+        bastasse una somiglianza, «SALENTO» farebbe «Alentejo» e «MARO»
+        farebbe «Marino»."""
         assert lambrusco.cerca(["PALAMA", "NEGROAMARO", "SALENTO", "VINICOLA"]) is None
         assert lambrusco.cerca(["2026", "ALBAD", "PALAMÀ", "MARO", "22"]) is None
 
     def test_e_un_pezzo_troppo_lontano_nemmeno(self, lambrusco):
         """«raccolta» della retroetichetta somiglia a «franciacorta» per settanta
-        su cento: con «BRUT» esatto, uno spumante pugliese diventava un
-        Franciacorta."""
+        su cento: se il pezzo bastasse, con «BRUT» esatto uno spumante pugliese
+        diventerebbe un Franciacorta."""
         righe = ["PRODUTTORI MANDURIA", "Vino Spumante di Qualità", "METODO CLASSICO",
                  "BRUT ROSÉ", "RACCOLTA DIFERENZIATA VERIFICA LE DISPOSIZIONI"]
         assert lambrusco.cerca(righe) is None
@@ -179,9 +179,10 @@ class TestLEtichettaLettaAPezzi:
         assert lambrusco.cerca(righe).titolo == "Lambrusco Grasparossa di Castelvetro DOC"
 
     def test_ma_una_parola_sola_non_si_porta_dietro_un_titolo(self, tmp_path):
-        """Rigiocando il giornale: «TOSCANA» da sola diventava «Maremma Toscana
-        DOC Vermentino», e «VIN» di «VINICOLA» con «SALENTO» somigliante a
-        «santo» diventava un Vin Santo."""
+        """Righe vere del giornale di bordo. Senza questa regola «TOSCANA» da
+        sola diventerebbe «Maremma Toscana DOC Vermentino», e «VIN» di
+        «VINICOLA», con «SALENTO» somigliante a «santo», diventerebbe un Vin
+        Santo."""
         f = tmp_path / "vini.csv"
         with open(f, "w", encoding="utf-8", newline="") as g:
             w = csv.writer(g, quoting=csv.QUOTE_ALL)
@@ -212,9 +213,9 @@ class TestLeVicine:
 
 
 class TestCioCheLaCartaDaPerScontato:
-    """Sul dispositivo, etichetta vera: l'OCR ha letto «Brunello» e tre
-    frammenti, e la regola ha scartato «Brunello di Montalcino DOCG» perché
-    «Montalcino» sul vetro non c'era. Ma in carta non esiste un altro Brunello:
+    """Un'etichetta vera da cui l'OCR legge «Brunello» e tre frammenti: la
+    regola, da sola, scarterebbe «Brunello di Montalcino DOCG» perché
+    «Montalcino» sul vetro non c'è. Ma in carta non esiste un altro Brunello:
     ogni voce che contiene quella parola contiene anche «Montalcino».
 
     Non è un'eccezione scritta a mano: è una proprietà del file, e cambiando la
@@ -248,9 +249,9 @@ class TestCioCheLaCartaDaPerScontato:
         assert "Riserva" not in v.titolo
 
     def test_e_l_extra_brut_pure(self, carta):
-        """Il caso che ha fatto nascere la regola non deve smentirla: se a
-        restringere la famiglia bastasse «brut», resterebbe in piedi il solo
-        Extra Brut e «extra» risulterebbe implicato."""
+        """Il caso che giustifica il veto resta vietato: se a restringere la
+        famiglia bastasse «brut», resterebbe in piedi il solo Extra Brut e
+        «extra» risulterebbe implicato."""
         v = carta.cerca(["CHAMPAGNE", "BRUT", "RESERVE"])
         assert v.titolo == "Champagne AOC"
 
@@ -262,9 +263,9 @@ class TestCioCheLaCartaDaPerScontato:
 class TestLeLingueDellaCarta:
     """Una carta scritta solo in italiano non deve fingere di parlare inglese.
 
-    Visto sul dispositivo: con l'inglese scelto, all'ospite arrivava la prima
-    frase tradotta - quella la compone il lessico - e poi tutta la descrizione
-    in italiano, **letta dalla voce inglese**. Una frase italiana compitata
+    Altrimenti, con l'inglese scelto, all'ospite arriverebbe la prima frase
+    tradotta - quella la compone il lessico - e poi tutta la descrizione in
+    italiano, **letta dalla voce inglese**: una frase italiana compitata
     all'inglese in mezzo a un testo inglese.
     """
 

@@ -177,7 +177,7 @@ ${B}== Come si legge l'esito ==${N}
           sudo apt-mark hold alsa-ucm-conf linux-image-\$(uname -r)
 
   ${Y}Si sente ma pianissimo${N}
-      E' il caso gia' incontrato da altri. Rimedio noto, in userspace:
+      E' un caso noto, con un rimedio in userspace:
           echo 'api.alsa.soft-mixer = true' | \\
             sudo tee /etc/wireplumber/wireplumber.conf.d/50-alsa-soft-mixer.conf
           systemctl --user restart wireplumber
@@ -185,11 +185,10 @@ ${B}== Come si legge l'esito ==${N}
       volume dello schermo e il potenziometro del PAM8403 bassi, e sali.
 
   ${R}Silenzio${N}
-      Non spendere piu' di mezza giornata. Il piano B costa 5 euro, dieci
-      minuti e zero rischio: un adattatore audio USB (USB Audio Class) in una
-      delle porte USB-A dell'hub, e da li' al PAM8403. Salta HDMI, hub e
-      schermo in un colpo solo.
-      Prima di arrendersi, due controlli: che il punto 5 dica "connected", e
+      Il piano B costa 5 euro, dieci minuti e zero rischio: un adattatore
+      audio USB (USB Audio Class) in una delle porte USB-A dell'hub, e da li'
+      al PAM8403. Salta HDMI, hub e schermo in un colpo solo.
+      Prima di passarci, due controlli: che il punto 5 dica "connected", e
       che PipeWire non stia tenendo attivo un profilo diverso —
           wpctl status
           wpctl set-profile <id-scheda> <indice-profilo-HDMI>

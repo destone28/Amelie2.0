@@ -4,9 +4,9 @@
 # L'immagine della UNO Q avvia una scrivania XFCE completa, e due delle cose
 # che parte da sola sono incompatibili con un oggetto da tavolo di ristorante:
 #
-#   ArduinoAppLab  apre una finestra propria e ci si mette DAVANTI al chiosco.
-#                  E' successo: una sua finestra di aggiornamenti ha coperto
-#                  Amelie mentre il dispositivo era acceso e in servizio.
+#   ArduinoAppLab  apre finestre proprie, come quella degli aggiornamenti, e
+#                  le mette DAVANTI al chiosco, anche a dispositivo in
+#                  servizio.
 #   light-locker   e' un blocca-schermo. Qui lo schermo non si deve MAI
 #                  spegnere: a schermo addormentato si perde anche l'audio,
 #                  perche' il ponte ANX7625 configura il flusso solo se vede il

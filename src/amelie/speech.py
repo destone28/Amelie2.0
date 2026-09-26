@@ -13,7 +13,8 @@ bloccato.
 *finetuning* della voce inglese `lessac`, il cui dataset — Blizzard Challenge
 2013 — vieta esplicitamente *«any commercial purpose, including the development,
 marketing, commercialisation, sale or licencing of voice synthesis products»*.
-Il dispositivo può essere usato in un locale. `serena` è addestrata da zero su dataset
+Il dispositivo può essere distribuito anche a fini commerciali, e la licenza
+della voce deve permetterlo. `serena` è addestrata da zero su dataset
 CC BY 4.0, ha la stessa architettura e lo stesso costo di calcolo — i due file
 ONNX differiscono di un byte — e chiede solo una riga di attribuzione.
 
@@ -66,9 +67,7 @@ BUFFER_ALSA_US = 200_000
 # apre il flusso, e `aplay` esce PRIMA che l'ultimo pezzo sia uscito davvero.
 # Misurato qui: su ogni durata, dai tre secondi al secondo scarso, aplay
 # impiega 0,35 s in meno del dovuto. Su nove secondi di racconto non si nota;
-# su una frase da un secondo se ne mangia i due terzi e resta un rumorino - che
-# e' esattamente come e' stato descritto la prima volta che si e' provato
-# l'annuncio della lingua in cuffia.
+# su una frase da un secondo se ne mangia i due terzi e resta un rumorino.
 #
 # Il rimedio NON e' imbottire di silenzio: e' non chiudere mai il flusso. Vedi
 # `Uscita`. Questi margini restano solo per chi suona un file da fuori.
@@ -87,7 +86,7 @@ def silenzio(secondi: float, frequenza: int = 22050) -> bytes:
 # schermo: i controlli «Volume» che il mixer ALSA espone - HPHL, HPHR, RX_RX*
 # - appartengono al codec delle cuffie del SoC, che sta su un altro percorso e
 # non tocca questo. L'unico posto dove il volume si puo' cambiare e' il PCM,
-# prima di consegnarlo ad aplay.
+# prima di passarlo ad aplay.
 VOLUME_PREDEFINITO = 100
 
 # Il volume e' un numero da 0 a 100, e diventa guadagno col QUADRATO. Una scala
@@ -164,8 +163,8 @@ class Uscita:
     """Un flusso audio che si apre una volta sola e non si chiude mai.
 
     Il DSP di questa board impiega **circa due secondi** a cominciare a rendere
-    il suono dopo l'apertura del flusso. Non e' una stima: si sono fatti
-    ascoltare sei bip a un secondo l'uno dall'altro, e se ne sono sentiti
+    il suono dopo l'apertura del flusso. Non e' una stima: di sei bip a un
+    secondo l'uno dall'altro, appena aperto il flusso, se ne sentono
     quattro. Aprire e chiudere `aplay` a ogni frase significa pagare quei due
     secondi ogni volta - e una frase da un secondo sparisce del tutto, ne resta
     l'ultima sillaba.
@@ -186,8 +185,8 @@ class Uscita:
     PEZZO_S = 0.08
     # Di quanto si sta avanti a cio' che l'orecchio sente. Senza un freno non
     # lo si decide: si scrive finche' qualcuno accetta, e la pipe del sistema
-    # da sola tiene 64 KB, cioe' UN SECONDO E MEZZO di parlato a 22050 mono.
-    # E' quello il ritardo con cui la voce arrivava dopo la didascalia.
+    # da sola tiene 64 KB, cioe' UN SECONDO E MEZZO di parlato a 22050 mono:
+    # senza freno, la voce arriverebbe dopo la didascalia di altrettanto.
     VANTAGGIO_S = 0.25
     # Se si resta indietro di piu' di cosi' - il sistema occupato, l'OCR che
     # parte - si riparte da capo col conto invece di recuperare a raffica, che
@@ -244,9 +243,9 @@ class Uscita:
                 return
 
     def attendi_fine(self, tetto_s: float = 120.0) -> None:
-        """Aspetta che TUTTO il consegnato sia stato davvero sentito.
+        """Aspetta che TUTTO l'audio inviato sia stato davvero sentito.
 
-        «Consegnato» e «sentito» non sono la stessa cosa: in mezzo ci sono la
+        «Inviato» e «sentito» non sono la stessa cosa: in mezzo ci sono la
         riserva di questa coda, la pipe del sistema e il buffer di ALSA. Chi
         scrive l'ultimo pezzo di una frase ha finito il suo lavoro, ma
         l'orecchio deve ancora ricevere mezzo secondo abbondante di suono.
@@ -256,7 +255,7 @@ class Uscita:
                and time.monotonic() < scadenza):
             if self._fermo.wait(0.02):
                 return
-        # E poi la latenza vera e propria: l'ultimo byte consegnato deve ancora
+        # E poi la latenza vera e propria: l'ultimo byte inviato deve ancora
         # attraversare la pipe e il buffer di ALSA.
         self._fermo.wait(min(self.latenza_s, max(0.0, scadenza - time.monotonic())))
 
@@ -268,16 +267,16 @@ class Uscita:
 
     @property
     def latenza_s(self) -> float:
-        """Quanto passa fra il consegnare un byte e il sentirlo."""
+        """Quanto passa fra l'invio di un byte e il sentirlo."""
         return self.VANTAGGIO_S + BUFFER_ALSA_US / 1_000_000
 
     def in_pancia_s(self) -> float:
-        """Quanto manca perche' TUTTO il consegnato sia stato sentito.
+        """Quanto manca perche' TUTTO l'audio inviato sia stato sentito.
 
         Non e' solo la coda: c'e' anche cio' che e' gia' passato ad aplay e non
-        e' ancora uscito. Contare solo la coda faceva credere di aver finito
-        con un secondo e mezzo di anticipo, e la didascalia correva avanti alla
-        voce di altrettanto.
+        e' ancora uscito. Contando solo la coda si crederebbe di aver finito
+        con un secondo e mezzo di anticipo, e la didascalia correrebbe avanti
+        alla voce di altrettanto.
         """
         with self._stato:
             coda = len(self._coda) / self._bps
@@ -306,10 +305,10 @@ class Uscita:
 
         Se si scrive finche' qualcuno accetta, si finisce molto avanti a cio'
         che si sente: la pipe del sistema da sola tiene 64 KB, che a 22050 mono
-        sono un secondo e mezzo di parlato, e dopo c'e' il buffer di ALSA. E'
-        quello il ritardo con cui la voce arrivava dopo la didascalia.
+        sono un secondo e mezzo di parlato, e dopo c'e' il buffer di ALSA: la
+        voce arriverebbe dopo la didascalia di altrettanto.
 
-        Scrivendo al ritmo del suono, "consegnato" torna a voler dire "sentito"
+        Scrivendo al ritmo del suono, "inviato" torna a voler dire "sentito"
         a meno del vantaggio dichiarato.
         """
         pezzo = int(self.PEZZO_S * self._bps)
@@ -357,7 +356,7 @@ class Uscita:
             self._versati += len(dati)
 
 # Una voce per lingua. La scelta e' di LICENZA prima che di gusto: vedi la nota
-# in testa al modulo per l'italiano, e docs/ATTRIBUZIONI.md per l'inglese.
+# in testa al modulo per l'italiano, e docs/it/08-attribuzioni.md per l'inglese.
 # Se per una lingua non c'e' voce, il dispositivo mostra il testo e tace: e'
 # meglio del sentire un motore italiano leggere l'inglese.
 VOCI = {
@@ -366,9 +365,9 @@ VOCI = {
     # e' la stessa dell'italiano e per la stessa ragione: le voci inglesi piu'
     # diffuse di Piper - `lessac` e tutte quelle rifinite a partire da lei,
     # `alba` e `libritts_r` comprese - poggiano sul dataset Blizzard Challenge
-    # 2013, che vieta esplicitamente l'uso commerciale. Qui l'uso puo' essere
-    # commerciale, quindi non basta che la scheda dica CC BY: bisogna guardare
-    # anche da CHE COSA e' stata rifinita.
+    # 2013, che vieta esplicitamente l'uso commerciale. Il dispositivo puo'
+    # essere distribuito anche a fini commerciali, quindi non basta che la
+    # scheda dica CC BY: bisogna guardare anche da CHE COSA e' stata rifinita.
     "en": "en_US-ljspeech-medium",
 }
 CARTELLA_CACHE = Path.home() / ".cache" / "amelie" / "voce"
@@ -380,18 +379,18 @@ CARTELLA_CACHE = Path.home() / ".cache" / "amelie" / "voce"
 #
 # Misurate sintetizzando davvero, 90 frasi per voce prese dai racconti in
 # archivio, 15-136 caratteri, per dieci minuti di parlato complessivi. Non
-# dalla cache: dai 14 file inglesi che c'erano in cache usciva 32.000 byte
-# fissi piu' 2.349 per carattere, cioe' un'altra costante, e sbagliata.
+# dai file in cache: sono pochi, non sono un campione, e danno un'altra
+# costante, sbagliata.
 #
-# Il modello e' PROPORZIONALE, senza parte fissa. Provato anche quello con
-# l'intercetta - il silenzio che Piper mette in testa e in coda e' reale, e in
-# italiano i minimi quadrati lo misurano in 0,22 s - e vale uguale: tarando su
-# meta' frasi e provando sull'altra meta', l'errore sulla somma di sei frasi e'
+# Il modello e' PROPORZIONALE, senza parte fissa. Quello con l'intercetta -
+# il silenzio che Piper mette in testa e in coda e' reale, e in italiano i
+# minimi quadrati lo misurano in 0,22 s - vale uguale: tarando su meta'
+# frasi e provando sull'altra meta', l'errore sulla somma di sei frasi e'
 # 2,8% contro 2,9% in inglese e 2,7% contro 3,2% in italiano. Mezzo punto non
 # paga una seconda costante per voce.
 #
 # (Sull'inglese quell'intercetta viene NEGATIVA, -5.179 byte, il che dice solo
-# che una retta non e' la forma giusta su quel campione. Non sarebbe stato un
+# che una retta non e' la forma giusta su quel campione. Non sarebbe un
 # pericolo: la stima si annullerebbe sotto 1,6 caratteri, e le frasi misurate
 # vanno da 23 a 136. E' un motivo per diffidare del modello, non per temerlo.)
 #
@@ -401,9 +400,7 @@ CARATTERI_AL_SECONDO = {
     "it_IT-serena-medium": 17.2,
     "en_US-ljspeech-medium": 14.4,
 }
-# Per una voce che non e' in tabella. E' la media delle due misurate: chi
-# aveva scritto «circa quindici caratteri al secondo» a occhio, nel ripiego
-# senza voce, aveva indovinato quasi esattamente questo numero.
+# Per una voce che non e' in tabella: la media delle due misurate.
 CARATTERI_AL_SECONDO_RIPIEGO = 15.8
 
 # Quanto vale una CIFRA, in caratteri parlati. «1990» sono quattro segni e
@@ -413,9 +410,10 @@ CARATTERI_AL_SECONDO_RIPIEGO = 15.8
 # parte che questa stima deve coprire.
 #
 # Misurato sintetizzando davvero, 39 frasi con cifre fra le due voci: l'errore
-# mediano su quelle frasi passa dal 27% (italiano) e 19% (inglese) al 3,2% in
-# tutte e due. E il valore viene lo stesso per le due lingue, il che ha senso:
-# un numero si pronuncia lungo in qualunque lingua.
+# mediano su quelle frasi e' del 3,2% in tutte e due, contro il 27% (italiano)
+# e il 19% (inglese) contando ogni cifra per un carattere. E il valore viene
+# lo stesso per le due lingue, il che ha senso: un numero si pronuncia lungo
+# in qualunque lingua.
 CIFRA_VALE = 4.7
 
 
@@ -460,10 +458,10 @@ PRONUNCIA: dict[str, str] = {
 # E la stessa tabella in inglese, perche' una sigla italiana letta dalla voce
 # inglese e' due errori in uno.
 #
-# Sentito sul dispositivo: in inglese «DOCG» diventava «denominazione di
-# origine controllata e garantita» - la tabella qui sopra si applicava a
-# qualunque lingua - e la voce inglese lo compitava all'inglese. Una frase
-# italiana, pronunciata male, in mezzo a un testo inglese.
+# Con la tabella qui sopra applicata a qualunque lingua, in inglese «DOCG»
+# diventerebbe «denominazione di origine controllata e garantita», e la voce
+# inglese lo compiterebbe all'inglese. Una frase italiana, pronunciata male,
+# in mezzo a un testo inglese.
 #
 # Le sigle si sciolgono anche qui, e nella loro forma inglese: sono le diciture
 # che stanno sulle etichette esportate. Le respellature fonetiche NON ci sono
@@ -508,9 +506,9 @@ def per_la_voce(testo: str, lingua: str = "it") -> str:
     for pattern, sostituto in _COMPILATE.get(lingua, _COMPILATE["it"]):
         testo = pattern.sub(sostituto, testo)
     # Il trattino fra numeri si legge "meno": va sciolto. E la congiunzione
-    # e' della lingua in cui si parla: «serve at 8 e 10 degrees», sentito
-    # riascoltando i testi inglesi, e' una parola italiana in mezzo a una
-    # frase inglese - lo stesso difetto delle sigle, in piccolo.
+    # e' della lingua in cui si parla: «serve at 8 e 10 degrees» avrebbe una
+    # parola italiana in mezzo a una frase inglese - lo stesso difetto delle
+    # sigle, in piccolo.
     testo = re.sub(r"(\d)\s*-\s*(\d)",
                    r"\1 to \2" if lingua == "en" else r"\1 e \2", testo)
     # «13.0%»: in italiano il decimale si scrive con la virgola, e chi legge
@@ -553,9 +551,9 @@ class ImpostazioniVoce:
     # esiste un device che si chiami "HDMI", e' il backend di MultiMedia4.
     # plughw, non hw: il device HDMI accetta SOLO 32000-48000 Hz e uno o due
     # canali, mentre Piper produce 22050 mono. Con `hw:` ogni riproduzione
-    # falliva con "Unable to install hw params", e il primo sintomo era che non
-    # si sentiva niente. `plughw` mette in mezzo la conversione di ALSA, che su
-    # questa board costa una frazione di punto percentuale di CPU.
+    # fallisce con "Unable to install hw params", e non si sente niente.
+    # `plughw` mette in mezzo la conversione di ALSA, che su questa board
+    # costa una frazione di punto percentuale di CPU.
     device_alsa: str = "plughw:0,3"
     # Due thread su quattro: gli altri due servono al modello linguistico, che
     # su questa board e' sempre il collo di bottiglia.
@@ -739,7 +737,7 @@ class Voce:
             stderr=subprocess.PIPE,
         )
 
-    # Il nome vecchio, per chi lo usava.
+    # Alias di `apri_uscita`.
     _aplay = apri_uscita
 
     def parla(self, frasi: Iterable[str], *, su_frase=None) -> None:
@@ -751,8 +749,8 @@ class Voce:
         `su_frase` viene chiamata quando una frase **comincia a sentirsi**, non
         quando la si scrive. Fra le due cose c'e' tutto cio' che e' in viaggio:
         la coda di questa classe, la pipe del sistema - 64 KB, cioe' un secondo
-        e mezzo di parlato - e il buffer di ALSA. Agganciando la didascalia alla
-        scrittura, il testo compariva uno o due secondi prima della voce.
+        e mezzo di parlato - e il buffer di ALSA. Agganciata alla scrittura, la
+        didascalia comparirebbe uno o due secondi prima della voce.
         """
         uscita = self.uscita()
         # Di quale silenzio siamo figli. Se `zittisci` ne dichiara un altro
@@ -774,9 +772,9 @@ class Voce:
             if su_frase is not None:
                 # Si accoda PRIMA e si mostra DOPO: la frase comincia a sentirsi
                 # quando manca esattamente la sua durata alla fine della coda.
-                # Mostrandola al momento di scriverla si correva avanti di tutto
-                # cio' che era ancora in viaggio - la pipe del sistema da sola
-                # tiene un secondo e mezzo di parlato.
+                # Mostrandola al momento di scriverla si correrebbe avanti di
+                # tutto cio' che e' ancora in viaggio - la pipe del sistema da
+                # sola tiene un secondo e mezzo di parlato.
                 uscita.attendi_residuo(len(pcm) / self._byte_al_secondo())
                 try:
                     su_frase(frase)
@@ -789,7 +787,7 @@ class Voce:
 
     @staticmethod
     def _attendi_uscita(uscita: "Uscita", tetto_s: float = 120.0) -> None:
-        """Il nome vecchio. L'attesa vera sta su `Uscita`, dove sono i numeri."""
+        """Delega a `Uscita.attendi_fine`, dove sono i numeri."""
         uscita.attendi_fine(tetto_s)
 
     def per_lingua(self, codice: str) -> bool:
@@ -823,13 +821,12 @@ class Voce:
         Si butta via cio' che non e' ancora uscito, e il flusso resta APERTO:
         chiuderlo costerebbe altri due secondi alla prossima parola.
 
-        Ma svuotare la coda NON basta, e per un po' non e' bastato: `parla`
-        cicla sulle frasi, e chi stava aspettando spazio per accodare la
-        successiva si svegliava sulla coda ora vuota e la faceva sentire. Un
-        annuncio di lingua e' di DUE frasi: zittendolo a meta' si sentiva la
-        seconda per intero - due secondi e mezzo - sopra la schermata d'invito.
-        Per questo si alza anche un contatore: chi sta parlando se ne accorge e
-        smette.
+        Ma svuotare la coda NON basta: `parla` cicla sulle frasi, e chi sta
+        aspettando spazio per accodare la successiva si sveglierebbe sulla coda
+        ora vuota e la farebbe sentire. Un annuncio di lingua e' di DUE frasi:
+        zittendolo a meta' si sentirebbe la seconda per intero - due secondi e
+        mezzo - sopra la schermata d'invito. Per questo si alza anche un
+        contatore: chi sta parlando se ne accorge e smette.
         """
         with self._lock:
             self._silenzi += 1
@@ -876,19 +873,18 @@ FRASI_FISSE = (
 class Riproduttore:
     """Un racconto che si puo' governare: pausa, salto, ricomincia da capo.
 
-    Il problema che risolve non e' far uscire il suono - per quello bastava
-    `Voce.parla` - ma sapere SEMPRE a che punto si e'. Prima il testo a schermo
-    avanzava a stima, con un `sleep` proporzionale alla lunghezza della frase,
-    mentre la voce andava per conto suo: finche' si va dritti la finzione
-    regge, ma al primo tocco di pausa le due cose divergono e non si
-    riallineano piu'.
+    Il problema che risolve non e' far uscire il suono - per quello basta
+    `Voce.parla` - ma sapere SEMPRE a che punto si e'. Un testo a schermo che
+    avanza a stima, con un `sleep` proporzionale alla lunghezza della frase,
+    mentre la voce va per conto suo, regge finche' si va dritti: al primo
+    tocco di pausa le due cose divergono e non si riallineano piu'.
 
     Qui c'e' una sola verita', la POSIZIONE in byte dentro il buffer, e tutto
     si ricava da quella: i secondi trascorsi, la frase da evidenziare, dove
     ripartire dopo una pausa.
 
     La sintesi corre avanti in un thread suo, perche' la prima frase deve
-    poter suonare dopo due secondi come prima, senza aspettare tutto il testo.
+    poter suonare dopo un paio di secondi, senza aspettare tutto il testo.
     Su questa board la sintesi va a circa il doppio del tempo reale (RTF 0,54),
     quindi dopo la prima frase resta comodamente in vantaggio sulla lettura.
     """
@@ -948,17 +944,18 @@ class Riproduttore:
     def quota(self) -> float:
         """Quanto del racconto INTERO e' stato detto, da 0 a 1.
 
-        La barra a schermo arretrava a ogni frase nuova, e la ragione era che
-        divideva la posizione per `durata_s`, cioe' per i byte gia'
-        sintetizzati. Ma la sintesi corre al doppio del tempo reale (RTF 0,54):
-        per tutta la prima meta' del racconto il denominatore
-        cresceva quasi al doppio della velocita' del numeratore. Dentro una
-        frase il rapporto saliva; all'arrivo della frase dopo precipitava.
+        Dividere la posizione per `durata_s`, cioe' per i byte gia'
+        sintetizzati, fa arretrare la barra a ogni frase nuova: la sintesi
+        corre al doppio del tempo reale (RTF 0,54), e per tutta la prima meta'
+        del racconto il denominatore cresce quasi al doppio della velocita' del
+        numeratore. Dentro una frase il rapporto sale; all'arrivo della frase
+        dopo precipita.
 
         Misurato su un racconto ricomposto da frasi con audio vero, otto frasi
-        per 16,8 secondi: **sette arretramenti, il peggiore di 43,9 punti** - e
-        a due secondi dall'inizio la barra segnava gia' il 56%, perche' con una
-        sola frase sintetizzata la posizione e' quasi tutto il buffer.
+        per 16,8 secondi, quel rapporto da' **sette arretramenti, il peggiore
+        di 43,9 punti** - e a due secondi dall'inizio la barra segna gia' il
+        56%, perche' con una sola frase sintetizzata la posizione e' quasi
+        tutto il buffer.
 
         Qui il denominatore e' il racconto intero: i byte VERI di cio' che e'
         gia' sintetizzato piu' i byte STIMATI delle sole frasi che mancano.
@@ -966,19 +963,19 @@ class Riproduttore:
         a quel ritmo di sintesi sparisce verso meta' racconto. E quando non
         manca piu' niente il denominatore e' esatto, quindi la barra non puo'
         piu' arrivare a fondo scala mentre c'e' ancora testo da sintetizzare -
-        cosa che con la vecchia formula capitava in un caso su quattro.
+        cosa che dividendo per `durata_s` capita in un caso su quattro.
 
-        Resta avanti alla voce di quel tanto che separa cio' che si CONSEGNA
+        Resta avanti alla voce di quel tanto che separa cio' che si INVIA
         all'uscita da cio' che l'orecchio sente: circa tre quarti di secondo,
         gli stessi che `attendi_la_coda` esiste per aspettare. Non e' un
         difetto di questa formula, e' la distanza che c'e' in tutto il modulo:
         anche la frase illuminata la ha.
 
-        Provata anche la strada senza stime - ripartire il racconto sul peso in
-        caratteri di ogni frase, denominatore costante dal primo istante - e
-        misurata contro la verita', cioe' la frazione di audio davvero
-        trascorsa. Su ottanta racconti, tarando la stima su frasi diverse da
-        quelle di prova:
+        Il confronto con l'alternativa senza stime - ripartire il racconto sul
+        peso in caratteri di ogni frase, denominatore costante dal primo
+        istante - misurato contro la verita', cioe' la frazione di audio
+        davvero trascorsa, su ottanta racconti, tarando la stima su frasi
+        diverse da quelle di prova:
 
             peso in caratteri    0 arretramenti   scarto mediano 1,1%  peggiore 6,5%
             denominatore misto   0 arretramenti   scarto mediano 0,0%  peggiore 2,8%
@@ -986,9 +983,9 @@ class Riproduttore:
         Nessuna delle due arretra; la seconda e' piu' che doppiamente fedele al
         tempo, perche' il numeratore resta la posizione in byte e non il conto
         delle lettere. Ventidue pixel di errore su una barra di 793, invece di
-        cinquantadue. Il confronto e' stato rifatto con la stima ESATTA che gira
-        qui: la prima volta era stato fatto con un estimatore diverso, e dava
-        1,4% - un numero migliore di quello vero.
+        cinquantadue. Il confronto va fatto con la stessa stima che gira qui,
+        `byte_stimati`: con un estimatore diverso i numeri escono migliori di
+        quelli veri.
 
         Il pavimento serve proprio a questa strada: sostituire la stima di una
         frase con la sua durata vera muove il denominatore di qualche punto, e
@@ -1067,7 +1064,7 @@ class Riproduttore:
             self._thread.append(t)
 
     def pausa(self) -> None:
-        # Quello che era gia' stato consegnato ma non ancora sentito va
+        # Quello che era gia' stato inviato ma non ancora sentito va
         # riascoltato: riprendere piu' avanti taglierebbe una parola.
         indietro = self._uscita.in_pancia_s() + BUFFER_ALSA_US / 1_000_000
         with self._sveglia:
@@ -1123,14 +1120,14 @@ class Riproduttore:
         self._avvisa()
 
     def attendi_la_coda(self, tetto_s: float = 10.0) -> None:
-        """Aspetta che l'ultimo suono consegnato sia stato davvero sentito.
+        """Aspetta che l'ultimo suono inviato sia stato davvero sentito.
 
         Va chiamata prima di `ferma()` quando il racconto e' finito da solo.
-        `_suona` esce quando l'ultimo pezzo e' stato CONSEGNATO all'uscita, ma
-        fra la consegna e l'orecchio ci sono la riserva della coda e la latenza
-        di ALSA: tre quarti di secondo abbondanti. `ferma()` li buttava via, e
-        il racconto si troncava mezza parola prima della fine - in tutte e due
-        le lingue, perche' non era la voce, era la coda.
+        `_suona` esce quando l'ultimo pezzo e' stato INVIATO all'uscita, ma
+        fra l'invio e l'orecchio ci sono la riserva della coda e la latenza
+        di ALSA: tre quarti di secondo abbondanti. `ferma()` li butta via, e
+        chiamata subito troncherebbe il racconto mezza parola prima della fine,
+        in tutte e due le lingue: non e' la voce, e' la coda.
         """
         self._uscita.attendi_fine(tetto_s)
 
@@ -1149,9 +1146,9 @@ class Riproduttore:
         riproduttore passano i tre quarti di secondo che servono all'ultimo
         suono per uscire davvero. In quel mezzo secondo lo schermo mostra
         ancora il racconto e i pulsanti sono accesi, ma qui dentro non c'e' piu'
-        nessuno che suoni: un tocco su «indietro» spostava la posizione, la
-        barra tornava indietro e ci restava, perche' nessuno pubblica piu'
-        niente. Un pulsante che non puo' fare niente deve dirlo.
+        nessuno che suoni: un tocco su «indietro» sposterebbe la posizione, e
+        la barra tornerebbe indietro e ci resterebbe, perche' nessuno pubblica
+        piu' niente. Un pulsante che non puo' fare niente deve dirlo.
         """
         return self._finito.is_set()
 
@@ -1171,10 +1168,10 @@ class Riproduttore:
             log.exception("errore nell'avviso di avanzamento")
 
     def _taci(self) -> None:
-        """Butta via cio' che e' stato consegnato ma non ancora sentito.
+        """Butta via cio' che e' stato inviato ma non ancora sentito.
 
         Il flusso NON si chiude: chiuderlo costerebbe due secondi alla
-        riapertura, e la ripresa dopo una pausa sarebbe muta per metа.
+        riapertura, e la ripresa dopo una pausa sarebbe muta per meta'.
         """
         self._uscita.svuota()
 

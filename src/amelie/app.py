@@ -23,9 +23,9 @@ dispositivo non controlla. Da lì:
     riconoscimento  ~0,05 s SQLite
     racconto        ~0 s    composto dai fatti; decine di secondi dal modello
 
-I numeri sono misurati sul dispositivo, e sono cambiati: lo scatto costava
-0,7 s e l'OCR 3,8, e il racconto veniva da un testo pre-generato perche' il
-modello era l'unica alternativa. Oggi il racconto si compone dai fatti.
+I numeri sono misurati sul dispositivo. Lo scatto non costa quasi niente
+perche' il flusso della camera e' gia' aperto, e il racconto si compone dai
+fatti: il modello resta un'opzione, e costa l'attesa della generazione.
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ VISTA = {
 
 # Dopo tre letture a vuoto si smette di riprovare.
 TENTATIVI_MAX = 3
-# Quanto si aspetta che finisca il lavoro di prima prima di dichiarare guasto.
+# Quanto si aspetta che finisca il lavoro precedente prima di dichiarare guasto.
 ATTESA_DEL_LAVORO_S = 8.0
 
 # Il ripristino da soli. Un guasto isolato scade in sei secondi e torna in
@@ -96,7 +96,7 @@ GUASTI_PER_RIPRISTINO = 3
 FINESTRA_GUASTI_S = 180.0
 # Se i guasti tornano entro dieci minuti da un ripristino, ripristinare non e'
 # bastato: si riavvia il servizio, che riparte da zero in una quarantina di
-# secondi. E' quello che faceva spegnere e riaccendere, senza spegnere.
+# secondi. E' quello che fa spegnere e riaccendere, senza spegnere.
 DOPO_RIPRISTINO_S = 600.0
 
 # Di quanto saltano i due pulsanti laterali. Cinque secondi: meno non si
@@ -112,20 +112,20 @@ TETTO_RACCONTO_S = 900.0
 # ristorante non deve ritararlo ogni sera. Sta in `var`, che e' l'unica cartella
 # del progetto che l'unita' systemd lascia scrivibile.
 PERCORSO_VOLUME = RADICE / "var" / "volume"
-# Le «descrizioni generate»: acceso, il modello scrive il racconto per QUESTA
-# bottiglia; spento, il racconto si compone dai fatti. Sta accanto al volume e
-# si ricorda allo stesso modo, perche' e' la stessa cosa - una scelta di chi
-# apre il locale, non un parametro di collaudo.
+# L'interruttore a due posizioni delle «descrizioni generate»: acceso vale il
+# modo «generativa», spento l'archivio. Si legge solo se in `PERCORSO_MODO`
+# non c'e' un modo valido - vedi `Amelie._modo_salvato`.
 PERCORSO_GENERATI = RADICE / "var" / "racconti_generati"
 # Come il dispositivo racconta. Tre modi, e la differenza fra loro non e' di
-# stile: e' DA DOVE VIENE quello che dice.
+# stile: e' DA DOVE VIENE quello che dice. Il modo si ricorda come il volume,
+# perche' e' una scelta di chi apre il locale, non un parametro di collaudo.
 #
 #   archivio    il racconto composto dai dati del registro UE e dal
 #               disciplinare, senza modello. Istantaneo, e vero per
 #               costruzione: e' il modo predefinito.
 #   generativa  gli stessi dati, ma il testo lo scrive il modello sul momento
 #               per QUELLA bottiglia. Costa l'attesa della generazione, e passa
-#               dalla stessa verifica di sempre.
+#               dalla `verifica` del narratore.
 #   carta       una carta dei vini scritta a mano, in un file. Solo i vini che
 #               ci sono dentro, e per quelli il testo e' quello che ha scritto
 #               una persona. Vedi `amelie.carta`.
@@ -157,10 +157,13 @@ CORREZIONE_TETTO_S = 600.0
 # Quanto resta a schermo un racconto finito che si puo' correggere. Di norma
 # sono i due secondi di CONCLUSO; ma sulla bottiglia fuori archivio l'ultima
 # frase dice che la descrizione si e' fatta da se', ed e' li' che viene voglia
-# di correggerla. Due secondi non bastano ad arrivare al pulsante: visto sul
-# dispositivo, il tocco e' arrivato sulla schermata d'invito. Dodici, come
-# la scelta fra i candidati.
+# di correggerla. Due secondi non bastano ad arrivare al pulsante: il tocco
+# cadrebbe sulla schermata d'invito. Dodici lasciano il tempo di arrivarci.
 CONCLUSO_CON_CORREZIONE_S = 12.0
+# Quanto resta la schermata finale dopo un cambio di lingua: il tempo di
+# annunciare la lingua e di far ripartire il racconto (`_riprendi_racconto`
+# aspetta al massimo 5 + 6 secondi), con un margine.
+LINGUA_A_RACCONTO_FINITO_S = 15.0
 SFONDO_DA_RISCRIVERE = 0.20
 # Quanti punti dell'etichetta, ritrovati nella foto nuova, bastano a dire che
 # la bottiglia rimessa sul piatto e' la stessa che si sta raccontando. Misurato
@@ -181,8 +184,8 @@ PASSO_VOLUME = 10
 # tambureggiamento: si suona quando la mano si e' fermata.
 RIPOSO_VOLUME_S = 0.35
 
-# Il tono di ogni schermata, per tenere schermo e anello d'accordo. Prima erano
-# tutti dello stesso oro: un guasto aveva l'aria di un invito.
+# Il tono di ogni schermata, per tenere schermo e anello d'accordo: con lo
+# stesso oro per tutte, un guasto avrebbe l'aria di un invito.
 TONO = {
     Stato.RIPOSIZIONA: "invito",     # ambra: si chiede una cosa
     Stato.GUASTO: "errore",          # rosso: qualcosa non ha funzionato
@@ -216,17 +219,12 @@ class Configurazione:
     simula_mcu: bool = False
     senza_camera: bool = False
     senza_voce: bool = False
-    # Il modello e' SPENTO in modo predefinito, e non e' una scelta di comodo.
-    # Misurato su questa board, un modello da 1 miliardo di parametri produce
-    # italiano non presentabile: «La Falanghina e' un'annata di media eta'»,
-    # «Il colore della bacca e' bianco» (recita l'etichetta del campo), e sul
-    # Nebbiolo inverte i fatti - il template dice «colore scarico» e lui scrive
-    # «colore scuro». Provati anche Qwen 2.5 1.5B (peggiore e piu' lento) e la
-    # riscrittura del template (butta via meta' dei fatti).
-    # Il racconto composto dai fatti e' la scelta predefinita, ed e' vero per
-    # costruzione. Con --con-modello il modo «generativa» diventa scegliibile
-    # dalle impostazioni: il modello scrive per primo, verificato, e ripiega
-    # sul testo pronto per quel record e poi sulla composizione.
+    # Il modello linguistico e' un'opzione. Il modo predefinito e' il racconto
+    # composto dai fatti, vero per costruzione e istantaneo: un modello piccolo
+    # che scrive da se' puo' sbagliare un fatto o una parola, e la verifica
+    # non li prende tutti. Con --con-modello il modo «generativa» diventa
+    # sceglibile dalle impostazioni: il modello scrive per primo, verificato,
+    # e ripiega sul racconto pronto per quel record e poi sulla composizione.
     senza_modello: bool = True
     # Il modello caricato e' quello affinato su questo progetto? Cambia la
     # FORMA del prompt, non solo il contenuto: il modello addestrato vuole i
@@ -236,29 +234,27 @@ class Configurazione:
     modello_addestrato: bool = False
     device_audio: str = "plughw:0,3"
     porta: int = 8080
-    # Il battito. Era 0,15 s, ed e' sceso perche' adesso e' lui a vedere
-    # arrivare la bottiglia: il sensore di distanza risponde in sei millesimi e
-    # vuole tre letture d'accordo per dire che c'e' qualcuno, quindi il ritardo
-    # dell'innesco e' tre battiti. A 0,15 erano quattrocentocinquanta
-    # millesimi, meta' del secondo che abbiamo in tutto; a 0,05 sono
-    # centocinquanta, e costano il dodici per cento di un core a non far niente.
+    # Il battito, ed e' lui a vedere arrivare la bottiglia: il sensore di
+    # distanza risponde in sei millesimi e vuole tre letture d'accordo per dire
+    # che c'e' qualcuno, quindi il ritardo dell'innesco e' tre battiti. A 0,05 s
+    # sono centocinquanta millesimi, e costano il dodici per cento di un core a
+    # non far niente; a 0,15 s sarebbero quattrocentocinquanta, meta' del
+    # secondo che c'e' in tutto.
     periodo_sensore_s: float = 0.05
-    # Ogni quanto si guarda il piatto. Era mezzo secondo, quando una sbirciata
-    # costava novanta millesimi di camera: accorgersi di una bottiglia voleva
-    # un secondo e mezzo - due letture d'accordo piu' una di assestamento.
-    #
-    # Col guardiano in moto il fotogramma c'e' gia' e la sbirciata costa la
-    # conversione in grigio, una decina di millesimi. Un quarto di secondo
-    # porta l'arrivo sotto il secondo, e conta: per le bottiglie di vetro
-    # chiaro, che il sensore di distanza non vede, questa e' l'unica via.
+    # Ogni quanto si guarda il piatto. Col guardiano in moto il fotogramma c'e'
+    # gia' e la sbirciata costa la conversione in grigio, una decina di
+    # millesimi; a stream fermo sarebbero novanta millesimi di camera. La
+    # sbirciata non decide se c'e' una bottiglia - lo dice il sensore, vedi
+    # `Amelie._chi_c_e` - ma tiene aggiornati il riquadro dell'etichetta e lo
+    # sfondo del piatto vuoto.
     periodo_sbirciata_s: float = 0.25
+    # Una carta dei vini al posto dell'archivio: un CSV con titolo e
+    # descrizione, e nel modo «carta» il dispositivo legge quella invece di
+    # comporre dai dati. Vedi `amelie.carta`.
+    carta: str | None = None
     # La lingua di partenza. Si cambia a schermo, con un tocco, e il
     # dispositivo torna a questa quando la bottiglia viene tolta: il tavolo
     # dopo trova il dispositivo come lo trova sempre.
-    # Una carta dei vini al posto dell'archivio: un CSV con titolo e
-    # descrizione, e il dispositivo legge quella invece di comporre dai dati.
-    # E' una PROVA - vedi `amelie.carta` - e si spegne togliendo l'opzione.
-    carta: str | None = None
     lingua: str = "it"
     # Il volume di partenza, che il file in `var` sovrascrive se c'e'. 100 e'
     # il fondo scala del PCM: sopra non si puo' andare, vedi speech.guadagno_di.
@@ -270,16 +266,15 @@ class Amelie:
         self.cfg = cfg
         self.macchina = Macchina(su_transizione=self._su_transizione)
         self.ponte: Ponte = PonteSimulato() if cfg.simula_mcu else Ponte()
-        # Due modi di accorgersi della bottiglia, e fanno due lavori diversi.
+        # Due modi di guardare il piatto, e fanno due lavori diversi.
         #
-        # Il sensore di distanza dice QUANDO, e lo dice in millesimi: e' lui
-        # l'innesco, perche' e' l'unico abbastanza rapido perche' il testo
-        # compaia entro un secondo da quando il vetro tocca il piatto.
+        # Il sensore di distanza dice SE e QUANDO, e lo dice in millesimi: e'
+        # lui l'innesco, perche' e' l'unico abbastanza rapido perche' il testo
+        # compaia entro un secondo da quando il vetro tocca il piatto. Vedi
+        # `_chi_c_e`.
         #
-        # La camera dice DOVE, e continua a servire: e' da lei che viene il
-        # riquadro dell'etichetta, che cambia con la forma della bottiglia. Ed
-        # e' il ripiego quando il sensore non risponde - un Modulino scollegato
-        # non deve rendere cieco il dispositivo.
+        # La camera dice DOVE: e' da lei che viene il riquadro dell'etichetta,
+        # che cambia con la forma della bottiglia.
         self.presenza = PresenzaOttica()
         self.distanza = PresenzaDistanza()
         # Quando la bottiglia e' comparsa: lo scatto deve essere di DOPO.
@@ -373,14 +368,13 @@ class Amelie:
         # Quello che si sa della scansione in corso, da annotare quando
         # finisce. Vedi `_annota`.
         self._scansione: dict[str, Any] = {}
-        # Questa bottiglia e' gia' stata raccontata. Serve da quando la
-        # schermata conclusa torna da sola all'invito: in attesa, con la
-        # bottiglia ancora sul piatto, il rilancio qui sotto farebbe ripartire
-        # una seconda lettura, e poi una terza. Si azzera quando la bottiglia
-        # viene tolta - che e' il modo in cui l'ospite dice "ho finito".
         # Questa bottiglia e' gia' stata servita: si e' raccontata fino in
         # fondo, oppure l'ospite ha annullato. Finche' e' alzata, il ciclo non
-        # riparte da solo. Si abbassa quando la bottiglia viene tolta davvero.
+        # riparte da solo: la schermata conclusa torna da sola all'invito, e in
+        # attesa, con la bottiglia ancora sul piatto, il rilancio in
+        # `_un_battito` farebbe ripartire una seconda lettura, e poi una terza.
+        # Si abbassa quando la bottiglia viene tolta davvero - che e' il modo
+        # in cui l'ospite dice "ho finito".
         self._bottiglia_chiusa = False
         # La bottiglia arrivata a racconto in corso: la lettura in corso, e
         # quella finita e riconosciuta come un'altra bottiglia, in attesa che
@@ -442,21 +436,22 @@ class Amelie:
             # Il tavolo e' finito: si torna alla lingua di casa PRIMA di
             # ridisegnare, cosi' la schermata d'attesa esce gia' nella lingua
             # giusta invece di cambiare sotto gli occhi di chi arriva.
-            # Annullare non vuol dire che il tavolo e' finito: la bottiglia
-            # e' ancora li' e sono le stesse persone. Chi aveva scelto
-            # l'inglese, premendo la croce, si ritrovava l'invito in italiano e
-            # doveva ricercarsi la bandierina per la bottiglia dopo. La lingua
-            # torna a casa quando la bottiglia viene TOLTA, che e' il momento
-            # in cui il tavolo cambia davvero.
+            # Ma solo se sul piatto non c'e' piu' niente. Un racconto finito,
+            # o annullato, con la bottiglia ancora li' vuol dire le stesse
+            # persone: chi ha scelto l'inglese dovrebbe ricercarsi la
+            # bandierina a ogni bottiglia. La lingua torna a casa quando la
+            # bottiglia viene TOLTA, che e' il momento in cui il tavolo cambia
+            # davvero; se la si toglie ad attesa gia' raggiunta, ci pensa
+            # `_un_battito`.
             if (t.cambia_stato and t.a is Stato.ATTESA
-                    and t.evento is not Evento.ANNULLA):
+                    and t.evento is not Evento.ANNULLA and not self._presente):
                 self._torna_alla_lingua_di_casa()
             # Questa bottiglia e' finita, comunque sia finita: perche' il
             # racconto e' arrivato in fondo, o perche' l'ospite ha annullato.
             # In tutti e due i casi il ciclo NON deve ripartire da solo con la
             # bottiglia ancora sul piatto - vedi il ramo di rilancio in
             # `_un_battito`, che senza questa bandiera rilancerebbe al primo
-            # battito, cioe' un decimo di secondo dopo il tocco.
+            # battito, cioe' un istante dopo il tocco.
             if t.a is Stato.CONCLUSO or t.evento is Evento.ANNULLA:
                 # A meno che il sensore non abbia visto la bottiglia andare
                 # via o arrivarne una mentre si raccontava: allora quella sul
@@ -483,7 +478,7 @@ class Amelie:
 
         Senza voce e senza annuncio: qui non c'e' nessuno a cui dirlo, e un
         dispositivo che parla da solo a tavolo vuoto in un ristorante e' una
-        cosa che non si puo' lasciare in sala.
+        cosa inaccettabile in sala.
         """
         if self.lingua == self.cfg.lingua:
             return
@@ -498,7 +493,7 @@ class Amelie:
     def _mostra(self, stato: Stato) -> None:
         """Che cosa vede l'ospite. Le frasi vengono dal lessico, non da qui.
 
-        Cablarle nel codice significava avere lo schermo in italiano e il
+        Cablarle nel codice vorrebbe dire avere lo schermo in italiano e il
         racconto in inglese, che e' il modo peggiore di essere bilingui.
         """
         def frase(chiave: str) -> str:
@@ -509,12 +504,11 @@ class Amelie:
             # "racconto" mostrerebbe un titolo vuoto e nessun testo, cioe' uno
             # schermo nero con una bottiglia ancora appoggiata sopra.
             #
-            # Qui c'era «Puo' togliere la bottiglia»: una frase che non serve a
-            # niente, e che si toglie. Se la bottiglia si
-            # puo' insegnare al dispositivo - correzioni accese, e qualche
-            # parola letta - si dice che non la si e' riconosciuta e si offre
-            # il pulsante per farlo; se no si torna subito all'invito, e la
-            # macchina ci arriva un istante dopo (vedi `_su_transizione`).
+            # Chiedere di togliere la bottiglia non servirebbe a niente. Se la
+            # bottiglia si puo' insegnare al dispositivo - correzioni accese, e
+            # qualche parola letta - si dice che non la si e' riconosciuta e si
+            # offre il pulsante per farlo; se no si torna subito all'invito, e
+            # la macchina ci arriva un istante dopo (vedi `_su_transizione`).
             if self._aiuto_possibile():
                 self._pubblica({"tipo": "stato", "vista": "avviso", "simbolo": "?",
                                 "tono": "neutro", "frase": frase("non_riconosciuta"),
@@ -538,11 +532,11 @@ class Amelie:
                 m["titolo"] = self._correzione.testo_in(self.lingua)["titolo"]
                 m["sottotitolo"] = ""
             elif self._la_carta_parla_ora():
-                # Quando a raccontare e' la carta, il titolo e' il suo. Prima
-                # veniva sempre dai fatti dell'archivio, che in modo carta non
-                # si toccavano mai: a schermo restava il nome del vino
-                # PRECEDENTE. Visto sul dispositivo, «Garda Cabernet 2008»
-                # scritto sopra la descrizione di un Lambrusco Grasparossa.
+                # Quando a raccontare e' la carta, il titolo e' il suo. I fatti
+                # dell'archivio, in modo carta, servono solo da ripiego per le
+                # altre lingue e possono nominare un altro vino: titolo dai
+                # fatti vorrebbe dire un «Garda Cabernet 2008» scritto sopra la
+                # descrizione di un Lambrusco Grasparossa.
                 m["titolo"] = self._voce.titolo_in(self.lingua)
                 m["sottotitolo"] = ""
             else:
@@ -550,9 +544,9 @@ class Amelie:
                     f.vitigni[0] if f.vitigni else "")
                 if not m["titolo"]:
                     # Al livello GENERICO non c'e' nessun nome da mettere - e'
-                    # il livello in cui non si e' riconosciuto il vino - e lo
-                    # schermo restava senza titolo: il testo saliva in cima,
-                    # sotto le linguette della lingua, e l'ospite leggeva una
+                    # il livello in cui non si e' riconosciuto il vino - e
+                    # senza titolo il testo salirebbe in cima, sotto le
+                    # linguette della lingua, e l'ospite leggerebbe una
                     # descrizione senza sapere di CHE COSA.
                     #
                     # Il titolo c'e' lo stesso, ed e' quello che si e' letto
@@ -563,11 +557,12 @@ class Amelie:
                                      str(f.annata) if f.annata else None) if x]
                 m["sottotitolo"] = " · ".join(pezzi)
             # CONCLUSO mostra la stessa schermata del racconto - la vista non
-            # cambia - e il racconto e' quello di prima: il testo NON va
-            # svuotato. Senza questa riga, alla fine di ogni racconto l'ospite
-            # guardava due secondi di schermo vuoto con sopra il solo pulsante:
-            # titolo, testo e barra sparivano tutti insieme, perche' il client
-            # ripulisce a ogni messaggio di stato con vista «racconto».
+            # cambia - e il racconto e' lo stesso: il testo NON va svuotato.
+            # Senza questa riga, alla fine di ogni racconto l'ospite
+            # guarderebbe due secondi di schermo vuoto con sopra il solo
+            # pulsante: titolo, testo e barra sparirebbero tutti insieme,
+            # perche' il client ripulisce a ogni messaggio di stato con vista
+            # «racconto».
             m["stesso_racconto"] = stato is Stato.CONCLUSO
         elif stato is Stato.SCANSIONE:
             m["frase"] = frase("sto_leggendo")
@@ -782,16 +777,16 @@ class Amelie:
 
         Come il volume, non solleva mai: un file illeggibile deve costare le
         impostazioni predefinite, non un dispositivo che non si accende. E un
-        modo salvato che non si puo' piu' servire - la carta, quando il file
-        non c'e' piu' - torna all'archivio invece di lasciare il dispositivo
-        muto: l'archivio c'e' sempre.
+        modo salvato che non si puo' servire - la carta, quando il file manca -
+        torna all'archivio invece di lasciare il dispositivo muto: l'archivio
+        c'e' sempre.
         """
         try:
             salvato = PERCORSO_MODO.read_text(encoding="utf-8").strip()
         except OSError:
             salvato = ""
         if salvato not in MODI:
-            # Dalla versione di prima, che sapeva dire solo si' e no.
+            # Nessun modo valido: vale l'interruttore a due posizioni, se c'e'.
             try:
                 acceso = PERCORSO_GENERATI.read_text(encoding="utf-8").strip() == "1"
             except OSError:
@@ -806,8 +801,8 @@ class Amelie:
 
     @property
     def genera_racconti(self) -> bool:
-        """Il modello scrive sul momento? È il modo «generativa», detto com'era
-        detto prima: lo chiedono il narratore e i test."""
+        """Il modello scrive sul momento? È il modo «generativa» detto come un
+        si' o un no: lo chiedono il narratore e i test."""
         return self.modo == "generativa"
 
     def imposta_modo(self, modo: str) -> dict[str, Any]:
@@ -835,9 +830,9 @@ class Amelie:
 
         Misurato sul dispositivo: `llama-server` fermo, senza nessuna richiesta,
         sta all'88% di un core - e sono i quattro core su cui l'OCR deve
-        leggere un'etichetta in meno di un secondo. Con la generazione spenta
-        dalle impostazioni quel core era regalato a nessuno: la rilevazione
-        del testo passava da 274 a 750 millesimi.
+        leggere un'etichetta in meno di un secondo. Tenuto acceso con la
+        generazione spenta dalle impostazioni, quel core e' regalato a nessuno:
+        la rilevazione del testo passa da 274 a 750 millesimi.
 
         Si accende e si spegne col modo, in un thread perche' avviarlo carica
         ottocento megabyte e nessuno deve aspettarlo. Se il comando fallisce si
@@ -845,7 +840,7 @@ class Amelie:
         un dispositivo bloccato non racconta niente.
 
         Senza `sudo`, di proposito: l'applicazione gira sotto
-        `NoNewPrivileges=yes` e `sudo` non puo' alzare niente - falliva con
+        `NoNewPrivileges=yes` e `sudo` non puo' alzare niente - fallisce con
         exit 1 e nessun altro segno. Il permesso sta in una regola polkit
         (`scripts/systemd/50-amelie-llm.rules`) che lascia all'utente
         `arduino` QUESTA unita' e nessun'altra.
@@ -866,7 +861,8 @@ class Amelie:
         threading.Thread(target=esegui, name="modello", daemon=True).start()
 
     def imposta_generati(self, acceso: bool) -> dict[str, Any]:
-        """L'interruttore di prima, tenuto perche' qualcuno lo chiama ancora."""
+        """L'interruttore a due posizioni della rotta `/generati`: acceso vale
+        il modo «generativa», spento l'archivio."""
         return self.imposta_modo("generativa" if acceso else "archivio")
 
     # --------------------------------------------------------------- mirino
@@ -923,7 +919,7 @@ class Amelie:
             pass
         if self.mirino is None:
             # Il mirino apre il SUO lettore e il SUO matcher. Prestargli quelli
-            # del dispositivo sembrava un risparmio e invece e' una corsa: se
+            # del dispositivo sembrerebbe un risparmio, ed e' una corsa: se
             # una scansione e' ancora in corso quando si accende il mirino, due
             # fili finiscono dentro allo stesso motore ONNX e alla stessa
             # connessione SQLite. Vedi `LetturaContinua`.
@@ -951,10 +947,10 @@ class Amelie:
         # E si guarda, come all'accensione. Uscire dal mirino e' la stessa
         # situazione: la camera stava facendo altro, il mondo davanti puo'
         # essere cambiato, e lo sfondo appena ricaricato dice com'era il piatto
-        # quando il dispositivo CREDEVA fosse vuoto. Senza questa riga bastava
-        # entrare e uscire dal mirino con una bottiglia sul piatto per
-        # ritrovarsi a crederlo vuoto - e chi tara l'inquadratura la bottiglia
-        # ce l'ha davanti per definizione.
+        # quando il dispositivo CREDEVA fosse vuoto. Senza questa riga
+        # basterebbe entrare e uscire dal mirino con una bottiglia sul piatto
+        # per ritrovarsi a crederlo vuoto - e chi tara l'inquadratura la
+        # bottiglia ce l'ha davanti per definizione.
         #
         # E' anche cio' che chi ha appena spostato la camera vuole: la prova
         # che l'aggiustamento ha funzionato, senza doverla chiedere.
@@ -1105,6 +1101,13 @@ class Amelie:
         riprendi = self.macchina.stato in (Stato.RACCONTO, Stato.CONCLUSO)
         if riprendi:
             self._ferma_racconto()
+        if self.macchina.stato is Stato.CONCLUSO:
+            # Il racconto riparte solo dopo l'annuncio: senza allungare la
+            # schermata finale, questa scadrebbe prima, si tornerebbe
+            # all'invito e il racconto nella lingua nuova non ripartirebbe
+            # piu'. Un tetto resta, se il racconto per qualche ragione non
+            # riparte.
+            self._scadenza = time.monotonic() + LINGUA_A_RACCONTO_FINITO_S
         self._parla_dopo(annuncia=True, riprendi=riprendi)
         return True
 
@@ -1126,14 +1129,13 @@ class Amelie:
         ha cambiato idea: sentirsi finire la frase di prima, e solo dopo quella
         chiesta, fa sembrare il tocco perso.
 
-        Questa e' la seconda volta che si sceglie di interrompere, e la prima
-        volta era andata male: gli annunci si tagliavano a vicenda e non si
-        sentiva NIENTE, come un guasto dell'amplificatore. La causa pero' non
-        era l'interruzione — era che il flusso audio si apriva e si chiudeva a
-        ogni frase, e il DSP di questa board impiega due secondi ad avviarsi:
-        una frase da un secondo spariva dentro quei due. Da quando il flusso
-        resta APERTO (vedi `speech.Uscita`) quel costo non c'e' piu', e
-        interrompere fa esattamente quello che sembra: tace e riparte.
+        Interrompere funziona perche' il flusso audio resta APERTO (vedi
+        `speech.Uscita`). Il DSP di questa board impiega due secondi ad
+        avviarsi: con un flusso aperto e chiuso a ogni frase, una frase da un
+        secondo sparirebbe dentro quei due, gli annunci si taglierebbero a
+        vicenda e non si sentirebbe NIENTE, come un guasto dell'amplificatore.
+        Col flusso aperto, interrompere fa esattamente quello che sembra: tace
+        e riparte.
         """
         with self._lucchetto_annuncio:
             self._lingua_da_annunciare = lingua
@@ -1161,16 +1163,15 @@ class Amelie:
 
     def _riprendi_racconto(self) -> None:
         # Il thread del racconto vecchio deve essere USCITO prima di chiedere
-        # quello nuovo: `_avvia` rifiuta il lavoro se ne trova uno vivo, e
-        # rifiutandolo mandava un ERRORE che in RACCONTO non ha transizione.
-        # Cadeva nel vuoto: la lingua cambiava a schermo e la storia non
-        # ripartiva mai, senza che niente lo dicesse.
+        # quello nuovo: se ne trova uno vivo, `_avvia` mette il nuovo in coda
+        # dietro al vecchio, e se il vecchio non esce in tempo dichiara guasto.
+        # Un cambio di lingua non deve mai finire cosi'.
         self._attendi_lavoro(5.0)
         # E l'annuncio deve aver FINITO DI PARLARE. Scrivono tutti e due nello
         # stesso flusso audio: partendo insieme, «English language» e la prima
-        # frase del racconto uscivano sovrapposte, e non si capiva ne' l'una ne'
-        # l'altra. L'ordine giusto e' quello che ci si aspetta sentendolo:
-        # prima la lingua, poi il vino in quella lingua.
+        # frase del racconto uscirebbero sovrapposte, e non si capirebbe ne'
+        # l'una ne' l'altra. L'ordine giusto e' quello che ci si aspetta
+        # sentendolo: prima la lingua, poi il vino in quella lingua.
         self._attendi_annuncio(6.0)
         self.macchina.invia(Evento.RIPETI)
 
@@ -1291,17 +1292,17 @@ class Amelie:
     def ripristina(self, motivo: str = "a mano") -> dict[str, Any]:
         """Rimette in moto il dispositivo senza spegnerlo.
 
-        Prima l'unico rimedio a un guasto che si ripete era staccare la
-        corrente. Qui si rifa' cio' che quello rifaceva, pezzo per pezzo:
+        Contro un guasto che si ripete rifa', pezzo per pezzo, cio' che
+        farebbe staccare la corrente:
 
         - si ferma il racconto, l'annuncio e l'editor aperto;
         - il lavoro in corso ha cinque secondi per uscire, e se non esce lo si
           lascia andare: un thread non si uccide, ma non deve piu' tenere
-          occupata la pipeline (vedi `_avvia`, che col lavoro «in corso»
-          dichiarava guasto a ogni bottiglia);
+          occupata la pipeline (vedi `_avvia`, che con un lavoro «in corso»
+          dichiara guasto a ogni bottiglia);
         - la camera torna come all'accensione: stream spento, posa di
-          partenza, device ricercato. E' il pezzo che una seraha
-          tenuto il dispositivo in guasto per un'ora: la posa salita a 5000;
+          partenza, device ricercato. E' il pezzo che conta di piu': una posa
+          salita a 5000 basta a tenere il dispositivo in guasto per ore;
         - l'uscita audio si chiude e si riapre;
         - col modo generativo, il modello si riavvia;
         - i contatori dei tentativi si azzerano, e si torna all'invito: una
@@ -1383,12 +1384,11 @@ class Amelie:
     def _colore_dello_stato(self) -> Colore | None:
         """Di che colore vuole l'anello lo stato in cui siamo ADESSO.
 
-        Serve a rimettere l'anello dopo la raffica. Cablare AMBRA funzionava
-        finche' SCANSIONE era l'unico stato da cui si scatta, ma era una
-        coincidenza scritta in due posti: bastava cambiare ANELLO_LAVORO in
-        state.py perche' la pipeline continuasse a rimettere l'ambra di prima.
-        E se nel frattempo la bottiglia e' stata tolta - succede, la raffica
-        dura mezzo secondo - lo stato non e' piu' quello di partenza.
+        Serve a rimettere l'anello dopo la raffica. Cablare AMBRA qui vorrebbe
+        dire scrivere la stessa cosa in due posti: basterebbe cambiare
+        ANELLO_LAVORO in state.py perche' la pipeline continuasse a rimettere
+        l'ambra. E se nel frattempo la bottiglia e' stata tolta - succede, la
+        raffica dura mezzo secondo - lo stato non e' piu' quello di partenza.
         """
         for effetto in EFFETTI_INGRESSO.get(self.macchina.stato, ()):
             if effetto in COLORE_ANELLO:
@@ -1406,19 +1406,18 @@ class Amelie:
             elif e is Effetto.AVVIA_RACCONTO:
                 # Lo stream della camera si spegne PRIMA di parlare. Con il
                 # DisplayPort attivo il link USB scende a 2.0 e camera e audio
-                # si dividono un bus solo: e' la ragione per cui questo modulo
-                # apriva e chiudeva la camera a ogni scatto, e resta valida
-                # adesso che la tiene accesa per guardare il piatto. Si
-                # riaccende da sola alla prima sbirciata dopo il racconto.
+                # si dividono un bus solo: la camera resta accesa per guardare
+                # il piatto, ma non mentre si parla. Si riaccende da sola alla
+                # prima sbirciata dopo il racconto.
                 if self.camera is not None:
                     self.camera.chiudi()
                 self._avvia(self._racconta)
             elif e is Effetto.FERMA_RACCONTO:
-                # Non una copia: la fermata e' UNA. Ce n'erano due, e quella
-                # che stava qui - cioe' quella che usano l'annullamento e la
-                # bottiglia tolta - alzava la bandiera FUORI dal lucchetto del
-                # riproduttore, che e' esattamente cio' che apre la finestra
-                # descritta in `_racconta`. Una sola copia, un solo invariante.
+                # Non una copia: la fermata e' UNA, e alza la bandiera DENTRO
+                # il lucchetto del riproduttore. Una seconda copia qui - la via
+                # dell'annullamento e del cambio di bottiglia - che la alzasse
+                # fuori riaprirebbe la finestra descritta in `_racconta`. Una
+                # sola copia, un solo invariante.
                 self._ferma_racconto()
         except Exception as ex:                             # noqa: BLE001
             # Un effetto che fallisce non deve MAI fermare la macchina a stati:
@@ -1438,13 +1437,12 @@ class Amelie:
                     and self._lavoro is not threading.current_thread())
         if occupato:
             # Succede quando la bottiglia «sparisce» per un istante durante una
-            # lettura e torna: la lettura di prima sta ancora finendo. Visto
-            # sul dispositivo subito dopo un riavvio - OCR da caricare, tre
-            # secondi di scatto - e dichiarato guasto al primo colpo. Si
-            # aspetta invece che finisca, in un thread per non fermare il
-            # battito; se non finisce, e solo allora, e' un guasto. Ignorare e
-            # basta lascerebbe la macchina ad aspettare un evento che nessuno
-            # mandera' mai.
+            # lettura e torna: la lettura precedente sta ancora finendo, e
+            # subito dopo un riavvio - OCR da caricare, tre secondi di scatto -
+            # capita spesso. Non e' un guasto: si aspetta che finisca, in un
+            # thread per non fermare il battito; se non finisce, e solo
+            # allora, e' un guasto. Ignorare e basta lascerebbe la macchina ad
+            # aspettare un evento che nessuno mandera' mai.
             precedente, stato = self._lavoro, self.macchina.stato
             self._lavoro = threading.Thread(
                 target=self._dopo_il_precedente, args=(precedente, stato, funzione),
@@ -1482,12 +1480,12 @@ class Amelie:
     def _anticipa(self) -> None:
         """Una bottiglia e' arrivata mentre si raccontava la precedente.
 
-        La si legge subito, SENZA fermare la voce. Il comportamento voluto e' questo:
-        quando la bottiglia cambia, la descrizione deve cambiare subito, e per
-        non far pesare l'attesa si comincia a leggere la nuova mentre si sta
-        ancora parlando della vecchia. Ma sollevarla per versare e rimetterla
-        e' il gesto piu' comune di un tavolo, e interrompere li' vorrebbe dire
-        ricominciare da capo la storia che si stava ascoltando.
+        La si legge subito, SENZA fermare la voce: quando la bottiglia cambia,
+        la descrizione deve cambiare subito, e per non far pesare l'attesa si
+        comincia a leggere la nuova mentre si sta ancora parlando della
+        vecchia. Ma sollevarla per versare e rimetterla e' il gesto piu' comune
+        di un tavolo, e interrompere li' vorrebbe dire ricominciare da capo la
+        storia che si stava ascoltando.
 
         Quindi si decide prima di interrompere, e si decide in fretta dove si
         puo'. La foto dice «e' la stessa» in un secondo circa, quando ritrova
@@ -1498,7 +1496,7 @@ class Amelie:
         niente, vedi `_scatta_e_leggi`.
 
         Se dalla lettura non si capisce niente - nessuna parola - si lascia
-        finire il racconto, e la bottiglia si rilegge dopo, come prima.
+        finire il racconto, e la bottiglia si rilegge a racconto finito.
         """
         if self.camera is None or self.lettore is None:
             return
@@ -1527,8 +1525,8 @@ class Amelie:
         try:
             self._decidi_in_anticipo(a)
         except Exception:                                   # noqa: BLE001
-            # Una lettura in anticipo che fallisce costa quello che costava
-            # prima: la bottiglia si rilegge a racconto finito.
+            # Una lettura in anticipo che fallisce non costa niente di piu': la
+            # bottiglia si rilegge a racconto finito.
             log.exception("lettura in anticipo")
         finally:
             if self._anticipo is a:
@@ -1586,7 +1584,7 @@ class Amelie:
         # Se il racconto e' gia' finito e si e' tornati all'invito, il cambio
         # non ha piu' niente da interrompere e la macchina lo ignora: la
         # bottiglia la raccoglie il rilancio del battito, che trova la lettura
-        # pronta. Senza questa riga restava segnata come gia' raccontata.
+        # pronta. Senza questa riga resterebbe segnata come gia' raccontata.
         self._bottiglia_chiusa = False
         self._tentativi = 0
         self.macchina.invia(Evento.CAMBIO_BOTTIGLIA)
@@ -1662,17 +1660,16 @@ class Amelie:
                                   anticipata=True)
             return
         # La luce dello scatto è l'anello stesso, che sale a bianco e poi torna
-        # al colore del lavoro. Prima era un secondo Modulino Pixels che faceva
-        # da flash di taglio sull'etichetta; tolto quello, questa è la sola luce
-        # che il dispositivo controlla.
+        # al colore del lavoro: è la sola luce che il dispositivo controlla.
         #
         # L'ambra si rimette SOLO se lo scatto è riuscito, e in un `else` invece
-        # che in un `finally`. Col `finally` l'ordine era: errore -> la macchina
-        # a stati entra in GUASTO e accende il ROSSO -> il finally lo cancella
-        # rimettendo l'ambra. Restava uno schermo che dichiara un guasto sopra
-        # un anello del colore dell'invito, che è esattamente la cosa che schermo
-        # e anello non devono mai fare. In ogni via d'errore il colore lo decide
-        # la macchina a stati, che è l'unica a sapere dove si sta andando.
+        # che in un `finally`. Col `finally` l'ordine sarebbe: errore -> la
+        # macchina a stati entra in GUASTO e accende il ROSSO -> il finally lo
+        # cancella rimettendo l'ambra. Resterebbe uno schermo che dichiara un
+        # guasto sopra un anello del colore dell'invito, che è esattamente la
+        # cosa che schermo e anello non devono mai fare. In ogni via d'errore il
+        # colore lo decide la macchina a stati, che è l'unica a sapere dove si
+        # sta andando.
         #
         # E si rimette SUBITO dopo la raffica, non alla fine del metodo: dopo
         # c'è l'OCR, e mezzo secondo di bianco pieno sotto una bottiglia è un
@@ -1693,8 +1690,8 @@ class Amelie:
                 # Un anello che non si accende costa una foto piu' scura, non
                 # una scansione fallita: e' la stessa regola con cui `_esegui`
                 # protegge tutti gli effetti. Senza ErroreMCU, un firmware
-                # vecchio che non conosce `set_anello` trasformava ogni scatto
-                # in un guasto.
+                # che non conosce `set_anello` trasformerebbe ogni scatto in un
+                # guasto.
                 pass
             try:
                 scatto = self.camera.scatta()
@@ -1722,7 +1719,7 @@ class Amelie:
     def _leggi_scatto(self, scatto):
         """L'OCR su uno scatto: la lettura, e l'immagine allargata se serviva."""
         # Il guardiano si ferma per il tempo della lettura: il fotogramma
-        # buono ce l'abbiamo gia', e decodificare MJPEG mentre l'OCR gira
+        # buono c'e' gia', e decodificare MJPEG mentre l'OCR gira
         # vuol dire toglierle un core su quattro.
         with self.camera.in_pausa():
             lettura = self.lettore.leggi_comunque(scatto.immagine)
@@ -1766,9 +1763,9 @@ class Amelie:
             self.macchina.invia(Evento.LETTURA_RIUSCITA)
             return
         # Righe senza parole - cifre, frammenti - non sono una lettura: si
-        # conta il tentativo, come se non si fosse letto niente. Contare le
-        # righe azzerava il contatore e il dispositivo scandiva un calendario
-        # ogni sei secondi per sempre.
+        # conta il tentativo, come se non si fosse letto niente. Contando le
+        # righe, un calendario sul piatto azzererebbe il contatore e verrebbe
+        # riletto ogni sei secondi per sempre.
         self._tentativi += 1
         self._annota("niente da leggere")
         self.macchina.invia(Evento.LETTURA_FALLITA)
@@ -1831,7 +1828,7 @@ class Amelie:
             "cantina": self._fatti.cantina or "",
             "annata": self._fatti.annata or "",
             # A livello di tipologia o denominazione il `nome` e' vuoto, e
-            # senza questi due il giornale diceva «riconosciuto» senza dire
+            # senza questi due il giornale direbbe «riconosciuto» senza dire
             # CHE COSA. Il colore sta qui perche' e' il vincolo che non si puo'
             # sbagliare: nessuna descrizione di un bianco vale per un rosato.
             "tipologia": self._fatti.tipologia or "",
@@ -1840,9 +1837,9 @@ class Amelie:
             "candidati": list(self._candidati),
         })
         if self._fatti.dubbio:
-            # Non si chiede piu' all'ospite di scegliere fra tre nomi quasi
-            # uguali: si dice il candidato meno specifico, che e' quello che si
-            # puo' sostenere. Vedi `Matcher.il_piu_generico`.
+            # Non si chiede all'ospite di scegliere fra tre nomi quasi uguali:
+            # si dice il candidato meno specifico, che e' quello che si puo'
+            # sostenere. Vedi `Matcher.il_piu_generico`.
             self._fatti = self.matcher.il_piu_generico(
                 self._fatti, getattr(self, "_righe", []))
             self._scansione["scelto_il_piu_generico"] = self._fatti.livello.value
@@ -1943,10 +1940,10 @@ class Amelie:
         """Letto, ma senza trovare un vino: si chiede di girare l'etichetta,
         e dopo tre volte si tace finche' la bottiglia non viene tolta.
 
-        Prima ogni lettura, anche senza riscontro, azzerava il contatore, e
-        un'etichetta che non si trova in carta veniva rifotografata ogni sei
-        secondi finche' qualcuno non la toglieva: anello e schermo che
-        lampeggiano davanti al tavolo, e la CPU a tre di carico.
+        Il contatore conta anche le letture senza riscontro. Senza, un'etichetta
+        che non si trova in carta verrebbe rifotografata ogni sei secondi
+        finche' qualcuno non la toglie: anello e schermo che lampeggiano davanti
+        al tavolo, e la CPU a tre di carico.
         """
         self._tentativi += 1
         self.macchina.invia(Evento.LETTURA_FALLITA)
@@ -1978,8 +1975,9 @@ class Amelie:
         })
         # E si cerca ANCHE in archivio, che costa cinquanta millesimi e parla
         # tutte le lingue. Serve quando l'ospite chiede l'inglese e la carta e'
-        # scritta solo in italiano: senza, gli arrivava la prima frase tradotta
-        # e tutto il resto in italiano, scritto e letto dalla voce inglese.
+        # scritta solo in italiano: senza, gli arriverebbe la prima frase
+        # tradotta e tutto il resto in italiano, scritto e letto dalla voce
+        # inglese.
         self._fatti = self.matcher.cerca(righe)
         self.macchina.invia(Evento.MATCH_SICURO)
 
@@ -2062,8 +2060,8 @@ class Amelie:
         elif self._la_carta_parla_ora():
             racconto = self._racconta_dalla_carta()
         else:
-            # Generare costa secondi, e in quei secondi lo schermo mostrava il
-            # titolo e sotto il vuoto: sembrava rotto. Si dice che si sta
+            # Generare costa secondi, e in quei secondi lo schermo mostrerebbe
+            # il titolo e sotto il vuoto: sembrerebbe rotto. Si dice che si sta
             # scrivendo, e lo si dice PRIMA - non e' una decorazione, e'
             # l'unica differenza fra un dispositivo che lavora e uno fermo.
             if self._si_generera():
@@ -2087,8 +2085,8 @@ class Amelie:
         self._annota("raccontato")
 
         # Il testo arriva TUTTO INSIEME, e la frase in ascolto si illumina.
-        # Prima compariva un pezzo alla volta, al ritmo stimato della lettura:
-        # una finzione che regge finche' si va dritti, ma con un pulsante di
+        # Farlo comparire un pezzo alla volta, al ritmo stimato della lettura,
+        # e' una finzione che regge finche' si va dritti, ma con un pulsante di
         # pausa e uno di riavvolgimento si sfalda al primo tocco. E con un
         # player davanti, chi guarda vuole vedere quanto manca.
         self._pubblica({"tipo": "racconto", "frasi": frasi,
@@ -2110,16 +2108,16 @@ class Amelie:
             return
 
         # Fra la generazione del testo e questa riga puo' essere passato un
-        # minuto, e in quel minuto `_lettore` era vuoto: un annullamento caduto
-        # li' non trovava niente da fermare e il dispositivo cominciava a
+        # minuto, e in quel minuto `_lettore` e' vuoto: un annullamento caduto
+        # li' non troverebbe niente da fermare, e il dispositivo comincerebbe a
         # parlare sopra la schermata d'invito.
         #
         # Il controllo sta DENTRO il lucchetto, insieme all'assegnazione, e
         # `_ferma_racconto` alza la bandiera dentro lo stesso lucchetto: senza,
         # fra il controllo e l'assegnazione restano pochi bytecode in cui un
         # annullamento passa in mezzo, non trova nessun riproduttore da fermare
-        # e ne lascia partire uno subito dopo. Stretta quanto si vuole, e'
-        # comunque la finestra che questa correzione doveva chiudere.
+        # e ne lascia partire uno subito dopo. Stretta quanto si vuole, resta
+        # una finestra, ed e' quella che il lucchetto chiude.
         with self._lucchetto_lettore:
             if self._ferma_voce.is_set():
                 log.info("racconto annullato prima di cominciare")
@@ -2129,12 +2127,12 @@ class Amelie:
         finito = lettore.attendi(timeout=TETTO_RACCONTO_S)
         # Se e' finito da solo, si aspetta che l'ULTIMO SUONO sia uscito davvero
         # prima di fermare: `ferma()` svuota la coda, e fra l'ultimo pezzo
-        # consegnato e l'orecchio ci sono la riserva dell'uscita e la latenza di
-        # ALSA. Erano i tre quarti di secondo che si perdevano in fondo a ogni
-        # racconto, in tutte e due le lingue.
+        # passato all'uscita e l'orecchio ci sono la riserva dell'uscita e la
+        # latenza di ALSA. Senza questa attesa si perderebbero tre quarti di
+        # secondo in fondo a ogni racconto, in tutte e due le lingue.
         #
-        # Se invece l'hanno fermato - bottiglia tolta - si tronca eccome: e'
-        # esattamente quello che serve.
+        # Se invece l'hanno fermato - un annullamento, un'altra bottiglia - si
+        # tronca eccome: e' esattamente quello che serve.
         if finito and not self._ferma_voce.is_set():
             lettore.attendi_la_coda()
         with self._lucchetto_lettore:
@@ -2148,16 +2146,15 @@ class Amelie:
     def _scorri_senza_voce(self, frasi: list[str]) -> None:
         """Il ripiego quando non c'e' voce: il testo si illumina da solo.
 
-        Il ritmo e' quello di una lettura ad alta voce. Era «circa quindici
-        caratteri al secondo», dichiarato come stima; ora e' il ritmo MISURATO
+        Il ritmo e' quello di una lettura ad alta voce, ed e' il ritmo MISURATO
         della voce che sta imitando - 17,2 caratteri al secondo in italiano,
         14,4 in inglese - cosi' il testo scorre come sarebbe stato letto.
 
-        E pubblica una quota vera. Prima mandava `durata: 0`, e il client
-        saltava l'aggiornamento: quando la lingua non ha voce la barra e'
-        nascosta dal foglio di stile e non si notava, ma a questo ripiego ci si
-        arriva ANCHE quando la voce per la lingua c'e' e il riproduttore non
-        parte. Li' la barra e' bene in vista, e restava ferma a zero per tutto
+        E pubblica una quota vera: con la sola `durata: 0` il client
+        salterebbe l'aggiornamento. Quando la lingua non ha voce la barra e'
+        nascosta dal foglio di stile, ma a questo ripiego ci si arriva ANCHE
+        quando la voce per la lingua c'e' e il riproduttore non parte. Li' la
+        barra e' bene in vista, e senza quota resterebbe ferma a zero per tutto
         il racconto.
         """
         pesi = [max(1, len(per_la_voce(f, self.lingua))) for f in frasi]
@@ -2179,10 +2176,10 @@ class Amelie:
                             "senza_voce": True})
             # `wait` e non `sleep`: la bandiera e' un Event, e aspettarci
             # sopra fa tornare il thread nell'istante in cui viene alzata.
-            # Dormendo, chi annulla lasciava il thread di lavoro vivo fino a
-            # sei secondi dopo che lo schermo era gia' tornato all'invito - e
-            # una bottiglia rimessa dentro quella finestra trovava il lavoro
-            # ancora in corso, cioe' un guasto dichiarato.
+            # Dormendo, chi annulla lascerebbe il thread di lavoro vivo fino a
+            # sei secondi dopo che lo schermo e' gia' tornato all'invito - e
+            # una bottiglia rimessa dentro quella finestra troverebbe il lavoro
+            # ancora in corso, e dovrebbe aspettarlo.
             if self._ferma_voce.wait(min(6.0, max(1.0, pesi[i] / car_s))):
                 return
             fatto += pesi[i]
@@ -2206,8 +2203,8 @@ class Amelie:
         # `esaurito` e non solo `None`: il riproduttore resta agganciato ancora
         # mezzo secondo dopo la fine, il tempo che l'ultimo suono esca davvero.
         # In quella finestra i suoi thread sono gia' morti, e un tocco su
-        # «indietro» faceva arretrare la barra lasciandocela, perche' nessuno
-        # pubblicava piu' niente.
+        # «indietro» farebbe arretrare la barra lasciandocela, perche' nessuno
+        # pubblica piu' niente.
         if lettore is None or lettore.esaurito:
             return {"ok": False}
         if azione == "alterna":
@@ -2229,17 +2226,17 @@ class Amelie:
     def annulla(self) -> dict:
         """Il tocco su «annulla»: si chiude e si torna all'invito.
 
-        Serve perche' fino a qui l'unico modo di finire era TOGLIERE LA
-        BOTTIGLIA. Va benissimo nel caso normale, ma non per chi ha appena
-        versato: il vino e' nel bicchiere, la bottiglia sta sul piatto, e
-        risollevarla solo per far tacere il dispositivo e' una cosa che non si
-        chiede a un ospite.
+        Senza, l'unico modo di finire sarebbe aspettare la fine del racconto:
+        togliere la bottiglia non lo ferma, perche' chi la alza per versare non
+        ha chiesto silenzio. E far aspettare chi ha gia' versato, solo per far
+        tacere il dispositivo, e' una cosa che non si chiede a un ospite.
 
         Quasi tutto lo spegne la macchina, e va lasciato fare a lei: uscendo da
         RACCONTO scatta FERMA_RACCONTO, entrando in ATTESA tornano l'anello in
-        respiro, la schermata d'invito e la lingua di casa. Scrivere l'annullamento
-        fuori dalla macchina significa dimenticarsene meta': la voce tace e
-        l'anello resta verde sopra la schermata d'invito.
+        respiro e la schermata d'invito; la lingua resta quella scelta (vedi
+        `_su_transizione`). Scrivere l'annullamento fuori dalla macchina
+        significa dimenticarsene meta': la voce tace e l'anello resta verde
+        sopra la schermata d'invito.
 
         Restano due cose che la macchina non puo' sapere, ed e' per quelle che
         questo metodo esiste.
@@ -2257,9 +2254,8 @@ class Amelie:
         proprio quando qualcuno ha voglia di annullare. `_ferma_voce` resta
         alzata, e `_racconta` la rilegge prima di dare fiato.
 
-        Non promette silenzio istantaneo: i due decimi di secondo gia'
-        consegnati ad ALSA escono comunque. Sono gli stessi che si sentono oggi
-        togliendo la bottiglia.
+        Non promette silenzio istantaneo: i due decimi di secondo gia' passati
+        ad ALSA escono comunque.
         """
         stato = self.macchina.stato
         # Si guarda PRIMA se c'e' qualcosa da annullare, e nel dubbio non si
@@ -2386,8 +2382,8 @@ class Amelie:
         self._correzione = c
         # Il racconto che riparte deve essere gia' quello della bottiglia
         # corretta: collegata a un altro vino, si racconta quello. Senza questa
-        # riga ripartiva la scheda di prima - visto sul dispositivo, un Asti
-        # collegato al Moscato d'Asti della carta raccontato come Asti.
+        # riga ripartirebbe la scheda di prima: un Asti collegato al Moscato
+        # d'Asti della carta verrebbe raccontato come Asti.
         if c.riferimento or not self._correzione_parla_ora():
             self._fatti, self._voce = self._della_correzione(
                 c, [getattr(r, "testo", r) for r in g["righe"]])
@@ -2455,7 +2451,7 @@ class Amelie:
 
     def _riferimento_valido(self, rif) -> dict | None:
         """Il collegamento arrivato dalla pagina, ricontrollato qui: si salva
-        solo cio' che esiste davvero, col titolo scritto da noi."""
+        solo cio' che esiste davvero, col titolo scritto qui e non dalla pagina."""
         if not isinstance(rif, dict):
             return None
         if rif.get("tipo") == "archivio":
@@ -2562,7 +2558,7 @@ class Amelie:
     async def sorveglia(self) -> None:
         """Legge il sensore e fa scadere i timer. È il battito del dispositivo."""
         # Il modello si accende solo se il modo salvato lo vuole: all'avvio
-        # nessun servizio lo tira su piu', ci pensa questo.
+        # nessun servizio lo tira su da solo, ci pensa questo.
         self._accendi_il_modello(self.modo == "generativa")
         self.batteria.avvia()
         if self.camera is not None:
@@ -2638,6 +2634,11 @@ class Amelie:
                 # Tolta la bottiglia, la prossima e' un'altra storia.
                 self._annulla_anticipo()
                 self._bottiglia_chiusa = False
+                if self.macchina.stato is Stato.ATTESA:
+                    # Gia' in attesa - racconto finito con la bottiglia ancora
+                    # sul piatto - la transizione non c'e': la lingua torna a
+                    # casa qui.
+                    self._torna_alla_lingua_di_casa()
                 self.macchina.invia(Evento.BOTTIGLIA_ASSENTE)
         elif (ora and self.macchina.stato is Stato.ATTESA
                 and not self._bottiglia_chiusa
@@ -2648,12 +2649,13 @@ class Amelie:
             # La bottiglia c'e' ma siamo tornati in attesa: succede dopo un
             # guasto. NON dopo un racconto finito - quello ci torna apposta, e
             # rilanciare li' vorrebbe dire raccontare lo stesso vino all'infinito
-            # finche' qualcuno non toglie la bottiglia. Il fronte di salita non si ripresenta mai piu', e senza
-            # questo rilancio il dispositivo resterebbe fermo per sempre con una
-            # bottiglia davanti. Il contatore NON si azzera qui: se il guasto si
-            # ripete, dopo TENTATIVI_MAX si smette, invece di riaccendere
-            # l'anello ogni quattro secondi tutta la sera su una board senza
-            # ventola. Si riparte solo togliendo e rimettendo la bottiglia.
+            # finche' qualcuno non toglie la bottiglia. Il fronte di salita non
+            # si ripresenta mai piu', e senza questo rilancio il dispositivo
+            # resterebbe fermo per sempre con una bottiglia davanti. Il
+            # contatore NON si azzera qui: se il guasto si ripete, dopo
+            # TENTATIVI_MAX si smette, invece di riaccendere l'anello ogni
+            # quattro secondi tutta la sera su una board senza ventola. Si
+            # riparte solo togliendo e rimettendo la bottiglia.
             self._tentativi += 1
             log.info("bottiglia ancora presente in attesa, rilancio (%d/%d)",
                      self._tentativi, TENTATIVI_MAX)
@@ -2666,24 +2668,22 @@ class Amelie:
     async def _chi_c_e(self) -> bool:
         """C'e' una bottiglia? Lo dice il sensore di distanza, e nessun altro.
 
-        Era una decisione a due voci, sensore e camera, con la camera a
-        decidere quando il sensore taceva. E' finita cosi': un oggetto
-        coperto a lungo sul sensore, poi tolto, e la camera che continuava a
-        vedere «qualcosa» per sempre - il suo sfondo era stato imparato con
-        l'oggetto davanti - mentre il sensore diceva, giustamente, che non
-        c'era niente. Il dispositivo scandiva un piatto vuoto ogni sei
-        secondi, senza fine.
-
-        Ora la regola e' una sola. Il sensore vede qualcosa: si legge e si
+        La regola e' una sola. Il sensore vede qualcosa: si legge e si
         racconta. Non vede niente: non si cerca niente, e la camera serve
         solo a sapere DOVE sta l'etichetta e a imparare com'e' fatto il piatto
         vuoto - quando il sensore dice che e' vuoto, non quando lo crede lei.
 
+        Una decisione a due voci, con la camera a decidere quando il sensore
+        tace, ha un modo di guastarsi senza uscita: un oggetto tenuto a lungo
+        davanti al sensore e poi tolto lascia alla camera uno sfondo imparato
+        con l'oggetto davanti, e lei continua a vedere «qualcosa» per sempre
+        mentre il sensore dice, giustamente, che non c'e' niente. Il
+        dispositivo scandirebbe un piatto vuoto ogni sei secondi, senza fine.
+
         Il prezzo, misurato: il sensore non vede il vetro chiaro - l'infrarosso
         attraversa il fondo di un Cerasuolo e non torna - e quelle bottiglie
-        non partono. E' una scelta di progetto, e la strada per
-        rimediare passa dal firmware (la soglia del segnale del VL53L4CD), non
-        da qui.
+        non partono. E' un prezzo accettato, e la strada per rimediare passa
+        dal firmware (la soglia del segnale del VL53L4CD), non da qui.
         """
         if self._bottiglia_finta is not None:
             ora = bool(self._bottiglia_finta)
@@ -2697,7 +2697,7 @@ class Amelie:
         return ora
 
     async def _guarda_il_piatto(self, c_e_secondo_il_sensore: bool) -> None:
-        """La sbirciata: non decide niente, ma serve ancora a due cose.
+        """La sbirciata: non decide niente, ma serve a due cose.
 
         Il riquadro dell'etichetta, che dipende dalla forma della bottiglia, e
         lo sfondo del piatto vuoto, imparato quando il sensore dice che e'
@@ -2726,24 +2726,23 @@ class Amelie:
             # di quanto possa dirlo la camera: quello che si vede ORA e' il
             # piatto vuoto, per definizione. Non c'e' niente da dedurre.
             #
-            # Non e' pulizia, e' la cura di un guasto vero. Lo sfondo che il
-            # rivelatore ottico teneva era stato imparato CON UNA BOTTIGLIA
-            # DAVANTI: da allora la differenza restava a zero, il riquadro
-            # dell'etichetta non si trovava piu', e all'OCR arrivava il
-            # ritaglio fisso con dentro mezza stanza. Misurato sul
-            # dispositivo: tredici regioni di testo invece di cinque, e la
-            # rilevazione da 274 a 750 millesimi - perche' la
-            # post-elaborazione del rilevatore costa per regione trovata, e le
-            # regioni di troppo sono il calendario appeso dietro il piatto.
+            # Non e' pulizia, e' la cura di un guasto vero. Uno sfondo imparato
+            # CON UNA BOTTIGLIA DAVANTI tiene la differenza a zero: il riquadro
+            # dell'etichetta non si trova piu', e all'OCR arriva il ritaglio
+            # fisso con dentro mezza stanza. Misurato sul dispositivo: tredici
+            # regioni di testo invece di cinque, e la rilevazione da 274 a 750
+            # millesimi - perche' la post-elaborazione del rilevatore costa per
+            # regione trovata, e le regioni di troppo sono il calendario appeso
+            # dietro il piatto.
             #
-            # Prima questa correzione esisteva, ma arrivava solo dopo tre
-            # scansioni fallite di fila: era una via di scampo. Adesso e' la
-            # regola, e il caso che la faceva servire non si presenta piu'.
+            # Reimparare lo sfondo a ogni sbirciata a piatto vuoto, e non solo
+            # dopo tre scansioni fallite di fila (vedi `_dopo_la_lettura`), fa
+            # si' che quel caso non si presenti.
             self.presenza.non_e_una_bottiglia(fascia)
             self.camera.riquadro = None
             self._ricorda_sfondo()
             return
-        # Il rivelatore ottico non decide piu' se c'e' una bottiglia: serve a
+        # Il rivelatore ottico non decide se c'e' una bottiglia: serve a
         # dire DOVE sta, per dare all'OCR il suo riquadro al posto di uno
         # fisso. `None` vuol dire «non si sa», e allora si torna al fisso.
         self.presenza.aggiorna(fascia)
@@ -2851,20 +2850,19 @@ def crea_app(amelie: Amelie):
         # Mai in cache. Il chiosco apre questa pagina una volta sola, all'avvio,
         # e ci resta per giorni: se Chromium se la tiene, aggiornare
         # l'interfaccia non basta piu' a cambiarla e bisogna ricordarsi di
-        # riavviare anche il chiosco. E' successo, e si e' visto come una
-        # schermata vecchia che non cambiava per nessun motivo.
+        # riavviare anche il chiosco. Il sintomo e' una schermata vecchia che
+        # non cambia per nessun motivo.
         return FileResponse(
             STATICI / "index.html",
             headers={"Cache-Control": "no-store, must-revalidate",
                      "Pragma": "no-cache", "Expires": "0"})
 
     # Il carattere dell'interfaccia sta DENTRO il dispositivo. Il foglio di stile
-    # chiedeva EB Garamond da sempre, ma sulla prima unita' il pacchetto non era
-    # mai stato installato - era stata preparata a mano prima che `install.sh`
-    # lo prevedesse - e sul vetro tutto usciva in DejaVu Serif: piu' largo,
-    # piu' pesante, con l'occhio medio un quarto piu' grande di quello su cui
-    # erano tarati i corpi. Servirlo da qui vuol dire che ogni unita' e ogni
-    # anteprima mostrano la stessa cosa, qualunque pacchetto ci sia sotto.
+    # chiede EB Garamond, e dove il pacchetto di sistema manca il browser
+    # ripiega su DejaVu Serif: piu' largo, piu' pesante, con l'occhio medio un
+    # quarto piu' grande di quello su cui sono tarati i corpi. Servirlo da qui
+    # vuol dire che ogni unita' e ogni anteprima mostrano la stessa cosa,
+    # qualunque pacchetto ci sia sotto.
     # Solo i file che ci sono, e solo woff2: niente percorsi composti.
     CARATTERI = {p.name for p in (STATICI / "fonts").glob("*.woff2")}
 
@@ -2907,8 +2905,8 @@ def crea_app(amelie: Amelie):
     async def annulla():
         # `async def`, come tutte le altre: FastAPI manderebbe una `def` in un
         # thread del pool, e `Macchina.invia` non ha lucchetti. Correrebbe
-        # contro il battito del sensore, che gira sul loop - cioe' contro la
-        # scadenza dei dodici secondi della conferma.
+        # contro il battito del sensore, che gira sul loop - cioe' contro le
+        # scadenze dei timer, che mandano i loro eventi da li'.
         return JSONResponse(amelie.annulla())
 
     # --- La correzione a mano. Tre rotte e una foto: aprire (ferma il racconto e
@@ -2919,9 +2917,9 @@ def crea_app(amelie: Amelie):
 
     # Il corpo come `dict` e non come `Request`: con le annotazioni rimandate
     # (`from __future__ import annotations`) FastAPI risolve «Request» fra i
-    # nomi del modulo, dove non c'e' - e' importato qui dentro - e lo prendeva
-    # per un parametro della query. Ogni salvataggio tornava 422, e sul
-    # dispositivo «Salva» non faceva niente.
+    # nomi del modulo, dove non c'e' - e' importato qui dentro - e lo
+    # prenderebbe per un parametro della query: ogni salvataggio tornerebbe
+    # 422, e «Salva» non farebbe niente.
     @app.post("/correzione/salva")
     async def correzione_salva(d: dict = Body(...)):
         return JSONResponse(amelie.salva_correzione(
@@ -3071,8 +3069,8 @@ def crea_app(amelie: Amelie):
         percorso vero, filtro compreso, e non una scorciatoia che gli somiglia.
 
         Tre parole, perché «non c'è una bottiglia» e «guarda tu» sono due cose
-        diverse: con il sensore erano la stessa, perché una distanza finta tolta
-        lasciava il posto a un sensore che diceva «lontano».
+        diverse: fingere una distanza non basterebbe, perché una distanza finta
+        tolta lascia il posto a un sensore che dice «lontano».
 
             bottiglia   sul piatto c'è una bottiglia
             via         il piatto è vuoto
@@ -3107,9 +3105,9 @@ def crea_app(amelie: Amelie):
             "mcu": amelie.ponte.disponibile,
             # Che protocollo parla il firmware, e cosa vede. Serve montando: lo
             # stato tecnico si apre dal vetro tenendo premuto l'angolo, senza
-            # tastiera, ed è l'unico modo di vedere da lì se sull'MCU c'è ancora
-            # il firmware di prima — quello in cui i bit dei moduli
-            # significavano un'altra cosa. Una chiamata sola per tutti e due:
+            # tastiera, ed è l'unico modo di vedere da lì se sull'MCU gira il
+            # firmware giusto: con un altro protocollo i bit dei moduli
+            # significano un'altra cosa. Una chiamata sola per tutti e due:
             # questa pagina si guarda quando qualcosa non risponde.
             **amelie.ponte.diagnosi(),
             "camera": amelie.camera is not None,
@@ -3149,13 +3147,12 @@ def main() -> None:
                     help="il modello caricato e' quello affinato su questo "
                          "progetto: vuole il prompt compatto")
     ap.add_argument("--con-modello", action="store_true",
-                    help="rende scegliibile il modo «generativa», in cui il modello "
-                         "scrive il racconto (lento e di qualita' incerta: vedi "
-                         "docs/04-QUALITA.md)")
+                    help="rende sceglibile il modo «generativa», in cui il modello "
+                         "scrive il racconto (sperimentale: vedi "
+                         "docs/it/07-racconto.md)")
     ap.add_argument("--carta", metavar="FILE.csv",
-                    help="una carta dei vini al posto dell'archivio: un CSV "
-                         "con le colonne «titolo» e «descrizione». E' una "
-                         "prova, e si spegne togliendo l'opzione")
+                    help="una carta dei vini, sceglibile come modo di racconto: "
+                         "un CSV con le colonne «titolo» e «descrizione»")
     ap.add_argument("--porta", type=int, default=8080)
     ap.add_argument("--audio", default="plughw:0,3")
     ap.add_argument("--volume", type=int, default=VOLUME_PREDEFINITO,

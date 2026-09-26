@@ -19,9 +19,9 @@ se non e' fortissimo:
 
 L'immagine si guarda **solo dove sta l'etichetta**, cioe' attorno alle righe in
 cui l'OCR ha trovato quelle parole. Misurato sulle scansioni vere del
-dispositivo: dietro al piatto c'era un calendario, e due foto di bottiglie
-diverse si somigliavano attraverso lo sfondo fino a 49 punti - quanto basta a
-confondersi. Un ristorante avra' il suo sfondo, sempre lo stesso: e' un rischio
+dispositivo, con un calendario dietro al piatto: guardando la foto intera, due
+bottiglie diverse si somigliano attraverso lo sfondo fino a 49 punti - quanto
+basta a confondersi. Una sala ha il suo sfondo, sempre lo stesso: e' un rischio
 che va tolto alla radice, non tarato.
 
 Le soglie sono in `Regola`, con la misura che le giustifica.
@@ -64,9 +64,9 @@ class Regola:
 
     Le soglie stanno sopra quei massimi con un margine, non sul bordo: su 470
     coppie della stessa bottiglia se ne riconoscono 268, su 4.084 coppie
-    diverse nessuna. Si poteva arrivare a 280 abbassando le parole a 0,5 - che
-    e' esattamente il massimo visto fra bottiglie diverse - e non lo si e'
-    fatto: un riconoscimento mancato si ripara con un tocco, uno sbagliato
+    diverse nessuna. Abbassando le parole a 0,5 - che e' esattamente il
+    massimo visto fra bottiglie diverse - se ne riconoscerebbero 280, ma non
+    conviene: un riconoscimento mancato si ripara con un tocco, uno sbagliato
     racconta un vino con le parole scritte per un altro.
     """
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Esegue il ciclo completo una volta sola, e racconta cosa è successo.
+"""Esegue il ciclo completo una volta sola, e mostra ogni passaggio.
 
     python3 scripts/prova_ciclo.py                 scatta e riconosce
     python3 scripts/prova_ciclo.py --foto x.jpg    parte da un'immagine
@@ -10,14 +10,13 @@
 È il collaudo che si fa con una bottiglia vera davanti al dispositivo: mostra
 ogni passaggio con il suo tempo, così si vede subito dove si perde.
 
-**La posa.** Da quando il secondo Modulino Pixels — quello che faceva da flash —
-è stato tolto, l'unica luce che il dispositivo controlla è l'anello sotto la
-bottiglia. Se l'etichetta viene scura, la prima cosa da provare non è rimettere
-hardware: è allungare il tempo di posa. Bottiglia e camera sono ferme entrambe,
-quindi si può salire parecchio senza mosso, ed è la posa a dare il grosso del
-segnale in questa geometria. `--scala-pose` fa la sweep e dice, per ogni posa,
-quanto è nitida l'immagine e quante righe ne tira fuori l'OCR: è quella tabella
-che decide, non un'occhiata allo scatto.
+**La posa.** L'unica luce che il dispositivo controlla è l'anello sotto la
+bottiglia. Se l'etichetta viene scura, la prima cosa da provare non è
+aggiungere luce: è allungare il tempo di posa. Bottiglia e camera sono ferme
+entrambe, quindi si può salire parecchio senza mosso, ed è la posa a dare il
+grosso del segnale in questa geometria. `--scala-pose` fa la sweep e dice, per
+ogni posa, quanto è nitida l'immagine e quante righe ne tira fuori l'OCR: è
+quella tabella che decide, non un'occhiata allo scatto.
 """
 from __future__ import annotations
 
@@ -34,18 +33,15 @@ class LuceDelloScatto:
     """Accende l'anello a bianco per la raffica, come fa il dispositivo vero.
 
     **Non è un abbellimento: senza, questo strumento misura la scena sbagliata.**
-    Da quando il secondo Modulino Pixels è stato tolto, la luce dello scatto è
-    l'anello stesso, e `Amelie._scatta_e_leggi` lo porta a BIANCO_SCATTO
-    (luminosità 90) prima della raffica. Questa prova si lancia a servizio
-    FERMO — è la condizione per non contendere la camera — quindi qui non c'è
-    nessun altro a pilotarlo: l'anello resterebbe all'ambra da 22 con cui l'ha
-    lasciato la prova precedente.
+    La luce dello scatto è l'anello stesso, e `Amelie._scatta_e_leggi` lo
+    porta a BIANCO_SCATTO (luminosità 90) prima della raffica. Questa prova si
+    lancia a servizio FERMO — è la condizione per non contendere la camera —
+    quindi qui non c'è nessun altro a pilotarlo: l'anello resterebbe all'ambra
+    da 22 in cui l'ha lasciato la prova precedente.
 
     Tarare la posa su una scena illuminata da un quarto della luce vera porta a
     scrivere in `capture.py` un valore che nel dispositivo finito brucia
-    l'immagine — o, peggio, a concludere che togliere il flash sia stato un
-    errore, sulla base di una misura fatta senza la luce che il flash ha
-    sostituito.
+    l'immagine.
 
     Se l'MCU non risponde lo **dice**, invece di misurare in silenzio una cosa
     diversa da quella che si crede di misurare — e lo dice una volta sola, anche
@@ -194,12 +190,11 @@ def main() -> None:
 def scala_pose(args) -> None:
     """Prova una scala di pose sulla stessa scena, e le mette a confronto.
 
-    Serve a rispondere alla sola domanda che conta dopo aver tolto il flash:
-    con questa luce, quale posa legge l'etichetta? Si guardano due numeri
-    insieme, perché uno solo inganna: la NITIDEZZA cala quando la posa è così
-    lunga da prendere il micromosso, e le RIGHE LETTE calano quando l'immagine
-    è troppo scura o troppo bruciata. La posa buona è dove le righe sono tante
-    e la nitidezza non è ancora crollata.
+    Serve a rispondere a una domanda sola: con questa luce, quale posa legge
+    l'etichetta? Si guardano due numeri insieme, perché uno solo inganna: la
+    NITIDEZZA cala quando la posa è così lunga da prendere il micromosso, e le
+    RIGHE LETTE calano quando l'immagine è troppo scura o troppo bruciata. La
+    posa buona è dove le righe sono tante e la nitidezza non è ancora crollata.
 
     Fra una posa e l'altra non si muove niente: la scena dev'essere la stessa,
     altrimenti si confrontano due cose diverse.

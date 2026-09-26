@@ -16,12 +16,11 @@
      · 5" su 800x480 fa 108,9 x 65,3 mm, cioè 7,35 pixel fisici per millimetro
      · un bersaglio tattile onesto è 9 mm  ->  66 px fisici  ->  106 px QUI
 
-   Il testo si misura sull'OCCHIO MEDIO, non sul corpo. Fino a qui i corpi
-   erano tarati su un carattere che sul vetro non c'era: il foglio chiedeva EB
-   Garamond, la prima unità non l'aveva installato, e usciva DejaVu Serif, con
-   l'occhio a 0,52 em. EB Garamond ce l'ha a 0,40: a parità di corpo le
-   minuscole sarebbero diventate un quarto più piccole. Adesso il carattere
-   viaggia con la pagina (/fonts) e i corpi sono ricalcolati su di lui:
+   Il testo si misura sull'OCCHIO MEDIO, non sul corpo, e l'occhio dipende
+   dal carattere: EB Garamond ce l'ha a 0,40 em, DejaVu Serif - quello che
+   esce quando il carattere chiesto manca - a 0,52. A parità di corpo le
+   minuscole cambierebbero di un quarto. Per questo il carattere viaggia con
+   la pagina (/fonts), e i corpi sono calcolati su di lui:
 
      · il racconto si legge a mezzo metro con un occhio di 1,7 mm  ->  50 px
      · una scritta che si guarda di passaggio, 1,5 mm              ->  44 px
@@ -61,7 +60,7 @@
      filo piu' chiaro, perche' il livello si legga. Da solo, sul fondo
      bordeaux, questo rosso non porterebbe nessuna forma: sta sempre DENTRO un
      calice disegnato in oro, che la porta per lui. Una goccia rossa da sola,
-     invece, si leggeva come sangue. */
+     invece, si leggerebbe come sangue. */
   --vino:         #A8323F;
   --vino-fondo:   #5A1320;
   --vino-pelo:    #E59A86;
@@ -88,8 +87,8 @@
   --tocco: 108px;          /*  9,2 mm sul vetro */
   --tocco-grande: 140px;   /* 11,9 mm — il pulsante che si cerca senza guardare */
 
-  /* --- Tipografia. Sei corpi e basta: prima erano nove, e tre di loro -
-     38, 40 e 42 - non facevano gerarchia, facevano rumore. ------------------ */
+  /* --- Tipografia. Sei corpi e basta, distanti abbastanza da fare
+     gerarchia: corpi vicini - 38, 40, 42 - non la fanno, fanno rumore. ------ */
   --t-marchio:  104px;     /* l'altezza del marchio, non un corpo */
   --t-titolo:    60px;     /* il nome del vino */
   --t-corpo:     50px;     /* il racconto */
@@ -97,12 +96,13 @@
   --t-sottotit:  34px;     /* il produttore, le scelte secondarie */
   --t-piccolo:   30px;     /* le spiegazioni */
   --t-minuto:    24px;     /* solo cose di servizio */
-  /* Una sola spaziatura fra le lettere, per le sole scritte maiuscole. Prima
-     erano tre - 0,22, 0,16 e 0,05 em - e nessuna diceva perche'. */
+  /* Una sola spaziatura fra le lettere, per le sole scritte maiuscole: le
+     capitali accostate si impastano, e una misura sola le tiene uguali in
+     tutta l'interfaccia. */
   --crenatura-maiuscole: .14em;
 
-  /* --- Movimento. Quattro durate e una curva, per tutto. Prima erano undici
-     durate diverse, da 0,12 a 4,2 secondi, scelte una per volta. ------------ */
+  /* --- Movimento. Quattro durate e una curva, per tutto: ogni cosa che si
+     muove prende la durata del suo genere, non una scelta caso per caso. ---- */
   --d-tocco:  .12s;        /* il ritorno sotto il dito */
   --d-stato:  .28s;        /* un comando che cambia, un pannello che si apre */
   --d-vista:  .45s;        /* una schermata che lascia il posto a un'altra */
@@ -145,13 +145,13 @@ html, body {
 svg { display: block; }
 /* Il contorno di messa a fuoco va tolto QUI e non nel selettore universale:
    la regola dell'agente utente e' `:focus-visible { outline: auto }`, che ha
-   specificita' maggiore di `*` e vinceva. Qui non c'e' tastiera fisica: non
+   specificita' maggiore di `*` e vincerebbe. Qui non c'e' tastiera fisica: non
    esiste un "elemento in evidenza" da mostrare a nessuno. */
 :focus, :focus-visible, :focus-within { outline: none !important; }
 
 /* ALLINEAMENTO — una regola sola, e vale ovunque.
    · Cio' che si GUARDA - un titolo, un invito, una domanda, un avviso - sta
-     al centro, e va a capo bilanciato: mai piu' una parola sola sulla seconda
+     al centro, e va a capo bilanciato: mai una parola sola sulla seconda
      riga, come «Provi a girarla verso di / me?».
    · Cio' che si LEGGE - il racconto, i campi dell'editor - sta a sinistra,
      a bandiera, e va a capo evitando le righe corte in fondo. Giustificato
@@ -198,9 +198,9 @@ svg { display: block; }
 /* ===========================================================================
    MARCHIO — un calice, e il nome.
 
-   Prima c'era una goccia rossa al posto del puntino della i: da sola, sul
-   fondo scuro, faceva pensare al sangue prima che al vino - l'ha detto chi
-   ha provato il dispositivo. Il calice non lascia dubbi: la coppa a
+   Il simbolo e' un calice, non una goccia: da sola, sul fondo scuro, una
+   goccia rossa fa pensare al sangue prima che al vino. Il calice non lascia
+   dubbi: la coppa a
    tulipano, il vino fino al punto piu' largo, dove lo si versa davvero, e un
    riflesso. E' lo stesso calice di tutta l'interfaccia - l'icona del
    racconto, la lettura, la scrittura, l'avvio - disegnato una volta in un
@@ -242,9 +242,9 @@ svg { display: block; }
 /* ===========================================================================
    ATTESA — il marchio, una frase, e che cosa fa l'oggetto in tre passi.
 
-   Senza tecnica: posi, leggo, racconto. Tre colonne e non un paragrafo,
+   Senza tecnica: scegli, posa, ascolta. Tre colonne e non un paragrafo,
    perche' da un tavolo si guardano, non si leggono: l'icona dice la cosa, il
-   titolo il gesto, la riga sotto lo finisce. La frase sotto il nome e' in
+   verbo il gesto, il resto della riga lo finisce. La frase sotto il nome e' in
    corsivo, l'unico del progetto: e' la voce del locale, non un'istruzione.
    =========================================================================== */
 #attesa { gap: 0; padding-top: calc(var(--passo) * 2); }
@@ -267,7 +267,7 @@ svg { display: block; }
          gap: 4px; }
 /* Le tre icone poggiano sulla stessa riga, in una fascia alta uguale. Alte
    uguali no: una bottiglia e' alta e stretta, un calice largo e basso, e a
-   pari altezza la bottiglia sembrava la piu' piccola delle tre. */
+   pari altezza la bottiglia sembrerebbe la piu' piccola delle tre. */
 .passo .icone { height: 84px; display: flex; align-items: flex-end; justify-content: center;
                 margin-bottom: calc(var(--passo) * 1.1); }
 .passo .icona { width: auto; height: 72px; overflow: visible; }
@@ -286,8 +286,8 @@ svg { display: block; }
    VERSA — il segnale che il dispositivo sta leggendo.
 
    Una bottiglia si inclina e versa in un calice, che si riempie; poi si
-   raddrizza, il vino sfuma e si ricomincia. Prima era una goccia rossa che
-   cadeva e increspava: da sola, sul fondo scuro, sembrava sangue. Lo stesso
+   raddrizza, il vino sfuma e si ricomincia. Niente gocce che cadono da sole:
+   sul fondo scuro, una goccia rossa sembrerebbe sangue. Lo stesso
    ciclo e la stessa curva per tutto cio' che aspetta: la lettura qui, la
    scrittura col suo calicino, l'avvio col calice del marchio.
 
@@ -334,8 +334,8 @@ svg { display: block; }
    =========================================================================== */
 #racconto {
   /* Niente `position: relative` qui: sovrascriverebbe l'`absolute` di .vista,
-     e il racconto tornerebbe a farsi dare l'altezza dal contenuto invece che
-     dallo schermo. E' successo: il testo si era ridotto a una riga. */
+     e il racconto si farebbe dare l'altezza dal contenuto invece che dallo
+     schermo, fino a ridursi a una riga. */
   justify-content: flex-start; gap: 0;
   padding-top: calc(var(--passo) * 2); padding-bottom: 0;
 }
@@ -350,8 +350,8 @@ svg { display: block; }
   bottom: calc(var(--passo) * 1.6);
 }
 /* Il fondo vuoto e' alto quanto la sfumatura: l'ultima riga del racconto
-   deve poter salire FUORI dalla sfumatura. Era 176, cioe' fin dove la
-   sfumatura finisce: l'ultima riga si fermava a meta' dissolvenza. */
+   deve poter salire FUORI dalla sfumatura. Con 176, cioe' fin dove la
+   sfumatura finisce, l'ultima riga si fermerebbe a meta' dissolvenza. */
 #racconto .testo { padding-bottom: 216px; }
 /* Il titolo lascia il posto ai comandi d'angolo, e lo stesso posto a sinistra
    e a destra: centrato sul vetro, non sullo spazio che avanza. */
@@ -362,10 +362,11 @@ svg { display: block; }
   max-width: 100%; overflow: hidden;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
-/* Un nome lungo non si tronca: si rimpicciolisce. Prima finiva in «Valpolicella
-   Classico..», cioe' si perdeva proprio la parte che distingue quel vino da un
-   altro. Il gradino lo sceglie il JavaScript contando le lettere - 1.751 nomi su
-   19.358 superano la riga - e i due corpi stanno nella scala. */
+/* Un nome lungo non si tronca: si rimpicciolisce. Troncato finirebbe in
+   «Valpolicella Classico..», cioe' perderebbe proprio la parte che distingue
+   quel vino da un altro. Il gradino lo sceglie il JavaScript contando le
+   lettere - 1.751 nomi su 19.358 superano la riga - e i due corpi stanno
+   nella scala. */
 .titolo[data-misura="lungo"]       { font-size: 50px; }
 .titolo[data-misura="lunghissimo"] { font-size: 42px; }
 .sottotit {
@@ -383,7 +384,8 @@ svg { display: block; }
   text-align: left; text-wrap: pretty;
   padding: 0 calc(var(--passo) * 2);
   /* Sotto i cinquanta caratteri a riga l'occhio non perde il segno tornando a
-     capo da mezzo metro; col corpo nuovo, mille pixel sono quarantadue. */
+     capo da mezzo metro; al corpo del racconto, mille pixel sono
+     quarantadue. */
   max-width: 1000px;
   /* Il dito non lo trascina: c'e' il pulsante indietro. */
   touch-action: none;
@@ -391,9 +393,9 @@ svg { display: block; }
 }
 /* La sfumatura in testa e in coda dice che il testo continua oltre il bordo.
    Sta sul testo, come maschera: il fondo è radiale, e due strisce di colore
-   fisso ci si vedevano sopra come bande. Quella in testa c'e' solo quando il
-   testo e' scorso: a testo fermo sopra non c'e' niente, e sfumava a meta' la
-   prima riga. I 34 e 210 pixel li conosce anche `segui()`. */
+   fisso ci si vedrebbero sopra come bande. Quella in testa c'e' solo quando il
+   testo e' scorso: a testo fermo sopra non c'e' niente, e sfumerebbe a meta'
+   la prima riga. I 34 e 210 pixel li conosce anche `segui()`. */
 .testo {
   mask-image: linear-gradient(to bottom, #000 0,
                               #000 calc(100% - 210px), transparent calc(100% - 176px));
@@ -456,9 +458,10 @@ svg { display: block; }
 }
 
 /* Mentre il racconto si scrive. Non e' una decorazione: generare costa
-   secondi, e in quei secondi lo schermo mostrava il titolo e sotto il vuoto -
-   cioe' sembrava rotto. Il calicino e' il calice del marchio, copiato dalla
-   pagina, che si riempie e si vuota col ciclo di tutto cio' che aspetta. */
+   secondi, e in quei secondi lo schermo mostrerebbe il titolo e sotto il
+   vuoto - cioe' sembrerebbe rotto. Il calicino e' il calice del marchio,
+   copiato dalla pagina, che si riempie e si vuota col ciclo di tutto cio'
+   che aspetta. */
 .scrivendo {
   display: flex; align-items: center; gap: calc(var(--passo) * 1.2);
   color: var(--oro-chiaro); font-size: var(--t-voce);
@@ -482,14 +485,14 @@ svg { display: block; }
 /* ===========================================================================
    LINGUE — le bandierine, in alto a destra.
 
-   Erano due sigle, «IT» ed «EN», con una lineetta sotto la scelta: si
-   leggevano, ma a quaranta pixel sotto la scritta la lineetta sembrava un
-   filo randagio, non una sottolineatura. Una bandiera si riconosce prima di
-   leggerla, e da un tavolo e' quello che serve.
+   Bandiere e non sigle: «IT» ed «EN» vanno lette, una bandiera si riconosce
+   prima di leggerla, e da un tavolo e' quello che serve. La scelta si segna
+   con un anello, non con una lineetta sotto: a quaranta pixel sotto la
+   scritta una lineetta sembrerebbe un filo randagio, non una sottolineatura.
 
    Disegnate a mano in SVG, e non con le bandiere emoji: su Linux Chromium non
    ha un carattere a colori che le contenga, e 🇮🇹 esce scritto «IT» - cioe'
-   si tornava esattamente a dove si era partiti.
+   di nuovo una sigla.
    =========================================================================== */
 #lingue {
   position: absolute; right: 0; top: 0; z-index: 6;
@@ -503,7 +506,7 @@ svg { display: block; }
 .lingua .bandiera {
   width: 60px; height: 60px; border-radius: 50%; overflow: hidden;
   /* Un filo d'avorio attorno a ogni bandiera: il Regno Unito ha il bordo blu
-     scuro, e sul fondo bordeaux senza filo non aveva un contorno. */
+     scuro, e sul fondo bordeaux senza filo non avrebbe un contorno. */
   box-shadow: 0 0 0 2px rgba(244,237,227,.18);
   opacity: .5; filter: saturate(.55);
   transition: opacity var(--d-stato) var(--curva), filter var(--d-stato) var(--curva),
@@ -527,12 +530,13 @@ svg { display: block; }
    VOLUME — in alto a sinistra, speculare alle lingue.
 
    Questa catena audio non ha un volume hardware: il suono esce dall'HDMI verso
-   lo schermo. Quello che si regola qui e' il PCM, prima di consegnarlo (vedi
-   speech.scala_pcm).
+   lo schermo. Quello che si regola qui e' il PCM, prima di passarlo all'uscita
+   (vedi speech.scala_pcm).
 
    Si vede solo l'altoparlante; il cursore esce al tocco e si richiude da solo.
-   Era un «meno», dieci tacche e un «piu'»: undici tocchi per andare da zero
-   al massimo. Il cursore ci va con un gesto, e si legge a colpo d'occhio.
+   Un cursore e non un «meno» e un «piu'»: a tacche, per andare da zero al
+   massimo servirebbero dieci tocchi. Il cursore ci va con un gesto, e si
+   legge a colpo d'occhio.
    =========================================================================== */
 #volume {
   position: absolute; left: 0; top: 0; z-index: 6;
@@ -550,8 +554,8 @@ svg { display: block; }
 }
 #v-apri { border-color: transparent; }
 /* Aperto, il gruppo diventa una targa OPACA: sotto ci puo' essere il titolo
-   del vino, e su un fondo quasi nero il sei per cento di un titolo in oro si
-   leggeva ancora dentro ai comandi. */
+   del vino, e anche su un fondo quasi nero il sei per cento di un titolo in
+   oro si leggerebbe ancora dentro ai comandi. */
 #volume.aperto #v-piatto {
   background: #2A0F0C; border-color: var(--oro-scuro);
   box-shadow: 0 12px 44px rgba(0,0,0,.55);
@@ -793,7 +797,7 @@ svg { display: block; }
   font-size: var(--t-minuto); line-height: 1.3;
 }
 /* Scorre il CORPO, non il pannello: con il pulsante dentro all'elenco l'unica
-   via d'uscita dal mirino finiva sotto il bordo dello schermo. */
+   via d'uscita dal mirino finirebbe sotto il bordo dello schermo. */
 #m-corpo { flex: 1 1 auto; min-height: 0; overflow: auto; }
 #m-corpo::-webkit-scrollbar { display: none; }
 #m-lato h3 {
@@ -843,8 +847,8 @@ svg { display: block; }
    CORREGGERE — la bottiglia che non e' in archivio, descritta da chi la conosce.
 
    Il pulsante sta nell'intestazione, sotto il titolo generico che corregge.
-   In coda al racconto finiva sotto la sfumatura del testo, o fuori dal
-   riquadro finche' il testo non scorreva fino in fondo: un pulsante che si
+   In coda al racconto finirebbe sotto la sfumatura del testo, o fuori dal
+   riquadro finche' il testo non scorre fino in fondo: un pulsante che si
    vede solo a volte non c'e'. Compare insieme al testo e non prima, perche'
    prima non c'e' niente da correggere; ha il filetto e l'oro dei comandi,
    perche' e' un comando.
@@ -853,8 +857,8 @@ svg { display: block; }
    occupa 60 al centro: i margini negativi le restituiscono lo spazio che ha
    in piu'. Il bersaglio deve essere la SCATOLA, non uno pseudo-elemento
    allargato: `rendiToccabile` agisce solo se il dito si alza dentro il
-   riquadro dell'elemento, e un tocco sull'alone di un ::before partiva e poi
-   non faceva niente. */
+   riquadro dell'elemento, e un tocco sull'alone di un ::before partirebbe e
+   poi non farebbe niente. */
 .correggi {
   display: inline-flex; align-items: center; justify-content: center;
   height: var(--tocco); padding: 0 var(--passo);
@@ -925,9 +929,9 @@ svg { display: block; }
    descrizione: e' li' che l'occhio va, sotto il campo in cui si scrive, e
    mentre si scrive il titolo la descrizione non serve. Tre colonne e due
    righe: cinque bottiglie e, nell'ultima casella, «Nessuna di queste», che
-   passa alle cinque dopo o, finite, riporta alla descrizione. Erano pillole
-   nella riga sopra il titolo: se ne vedevano quante ci stavano, e le altre
-   uscivano dallo schermo senza modo di raggiungerle. */
+   passa alle cinque dopo o, finite, riporta alla descrizione. In fila, come
+   pillole sopra il titolo, se ne vedrebbero quante ci stanno, e le altre
+   uscirebbero dallo schermo senza modo di raggiungerle. */
 #k-proposte {
   flex: 1; min-height: 0;
   display: grid; gap: 8px;
@@ -1318,8 +1322,8 @@ addEventListener("resize", adattaScena);
 
 /* La sola schermata in cui e' lecito chiudere: il racconto. Nelle altre non
    c'e' niente da annullare - in attesa si e' gia' a casa, e durante la
-   lettura fermarsi a meta' lascerebbe l'OCR a girare. (C'era anche la scelta
-   fra candidati, che non c'e' piu': col dubbio si dice il piu' generico.) */
+   lettura fermarsi a meta' lascerebbe l'OCR a girare. (Non c'e' una scelta
+   fra candidati da annullare: col dubbio si dice il piu' generico.) */
 const VISTE_ANNULLABILI = ["racconto"];
 
 function mostra(nome) {
@@ -1385,7 +1389,7 @@ function illumina(i) {
 
    La frase viva va al centro della parte che si LEGGE, fra le due sfumature
    della maschera di `.testo` - non al centro della scatola, che continua sotto
-   i comandi. Centrata nella scatola, una frase di quattro righe perdeva
+   i comandi. Centrata nella scatola, una frase di quattro righe perderebbe
    l'ultima dietro ai pulsanti: proprio quella che dice «questa bottiglia non
    e' nel mio archivio».
 
@@ -1491,8 +1495,8 @@ function rendiToccabile(elemento, azione) {
 
      Il confronto è sul RIQUADRO DI PARTENZA, non su elementFromPoint: mentre
      il dito preme, il pulsante è rimpicciolito al 93% dal ritorno visivo, e
-     chiedere "che cosa c'è sotto questo punto" misurava il dito contro un
-     bersaglio più piccolo di quello che l'occhio vede. Ne nasceva un anello
+     chiedere "che cosa c'è sotto questo punto" misurerebbe il dito contro un
+     bersaglio più piccolo di quello che l'occhio vede. Ne nascerebbe un anello
      morto di quattro pixel tutt'intorno, proprio dove il dito arriva quando
      si tocca senza guardare. */
   elemento.addEventListener("pointerdown", (e) => {
@@ -1511,8 +1515,8 @@ function rendiToccabile(elemento, azione) {
 
 /* Il filtro anti-rimbalzo è PER AZIONE, e parte da meno infinito: con uno
    zero condiviso, il primo tocco nei primi duecento millesimi di vita della
-   pagina veniva scartato in silenzio, e "indietro" seguito da "avanti" perdeva
-   il secondo. */
+   pagina verrebbe scartato in silenzio, e "indietro" seguito da "avanti"
+   perderebbe il secondo. */
 const ultimoComando = {};
 function comanda(azione) {
   const ora = performance.now();
@@ -1524,8 +1528,8 @@ function comanda(azione) {
     .then(d => {
       /* Il server dice se c'era qualcosa da comandare. Un pulsante che non può
          fare niente si spegne: acceso e inerte è peggio di assente — a racconto
-         finito quello che l'ospite cerca è proprio "da capo", e restava lì a
-         piena luce senza nemmeno un lampo di rifiuto. */
+         finito quello che l'ospite cerca è proprio "da capo", e resterebbe lì
+         a piena luce senza nemmeno un lampo di rifiuto. */
       spegniComandi(d.ok === false);
       if (d.ok !== false && "in_pausa" in d) segnaPausa(d.in_pausa === true);
     })
@@ -1757,8 +1761,8 @@ eventi.onmessage = (e) => {
            Ma non quando il racconto e' lo STESSO: la schermata resta accesa
            anche nei due secondi che seguono la fine, e li' non c'e' nessun
            vino di prima da nascondere - c'e' quello che si e' appena
-           ascoltato. Svuotandola, l'ospite guardava due secondi di schermo
-           vuoto ogni volta che una storia finiva. */
+           ascoltato. Svuotandola, l'ospite guarderebbe due secondi di schermo
+           vuoto ogni volta che una storia finisce. */
         if (!m.stesso_racconto) componiRacconto([]);
         segnaCorrezione();
       }
@@ -1771,7 +1775,7 @@ eventi.onmessage = (e) => {
         $("a-frase").textContent = m.frase || "";
         $("a-simbolo").textContent = m.simbolo || "↻";
         /* Il tono lo decide il server, che sa se sta chiedendo qualcosa o
-           dichiarando un guasto. Prima erano tutti dello stesso oro. */
+           dichiarando un guasto: un guasto non ha l'oro di un invito. */
         $("avviso").className = "vista " + (m.tono || "invito");
         const aiuta = $("a-aiuta");
         aiuta.hidden = m.aiuta !== true;
@@ -1819,9 +1823,10 @@ eventi.onmessage = (e) => {
       tieniIlPasso(m.frase || 0, m.posizione);
       segnaPausa(m.in_pausa === true);
       /* La quota la calcola il server, che e' l'unico a sapere quanto dura
-         il racconto INTERO. Qui si divideva posizione per durata, ma quella
-         durata era «quanto e' gia' sintetizzato»: cresceva sotto i piedi del
-         numeratore e la barra tornava indietro a ogni frase nuova. */
+         il racconto INTERO. Qui si sa solo «quanto e' gia' sintetizzato»:
+         dividendo la posizione per quello, il denominatore crescerebbe sotto
+         i piedi del numeratore e la barra tornerebbe indietro a ogni frase
+         nuova. */
       if (typeof m.quota === "number") avanzamento(m.quota);
       break;
 
@@ -1901,14 +1906,15 @@ eventi.onmessage = (e) => {
    riavvio della pagina perderebbe il racconto in corso. */
 eventi.onerror = () => $("spia").classList.add("rotto");
 
-/* Lo stato tecnico, per il collaudo senza tastiera. Si APRE sopra la scena e
+/* Lo stato tecnico, da leggere senza tastiera. Si APRE sopra la scena e
    non ci si naviga: andarsene da questa pagina, su un chiosco senza barra degli
    indirizzi, significa non tornare più indietro e perdere il flusso di eventi.
 
    Tre secondi fermi, con una tolleranza di movimento. Senza la tolleranza il
-   gesto era rovesciato: il centro del contatto su un capacitivo non calibrato
-   oscilla di continuo, quindi non si completava mai per chi lo cercava — e
-   poteva completarsi da solo sotto una mano appoggiata immobile sul bordo. */
+   gesto sarebbe rovesciato: il centro del contatto su un capacitivo non
+   calibrato oscilla di continuo, quindi non si completerebbe mai per chi lo
+   cerca — e potrebbe completarsi da solo sotto una mano appoggiata immobile
+   sul bordo. */
 const ANGOLO_TENUTA = 3000;
 const ANGOLO_SCARTO = 30;
 let gesto = null;
@@ -1930,8 +1936,9 @@ function apriDiagnostica() {
   $("diagnostica").hidden = false;
 }
 
-/* Le descrizioni generate. `modelloAcceso` e' falso quando il dispositivo gira
-   senza modello: allora la riga non si mostra affatto. */
+/* I modi di raccontare. `modiServibili` sono quelli che il server dice di
+   poter servire: senza modello, la riga delle descrizioni generate non si
+   mostra affatto. */
 const MODI = ["archivio", "generativa", "carta"];
 let modoScelto = "archivio";
 let modiServibili = MODI.slice();
@@ -1978,7 +1985,7 @@ function disegnaImpostazioni(m) {
       .catch(() => disegnaImpostazioni({ correzioni: prima }));
   });
   rendiToccabile($("i-stato"), apriDiagnostica);
-  /* «Ripristina il funzionamento»: quello che prima si otteneva solo
+  /* «Ripristina il funzionamento»: quello che altrimenti si otterrebbe solo
      staccando la corrente. Il server ci mette fino a qualche secondo. */
   let ripristinando = false;
   rendiToccabile($("i-ripristina"), () => {
@@ -2527,9 +2534,9 @@ const CANCELLA = '<svg viewBox="0 0 24 24"><path d="M22 3H7c-.69 0-1.23.35-1.59.
   'L17.59 17 14 13.41 10.41 17 9 15.59 12.59 12 9 8.41 10.41 7 14 10.59 17.59 7 19 ' +
   '8.41 15.41 12 19 15.59z"/></svg>';
 /* Come su ogni telefono: la freccia vuota scrive minuscolo, piena scrive la
-   prossima lettera maiuscola, piena e sottolineata le scrive tutte. Era il
-   carattere ⇧, che il Garamond non ha: usciva da un altro carattere, sottile
-   e piu' piccolo delle due icone accanto. */
+   prossima lettera maiuscola, piena e sottolineata le scrive tutte. Disegnata
+   e non scritta: il carattere ⇧ il Garamond non ce l'ha, e uscirebbe da un
+   altro carattere, sottile e piu' piccolo delle due icone accanto. */
 const MAIUSCOLA = {
   spenta: '<svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2.5 21.5 12.5H16V20H8' +
     'v-7.5H2.5L12 2.5zm0 3L7 10.5h3V18h4v-7.5h3L12 5.5z"/></svg>',
@@ -2552,12 +2559,13 @@ function fermaRipetizione() {
 }
 
 /* I tasti si costruiscono una volta per strato - lettere o simboli - e poi se
-   ne cambiano solo le scritte. Si ricostruivano a ogni cambio di maiuscola, e
-   la maiuscola cambia anche SOTTO il dito: un tocco su ⌫ che svuota il campo
-   la riaccende. Il tasto premuto spariva, il dito si alzava su quello nuovo,
-   e il ripetitore del vecchio - avviato dopo 450 ms - non lo fermava piu'
-   nessuno: tutto quello che si scriveva spariva settanta millesimi dopo.
-   Visto sul dispositivo come «il cancella sembra sempre premuto». */
+   ne cambiano solo le scritte. Non si ricostruiscono a ogni cambio di
+   maiuscola, perche' la maiuscola cambia anche SOTTO il dito: un tocco su ⌫
+   che svuota il campo la riaccende. Ricostruendo, il tasto premuto
+   sparirebbe, il dito si alzerebbe su quello nuovo, e il ripetitore del
+   vecchio - avviato dopo 450 ms - non lo fermerebbe nessuno: tutto quello che
+   si scrive sparirebbe settanta millesimi dopo, come se il cancella restasse
+   sempre premuto. */
 function disegnaTastiera() {
   fermaRipetizione();
   const box = $("tastiera");

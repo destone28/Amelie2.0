@@ -421,17 +421,17 @@ class TestUnSoloColore:
 
 
 class TestAvanzamentoDelRacconto:
-    """La barra del racconto arretrava a ogni frase nuova.
+    """La barra del racconto non deve arretrare a ogni frase nuova.
 
-    Divideva la posizione per `durata_s`, cioe' per i byte GIA' sintetizzati.
-    Ma la sintesi corre al doppio del tempo reale: per tutta la prima meta' del
-    racconto il denominatore cresceva quasi al doppio della velocita' del
-    numeratore. Dentro una frase il rapporto saliva, all'arrivo della frase
-    dopo precipitava.
+    Dividere la posizione per `durata_s`, cioe' per i byte GIA' sintetizzati,
+    non funziona: la sintesi corre al doppio del tempo reale, e per tutta la
+    prima meta' del racconto il denominatore cresce quasi al doppio della
+    velocita' del numeratore. Dentro una frase il rapporto sale, all'arrivo
+    della frase dopo precipita.
 
     Misurato su un racconto ricomposto da frasi con audio vero - otto frasi per
-    16,8 secondi - la barra faceva **sette arretramenti, il peggiore di 43,9
-    punti**, e a due secondi dall'inizio segnava gia' il 56%.
+    16,8 secondi - quel conto fa **sette arretramenti, il peggiore di 43,9
+    punti**, e a due secondi dall'inizio segna gia' il 56%.
     """
 
     @staticmethod
@@ -496,12 +496,12 @@ class TestAvanzamentoDelRacconto:
         assert r.quota == pytest.approx(1.0)
 
     def test_non_arriva_in_fondo_prima_della_voce(self):
-        """L'altro modo di sbagliare, e capitava in un caso su quattro.
+        """L'altro modo di sbagliare, in un caso su quattro.
 
         Quando la riproduzione raggiunge la sintesi, la posizione finisce
         esattamente sull'ultimo byte esistente: dividendo per i byte
-        sintetizzati fa uno tondo. La barra andava a fondo scala a meta'
-        racconto e poi crollava.
+        sintetizzati fa uno tondo, e la barra andrebbe a fondo scala a meta'
+        racconto per poi crollare.
         """
         r = self._riproduttore(self.FRASI)
         self._accoda(r, self.DURATE[0])
@@ -546,11 +546,11 @@ class TestAvanzamentoDelRacconto:
 class TestZittire:
     """Svuotare la coda non basta a far tacere chi sta parlando.
 
-    `zittisci()` buttava via cio' che non era ancora uscito, e chi stava
-    aspettando spazio per accodare la frase successiva si svegliava sulla coda
-    ora vuota e la faceva sentire. Un annuncio di lingua e' di DUE frasi:
-    zittendolo a meta' si sentiva la seconda per intero - piu' di due secondi -
-    sopra la schermata d'invito.
+    Se `zittisci()` buttasse soltanto via cio' che non e' ancora uscito, chi
+    aspetta spazio per accodare la frase successiva si sveglierebbe sulla coda
+    ora vuota e la farebbe sentire. Un annuncio di lingua e' di DUE frasi:
+    zittendolo a meta' si sentirebbe la seconda per intero - piu' di due
+    secondi - sopra la schermata d'invito.
     """
 
     @staticmethod
@@ -581,20 +581,20 @@ class TestZittire:
         """Il caso vero: il silenzio arriva mentre la prima frase e' in coda.
 
         E' quello che succede toccando «annulla» durante l'annuncio della
-        lingua: la prima frase e' gia' consegnata, la seconda no. Prima
-        usciva lo stesso, perche' `svuota` libera la coda e chi aspettava
-        spazio si sveglia e accoda.
+        lingua: la prima frase e' gia' passata all'uscita, la seconda no. Senza
+        il contatore dei silenzi uscirebbe lo stesso, perche' `svuota` libera
+        la coda e chi aspetta spazio si sveglia e accoda.
         """
         from amelie.speech import Voce
 
         v = self._voce()
-        sintetizzate, consegnate = [], []
+        sintetizzate, inviate = [], []
 
         class UscitaFinta:
             def scrivi(self, dati):
-                consegnate.append(dati)
+                inviate.append(dati)
                 # Il tocco arriva mentre la prima frase e' appena entrata.
-                if len(consegnate) == 1:
+                if len(inviate) == 1:
                     v.zittisci()
 
             def svuota(self):
@@ -611,7 +611,7 @@ class TestZittire:
         Voce.parla(v, ["Lingua italiana.", "Da adesso racconto i vini in italiano."])
         assert sintetizzate == ["Lingua italiana."], (
             f"ha continuato dopo il silenzio: {sintetizzate}")
-        assert len(consegnate) == 1
+        assert len(inviate) == 1
 
 
 class TestStimaDellaVoce:
@@ -642,8 +642,8 @@ class TestStimaDellaVoce:
     def test_ogni_voce_ha_il_suo_ritmo(self):
         """Misurati sintetizzando davvero, 90 frasi per voce.
 
-        Non dalla cache: dai quattordici file inglesi che c'erano in cache
-        usciva un'altra costante, e sbagliata.
+        Non dalla cache: i quattordici file inglesi in cache danno un'altra
+        costante, e sbagliata.
         """
         from amelie.speech import CARATTERI_AL_SECONDO, VOCI
 
@@ -655,7 +655,7 @@ class TestStimaDellaVoce:
 
         Non e' un caso di bordo: annata, temperatura e gradazione chiudono
         quasi ogni racconto, cioe' sono proprio la coda che la stima deve
-        coprire. Contandole per quattro, l'errore mediano su quelle frasi era
+        coprire. Contandole per quattro, l'errore mediano su quelle frasi e'
         del 27% in italiano; col peso misurato scende al 3,2%.
         """
         from amelie.speech import byte_stimati
@@ -679,8 +679,9 @@ class TestIlModoDiRaccontare:
 
     Tre modi, e la differenza fra loro non è di stile: è la FONTE. L'archivio
     compone dai dati del registro; la generativa fa scrivere al modello quegli
-    stessi dati; la carta legge un file scritto a mano. Era un interruttore a
-    due posizioni, e l'interruttore resta come scorciatoia per chi lo chiamava.
+    stessi dati; la carta legge un file scritto a mano. Accanto al selettore
+    c'e' un interruttore a due posizioni, `imposta_generati`, come scorciatoia
+    fra archivio e generativa.
     """
 
     @pytest.fixture
@@ -795,10 +796,10 @@ class TestIlModoDiRaccontare:
 
 
 class TestLaPronunciaSegueLaLingua:
-    """Sentito sul dispositivo: in inglese «DOCG» diventava «denominazione di
-    origine controllata e garantita», e la voce inglese lo compitava
-    all'inglese. La tabella di pronuncia era una sola, italiana, e si
-    applicava a qualunque voce."""
+    """Ogni lingua ha la sua tabella di pronuncia. Con una sola, italiana,
+    applicata a qualunque voce, in inglese «DOCG» diventerebbe «denominazione
+    di origine controllata e garantita», e la voce inglese lo compiterebbe
+    all'inglese."""
 
     def test_in_inglese_la_sigla_si_scioglie_in_inglese(self):
         from amelie.speech import per_la_voce
@@ -808,7 +809,7 @@ class TestLaPronunciaSegueLaLingua:
         assert "designation of origin" in detto
         assert "percent" in detto
 
-    def test_in_italiano_come_prima(self):
+    def test_in_italiano_la_sigla_si_scioglie_in_italiano(self):
         from amelie.speech import per_la_voce
 
         assert "denominazione di origine controllata e garantita" in per_la_voce(

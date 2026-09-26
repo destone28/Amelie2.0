@@ -7,8 +7,7 @@ punteggiatura. `llama.cpp` la applica a ogni token: il modello non può
 scrivere una parola che non stia qui dentro, e questo non è un controllo a
 posteriori, è un vincolo strutturale.
 
-Misurato con `scripts/valuta_generativa.py`, trenta vini, stesso modello,
-temperatura 0,2:
+Misurato su trenta vini, stesso modello, temperatura 0,2:
 
     senza gabbia   22 su 30 passano la verifica   0,67 parole fuori dai fatti
     con la gabbia  25 su 30                        0,50
@@ -18,9 +17,9 @@ sono i RAPPORTI sbagliati fra parole vere — «di colore spumante», «Sangiove
 e Amarena» come vitigni — e a quelli pensa `verifica`, dopo.
 
 Il lessico sta in `data/lessico/gabbia_it.txt` ed è ricavato dai testi del
-corpus di addestramento che passano la verifica di oggi: 310 parole, viste
-almeno due volte. Non c'è un lessico inglese perché non c'è un corpus inglese
-scritto da una persona o da un maestro; con il solo lessico dei testi composti
+corpus di addestramento che passano la verifica: 310 parole, viste almeno due
+volte. Non c'è un lessico inglese perché non c'è un corpus inglese scritto da
+una persona o da un modello maestro; con il solo lessico dei testi composti
 la gabbia inglese affamerebbe il modello. In inglese, niente gabbia.
 """
 

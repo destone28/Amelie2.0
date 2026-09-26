@@ -7,9 +7,8 @@ vino da un'etichetta non servono. Questo script tiene i 19.358 vini italiani e
 il manifesto delle etichette fotografate, e scarta il resto.
 
 Il repository non e' versionato (vedi .gitignore): va scaricato una volta dal
-repository ufficiale X-Wines - vedi docs/ATTRIBUZIONI.md per licenza e citazione
-obbligatoria - e messo in
-`data/sources/X-Wines_Official_Repository/`.
+repository ufficiale X-Wines - vedi docs/it/08-attribuzioni.md per licenza e
+citazione obbligatoria - e messo in `data/sources/X-Wines_Official_Repository/`.
 
     python3 data/estrai_xwines.py
 
@@ -53,7 +52,7 @@ def leggi_vini() -> list[dict]:
     if not sorgente.exists():
         sys.exit(
             f"manca {sorgente}\n"
-            "Scarica il repository X-Wines (licenza e citazione in docs/ATTRIBUZIONI.md) "
+            "Scarica il repository X-Wines (licenza e citazione in docs/it/08-attribuzioni.md) "
             "in data/sources/X-Wines_Official_Repository/"
         )
     csv.field_size_limit(10 ** 7)

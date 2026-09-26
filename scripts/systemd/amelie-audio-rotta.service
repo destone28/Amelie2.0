@@ -9,8 +9,9 @@ Wants=amelie-audio-guard.service
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/local/bin/amelie-audio-rotta.sh
-# Il controllo torna a zero se l'ADSP viene riavviato a caldo: se succede, la
-# guardia riavvia il servizio e questo riapre.
+# Il controllo torna a zero anche quando la guardia riavvia l'ADSP a caldo:
+# per questo si parte dopo di lei. Se la rotta non si trova ancora, lo script
+# esce in errore e systemd ritenta dopo cinque secondi.
 Restart=on-failure
 RestartSec=5
 

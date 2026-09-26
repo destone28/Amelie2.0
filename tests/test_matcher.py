@@ -70,7 +70,7 @@ class TestCascata:
 
 class TestSicurezza:
     def test_non_dichiara_certo_un_produttore_diverso(self, m):
-        """Il caso che generava figuracce: 'Monte Antico' -> 'Monte Giove'.
+        """Il caso da figuraccia: 'Monte Antico' scambiato per 'Monte Giove'.
 
         Un nome simile a metà non deve MAI produrre un match certo su un vino
         commerciale, perché quello impegna il produttore.
@@ -202,7 +202,7 @@ class TestCandidati:
         """Sullo schermo di un ristorante non si mostra l'indice di ricerca.
 
         Le voci dell'indice sono normalizzate - minuscole, senza punteggiatura -
-        e mostrarle tali e quali significava proporre all'ospite di scegliere
+        e mostrarle tali e quali significherebbe proporre all'ospite di scegliere
         fra "barolo cannubi marchesi di barolo" e "barolo bussia tenuta rocca".
         """
         f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI"])
@@ -215,7 +215,7 @@ class TestCandidati:
         assert len(f.riferimenti) == len(f.candidati)
 
     def test_scegliere_un_alternativa_da_proprio_quel_record(self, m):
-        """Ricercare il NOME del candidato poteva riportare a un altro vino."""
+        """Ricercare il NOME del candidato può riportare a un altro vino."""
         f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI"])
         if not f.riferimenti:
             pytest.skip("nessuna alternativa da questa etichetta")
@@ -230,19 +230,19 @@ class TestCandidati:
 
 
 class TestFigureBrutte:
-    """I casi veri che hanno prodotto un'affermazione sbagliata a schermo.
+    """Casi veri in cui un calcolo ingenuo della sicurezza afferma il falso a schermo.
 
-    Ognuno viene da un'etichetta fotografata davvero, e ognuno e' costato una
-    modifica al calcolo della sicurezza. Stanno qui perche' non tornino.
+    Ognuno viene da un'etichetta fotografata davvero, e ognuno tiene ferma una
+    regola del calcolo della sicurezza.
     """
 
     def test_un_refuso_non_deve_far_perdere_il_record_giusto(self, m):
         """«TINUTA ROCCA BAROLO BUSSIA»: una lettera sbagliata su «Tenuta».
 
-        token_set_ratio e' tutto-o-niente sui token: bastava quella «i» per far
+        token_set_ratio e' tutto-o-niente sui token: basta quella «i» per far
         crollare «tenuta rocca barolo bussia» a 58.8, mentre un altro
-        produttore chiamato semplicemente «Rocca» prendeva 100 con la sua unica
-        parola. Vinceva il record che spiegava UNA parola su sette.
+        produttore chiamato semplicemente «Rocca» prende 100 con la sua unica
+        parola. Vincerebbe il record che spiega UNA parola su sette.
         """
         f = m.cerca(["TINUTA", "ROCCA", "BAROLO", "BUSSIA", "2010",
                      "DENOMINAZIONE DI ORIGINE CONTROLLATA E GARANTITA"])
@@ -254,8 +254,8 @@ class TestFigureBrutte:
     def test_due_produttori_vicini_non_si_dichiarano_certi(self, m):
         """«Monte Antico» contro «Monte Giove»: 90 contro 87.6.
 
-        Il primo classificato era il produttore SBAGLIATO, e quello giusto
-        stava 2.4 punti sotto. Con due nomi cosi' vicini il dispositivo non
+        Il primo classificato e' il produttore SBAGLIATO, e quello giusto
+        sta 2.4 punti sotto. Con due nomi cosi' vicini il dispositivo non
         riconosce: sceglie a caso. Deve chiedere.
         """
         f = m.cerca(["Monte", "Antico", "Toscana", "Indicacsione Gecgafica Tipica",
@@ -268,13 +268,13 @@ class TestFigureBrutte:
     def test_i_punti_fra_le_parole_non_le_incollano(self, m):
         """«COMM.G.B.BURLOTTO»: l'OCR legge i punti, non gli spazi.
 
-        Togliendo ogni punto quella riga diventava l'unico token
+        Togliendo ogni punto quella riga diventerebbe l'unico token
         «commgbburlotto», mentre lo stesso produttore in archivio - scritto
-        «Comm. G.B. Burlotto», con gli spazi - era «comm gb burlotto». Lo
-        stesso nome in due forme diverse: il suo Barolo Vigneto Cannubi era
-        nel database e non veniva trovato. Vinceva invece «Ca'Stella», che si
-        accontentava della «Stella Polare» stampata sulla retroetichetta, e si
-        dichiarava CERTA con 92.
+        «Comm. G.B. Burlotto», con gli spazi - e' «comm gb burlotto». Lo
+        stesso nome in due forme diverse: il suo Barolo Vigneto Cannubi, che
+        e' nel database, non si troverebbe. Vincerebbe invece «Ca'Stella», che
+        si accontenta della «Stella Polare» stampata sulla retroetichetta, e
+        si dichiarerebbe CERTA con 92.
         """
         f = m.cerca(["Barole", "CANNUBI", "COMM.G.B.BURLOTTO",
                      "Imbottigliato da Burlotto Marina", "VERDUNO", "ITALIA",
@@ -301,7 +301,7 @@ class TestFigureBrutte:
             "di retroetichetta")
 
     def test_un_vino_di_una_parola_non_basta_a_se_stesso(self, m):
-        """Un record «Rocca»/«Rocca» spiegava una parola e diceva 100."""
+        """Un record «Rocca»/«Rocca» spiega una parola sola: non puo' dire 100."""
         f = m.cerca(["ROCCA"])
         assert not f.certo, "una parola sola non puo' identificare un produttore"
 
@@ -310,9 +310,9 @@ class TestVerificaCompleta:
     def test_si_verificano_tutti_i_candidati_non_solo_i_primi(self):
         """Chi resta fuori dalla verifica conserva il punteggio gonfiato.
 
-        La verifica ABBASSA i punteggi. Fermarsi ai primi 25 su 200 voleva dire
-        che il 26esimo, mai esaminato, poteva scavalcare tutti dopo il riordino
-        e presentarsi come certo senza aver mai superato l'esame.
+        La verifica ABBASSA i punteggi. Fermarsi ai primi 25 su 200 vorrebbe
+        dire che il 26esimo, mai esaminato, potrebbe scavalcare tutti dopo il
+        riordino e presentarsi come certo senza aver mai superato l'esame.
         """
         from amelie.matcher import CANDIDATI, VERIFICATI
         assert VERIFICATI >= CANDIDATI
@@ -391,7 +391,7 @@ class TestDueLingue:
 
         La scheda del vitigno SUBENTRA solo dove il vino non ha nulla di suo, e
         la sostituzione dev'essere la stessa in ogni lingua: altrimenti la
-        stessa bottiglia dava due risposte diverse alla stessa domanda.
+        stessa bottiglia darebbe due risposte diverse alla stessa domanda.
         """
         f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI", "2016"])
         if not f.abbinamenti:
@@ -413,11 +413,12 @@ class TestProduttoreLetto:
     Misurato su 1200 etichette costruite dalle tipologie del database, lunghe
     abbastanza da non essere protette dal tetto sulle parole:
 
-        prima    1179 generiche, 21 attribuite a un produttore, 1 CERTA
-        dopo     1200 generiche,  0 attribuite,                  0 certe
+        senza la regola  1179 generiche, 21 attribuite a un produttore, 1 CERTA
+        con la regola    1200 generiche,  0 attribuite,                  0 certe
 
-    La certa era «Brunello di Montalcino» dato a «Vigna Italia» con 100, da
-    un'etichetta dove la parola «vigna» era quella del disciplinare.
+    La certa, senza la regola, e' «Brunello di Montalcino» dato a «Vigna
+    Italia» con 100, da un'etichetta dove la parola «vigna» e' quella del
+    disciplinare.
     """
 
     def test_una_denominazione_da_sola_non_si_attribuisce_a_nessuno(self, m):
@@ -428,11 +429,12 @@ class TestProduttoreLetto:
         assert "manduria" in (f.tipologia or f.denominazione or "").lower()
 
     def test_il_produttore_non_si_fa_confermare_dalle_parole_del_vino(self, m):
-        """«Barolo del Comune di Serralunga d'Alba», dato a «Terre del Barolo».
+        """«Barolo del Comune di Serralunga d'Alba» non e' di «Terre del Barolo».
 
-        Il produttore prendeva 88 e si dichiarava certo perche' il suo nome
-        contiene «Barolo», che sull'etichetta c'e' - ma come denominazione, non
-        come firma. Due conferme indipendenti che erano la stessa parola.
+        Senza la regola il produttore prenderebbe 88 e si dichiarerebbe certo
+        perche' il suo nome contiene «Barolo», che sull'etichetta c'e' - ma come
+        denominazione, non come firma. Due conferme indipendenti che sono la
+        stessa parola.
         """
         f = m.cerca(["BAROLO DEL COMUNE DI SERRALUNGA D'ALBA",
                      "DENOMINAZIONE DI ORIGINE CONTROLLATA E GARANTITA",
@@ -452,8 +454,8 @@ class TestProduttoreLetto:
         """L'altro lato: la regola non deve rendere il dispositivo cieco.
 
         Misurato su 500 etichette complete: 498 col produttore giusto, 461
-        dichiarate certe, nessuna attribuita al produttore sbagliato - dove
-        prima ce n'era una, per giunta dichiarata certa con 93.
+        dichiarate certe, nessuna attribuita al produttore sbagliato - senza la
+        regola ce n'e' una, per giunta dichiarata certa con 93.
         """
         f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI",
                      "DENOMINAZIONE DI ORIGINE CONTROLLATA E GARANTITA", "2016"],
@@ -489,12 +491,12 @@ class TestProduttoreLetto:
         assert Matcher._prova_del_produttore("cantina di soave", "soave") == []
 
     def test_la_gradazione_alcolica_non_e_una_firma(self, m):
-        """«VOL» confermava il produttore «Volpi».
+        """«VOL» non conferma il produttore «Volpi».
 
         Cinque lettere contro tre, due terzi in comune: `fuzz.ratio` da' 75, e
-        75 bastava a dire «il produttore l'ho letto». Cosi' «Cantine Volpi»
-        finiva su un Piemonte Cortese che non la nominava affatto - bastava che
-        sull'etichetta ci fosse la gradazione, cioe' su ogni etichetta.
+        75 basterebbe a dire «il produttore l'ho letto». Cosi' «Cantine Volpi»
+        finirebbe su un Piemonte Cortese che non la nomina affatto - basterebbe
+        che sull'etichetta ci fosse la gradazione, cioe' su ogni etichetta.
 
         La prova del produttore si misura sulle parole UTILI: quelle che stanno
         su ogni bottiglia non identificano una cantina piu' di quanto
@@ -510,9 +512,9 @@ class TestProduttoreLetto:
     def test_una_parola_assente_non_vale_un_riscontro_parziale(self):
         """`fuzz.ratio` fra parole che non c'entrano vale trenta o quaranta.
 
-        Contarlo regalava a ogni produttore di tre parole una quarantina di
-        punti che sull'etichetta non c'erano. Un refuso, invece, vale ottanta
-        e passa, e deve continuare a contare.
+        Contarlo regalerebbe a ogni produttore di tre parole una quarantina di
+        punti che sull'etichetta non ci sono. Un refuso, invece, vale ottanta
+        e passa, e deve contare.
         """
         assente = Matcher._copertura("terre", "comune serralunga alba".split())
         assert assente == 0.0, f"una parola assente ha preso {assente}"
@@ -525,8 +527,8 @@ class TestDatabasePiuRiccoDelCodice:
 
     L'indice di ricerca vive nel database. Chi lo ricostruisce puo' metterci
     righe di un ambito che questo codice non conosce - una tabella nuova, un
-    prodotto da scaffale con un codice a barre. Prima era un `KeyError` dentro
-    `_componi`, che gira nel thread di lavoro: diventava una schermata di
+    prodotto da scaffale con un codice a barre. Un `KeyError` dentro
+    `_componi`, che gira nel thread di lavoro, diventerebbe una schermata di
     guasto davanti all'ospite, su ogni bottiglia che ci finisse sopra.
 
     Chi legge deve reggere un database piu' ricco di quanto sappia usare.
@@ -628,7 +630,7 @@ class TestDisciplinare:
 
     def test_il_pareggio_si_tace(self, m):
         """Una denominazione con più descrizioni dello stesso colore, e niente
-        che dica quale sia la nostra: si resta in silenzio. Il narratore ha
+        che dica quale sia quella giusta: si resta in silenzio. Il narratore ha
         comunque il resto dei fatti."""
         assert m._disciplinare(None, "qualunque", "Red") is None
         assert m._disciplinare(1, "qualunque", "Sparkling") is None
@@ -651,8 +653,8 @@ class TestDisciplinare:
     def test_la_forma_compatta_porta_la_nota(self, m):
         """Costa quaranta token, e vanno pagati.
 
-        Toglierla sembrava gratis — il racconto la dice comunque, dal template
-        — ma il corpus d'addestramento è scritto da un modello che la nota la
+        Toglierla sembrerebbe gratis — il racconto la dice comunque, dal
+        template — ma il corpus d'addestramento è scritto da un modello che la nota la
         vede: 498 esempi su 550 usano sue parole. Un ingresso che non la porta
         insegna a dire cose che l'ingresso non contiene, e l'unico modo di
         produrle è inventarle.
@@ -666,7 +668,7 @@ class TestDisciplinare:
         assert "ruby red" in compatto and "rosso rubino" not in compatto
 
     def test_in_inglese_sono_dichiarate_traduzione(self, m):
-        """«rosso rubino» reso «ruby red» è parola nostra: dirlo citazione
+        """«rosso rubino» reso «ruby red» è parola del dispositivo: dirlo citazione
         attribuirebbe a un ente pubblico una frase che non ha mai scritto."""
         blocco = m._fatti_tipologia(2).blocco_fatti(lingua="en")
         assert "translated from the Italian" in blocco
@@ -676,12 +678,12 @@ class TestDisciplinare:
 class TestCandidatiCheNonAggiungonoNiente:
     """Sull'etichetta c'è «Cerasuolo d'Abruzzo» e basta.
 
-    In archivio ce ne sono tre, di Filari, Lepore e Valori, e il dispositivo li
-    mostrava tutti e tre chiedendo di scegliere. Quella domanda non ha
-    risposta: la bottiglia non dice di chi è, e nessuno al tavolo lo sa meglio
-    di lei. Chiedere sposta su un ospite una scelta che il riconoscitore ha
-    appena dichiarato impossibile, quando la regola del produttore l'ha fatto
-    scendere al vino generico.
+    In archivio ce ne sono tre, di Filari, Lepore e Valori, e mostrarli tutti e
+    tre chiedendo di scegliere sarebbe una domanda senza risposta: la bottiglia
+    non dice di chi è, e nessuno al tavolo lo sa meglio di lei. Chiedere
+    sposta su un ospite una scelta che il riconoscitore ha appena dichiarato
+    impossibile, quando la regola del produttore l'ha fatto scendere al vino
+    generico.
     """
 
     def test_senza_cantina_letta_non_si_propone_nessuna_cantina(self, m):
@@ -710,12 +712,12 @@ class TestIlColoreScrittoSullEtichetta:
     """Quando la bottiglia dichiara il proprio colore, quella parola non è un
     indizio da pesare insieme agli altri: è la bottiglia che lo dice di sé.
 
-    Viene da un caso vero, visto sul dispositivo. Su «Leggiadro · Brut Rosé ·
-    METODO CLASSICO» il riconoscitore proponeva per primo «Asti Metodo
-    Classico» — bianco, di Moscato, dolce — all'86 %, e la voce raccontava il
-    Moscato d'Asti a chi aveva in mano uno spumante rosa. I tre candidati
-    offerti accanto erano già tutti Metodo Classico Rosé: la risposta giusta
-    era in lista, solo non per prima.
+    Un caso vero: su «Leggiadro · Brut Rosé · METODO CLASSICO», senza questa
+    regola, il riconoscitore proporrebbe per primo «Asti Metodo Classico» —
+    bianco, di Moscato, dolce — all'86 %, e la voce racconterebbe il Moscato
+    d'Asti a chi ha in mano uno spumante rosa. I tre candidati accanto sono
+    già tutti Metodo Classico Rosé: la risposta giusta è in lista, solo non
+    per prima.
     """
 
     ROSA = ["Leggiadro", "Brut Rosé", "METODO CLASSICO"]
@@ -770,9 +772,9 @@ class TestLaTemperaturaDiServizio:
     """La decide la categoria, non l'uva, tutte le volte che il vino non è fermo.
 
     Le schede in `data/vitigni.json` danno la temperatura del vino FERMO di
-    quell'uva — giusta per un Pinot Nero — e uno spumante di Pinot Nero la
-    ereditava: il dispositivo ha consigliato di servire un Trentodoc rosato a
-    quindici-diciassette gradi. In archivio 819 tipologie su 4.300 sono
+    quell'uva — giusta per un Pinot Nero — e uno spumante di Pinot Nero che la
+    ereditasse farebbe servire un Trentodoc rosato a quindici-diciassette
+    gradi. In archivio 819 tipologie su 4.300 sono
     spumanti o frizzanti, più 212 fra passiti e liquorosi: non è un caso
     isolato, è una classe.
     """
@@ -804,16 +806,16 @@ class TestNonSiNominaCioCheNonSiELetto:
     """La regola più importante del riconoscimento.
 
     «Trento Rosato/Rosé» somiglia moltissimo a «Brut Rosé Metodo Classico» —
-    due parole su tre in comune — ma «Trento» sulla bottiglia non c'era, e
+    due parole su tre in comune — ma «Trento» sulla bottiglia non c'è, e
     Trento è un posto: dirlo vuol dire attribuire al vino un'origine che
     nessuno ha dichiarato.
 
     Misurato su 139 etichette vere più 9 bottiglie fuori archivio, e la
     separazione è totale: i riconoscimenti giusti hanno il 100 % delle parole
     identificanti sul vetro, le invenzioni ne hanno lo 0 %. Una soglia di
-    SOMIGLIANZA non avrebbe potuto fare questo lavoro — «Lambrusco dell'Emilia»
-    diventava «Colli dell'Etruria Centrale» con sicurezza 67, sopra al Chianti
-    Classico vero che ne fa 78.
+    SOMIGLIANZA non può fare questo lavoro — «Lambrusco dell'Emilia»
+    diventerebbe «Colli dell'Etruria Centrale» con sicurezza 67, sopra al
+    Chianti Classico vero che ne fa 78.
     """
 
     def test_un_posto_che_non_si_e_letto_non_si_nomina(self, m):
@@ -830,8 +832,8 @@ class TestNonSiNominaCioCheNonSiELetto:
     def test_il_produttore_non_trascina_la_sua_omonima(self, m):
         """Caso vero, dalle 139 etichette: il produttore si chiama «Santa
         Margherita» e il vino è un Valdadige, dell'Alto Adige. In archivio
-        esiste «Santa Margherita di Belice», che è in Sicilia, e il
-        riconoscitore la metteva prima all'84 %."""
+        esiste «Santa Margherita di Belice», che è in Sicilia, e senza la
+        regola il riconoscitore la metterebbe in testa all'84 %."""
         f = m.cerca(["Santa Margherita", "VALDADIGE", "DENOMINAZIONE DI ORIGINE"])
         detto = " ".join(filter(None, [f.nome, f.denominazione, f.tipologia]))
         assert "belice" not in detto.lower(), f"ha inventato la Sicilia: {detto!r}"
@@ -905,8 +907,8 @@ class TestQuelCheDiceLEtichetta:
         regola sul nome fa scendere ancora, e uno di quei gradini può essere di
         un altro colore.
 
-        Visto sul dispositivo con un'etichetta che diceva PROSECCO ROSÉ: si
-        scendeva a «Prosecco-Wine», che in archivio è BIANCO.
+        Con un'etichetta che dice PROSECCO ROSÉ si scenderebbe a
+        «Prosecco-Wine», che in archivio è BIANCO.
         """
         f = m.cerca(["ISE", "20", "TARVESIUM", "PROSECCO ROSÉ", "DOC",
                      "MILLESIMATO2024", "EXTRA DRY"])
@@ -924,8 +926,8 @@ class TestQuelCheDiceLEtichetta:
 class TestLeCitazioniEntranoPulite:
     def test_una_parola_doppia_del_registro_si_toglie_una_volta(self):
         """«leggermente erbaceo, erbaceo, secco»: cinque citazioni cosi' nel
-        registro, e il racconto che le copiava veniva bocciato per una
-        ripetizione che non era sua."""
+        registro, e il racconto che le copiasse verrebbe bocciato per una
+        ripetizione che non e' sua."""
         from amelie.matcher import _citazioni_utili
         r = {"desc_colore": "rosso rubino", "desc_odore": "leggermente erbaceo, erbaceo, secco",
              "desc_sapore": "asciutto, asciutto e armonico"}
@@ -937,8 +939,8 @@ class TestLeCitazioniEntranoPulite:
 
 class TestIlColoreDiUnVinoEUnColore:
     """La colonna `tipo` di X-Wines mescola colore e stile: «Sparkling» e
-    «Dessert» non sono colori, e per 2.948 vini su 19.602 finivano stampati
-    nei fatti come «Colore: spumante». Il modello lo ripeteva."""
+    «Dessert» non sono colori, e per 2.948 vini su 19.602 finirebbero stampati
+    nei fatti come «Colore: spumante», che il modello ripeterebbe."""
 
     def test_uno_spumante_ha_un_colore_e_una_categoria(self, m):
         i = m.con.execute(
@@ -950,9 +952,9 @@ class TestIlColoreDiUnVinoEUnColore:
         assert "Colore: spumante" not in f.blocco_fatti()
 
     def test_e_la_categoria_arriva_al_modello(self, m):
-        """Da quando il colore e' un colore, «spumante» non sta piu' nel suo
-        posto: senza la categoria nella riga compatta lo studente non saprebbe
-        piu' che quel vino ha le bolle."""
+        """Il colore e' solo un colore, e «spumante» non ci sta: senza la
+        categoria nella riga compatta lo studente non saprebbe che quel vino
+        ha le bolle."""
         i = m.con.execute(
             "SELECT id FROM vino WHERE tipo='Sparkling' AND denominazione_id IS NOT NULL"
             " LIMIT 1").fetchone()[0]
@@ -961,8 +963,8 @@ class TestIlColoreDiUnVinoEUnColore:
             assert "spumante" in f.blocco_compatto().lower()
 
     def test_gli_spumanti_ricevono_le_citazioni_del_registro(self, m):
-        """Zero su centocinquanta, prima: `_disciplinare` accetta solo un
-        colore vero, e il loro non lo era."""
+        """`_disciplinare` accetta solo un colore vero: con «spumante» al posto
+        del colore, nessuno spumante riceverebbe una citazione."""
         ids = [r[0] for r in m.con.execute(
             "SELECT id FROM vino WHERE tipo='Sparkling' AND denominazione_id IS NOT NULL"
             " LIMIT 120")]
@@ -981,10 +983,10 @@ class TestIlColoreDiUnVinoEUnColore:
 
 
 class TestIlBloccoInglesePerDavvero:
-    """Le etichette erano italiane e due campi restavano italiani dentro un
-    blocco inglese. Un ingresso cosi' insegna che l'italiano e' la lingua
-    delle etichette, e nei testi inglesi ricompariva la forma del blocco con
-    le etichette tradotte a orecchio: «Disgust: Red with garnet notes»."""
+    """Nel blocco inglese, etichette e campi sono tutti in inglese. Un ingresso
+    con le etichette italiane insegna che l'italiano e' la lingua delle
+    etichette, e nei testi inglesi ricompare la forma del blocco con le
+    etichette tradotte a orecchio: «Disgust: Red with garnet notes»."""
 
     def _con_tutto(self, m):
         for r in m.con.execute(
@@ -1007,7 +1009,7 @@ class TestIlBloccoInglesePerDavvero:
 
     def test_il_colore_si_traduce_nelle_due_scritture(self, m):
         """`_colore_di` risponde in italiano, i vocabolari hanno chiavi
-        inglesi: senza il ponte usciva «Colour: Rosso»."""
+        inglesi: senza il ponte uscirebbe «Colour: Rosso»."""
         f = self._con_tutto(m)
         b = f.blocco_fatti(lingua="en")
         assert "Colour: Rosso" not in b and "Colour: Bianco" not in b
@@ -1024,16 +1026,17 @@ class TestIlBloccoInglesePerDavvero:
 
 
 class TestIlColoreScrittoNelNome:
-    """«Franciacorta Rosé» prendeva la descrizione del Franciacorta bianco.
+    """«Franciacorta Rosé» non prende la descrizione del Franciacorta bianco.
 
     La tipologia si aggancia al vino per somiglianza del nome, e con una sola
-    tipologia la si prendeva senza nemmeno confrontare il colore. Da li'
-    venivano colore, categoria e citazione del disciplinare: la descrizione di
-    un altro vino, letta a voce con sicurezza.
+    tipologia la si prenderebbe senza nemmeno confrontare il colore. Da li'
+    vengono colore, categoria e citazione del disciplinare: sarebbe la
+    descrizione di un altro vino, letta a voce con sicurezza.
 
-    In archivio, quando si e' guardato: 467 record cambiano colore e 109
-    citazioni erano del vino sbagliato - un «Nebbiolo Brut Rosé» si portava
-    dietro il testo del Barolo, un «Bianco Veronese» quello del Valpolicella.
+    In archivio il colore scritto nel nome cambia il colore di 467 record, e
+    salva 109 citazioni dal vino sbagliato - un «Nebbiolo Brut Rosé» si
+    porterebbe dietro il testo del Barolo, un «Bianco Veronese» quello del
+    Valpolicella.
     """
 
     def test_il_nome_dichiara_il_colore(self, m):
@@ -1053,7 +1056,7 @@ class TestIlColoreScrittoNelNome:
         assert m._colore_scritto_nel_nome("cuvee bianco e rosso") is None
 
     def test_il_franciacorta_rose_non_e_il_franciacorta(self, m):
-        """Il caso che ha fatto nascere la regola, sul record vero."""
+        """Il caso tipico, sul record vero."""
         f = m._fatti_vino(2333)
         assert f.nome == "Franciacorta Rosé"
         assert f.colore == "Rosato"
@@ -1062,13 +1065,13 @@ class TestIlColoreScrittoNelNome:
 
 
 class TestLaBollaNelNome:
-    """«Prestige Collection Brut Prosecco Treviso» si prendeva «Prosecco-Wine».
+    """«Prestige Collection Brut Prosecco Treviso» non e' un «Prosecco-Wine».
 
     La tipologia si aggancia per somiglianza, e il Prosecco FERMO somiglia di
     piu' a un nome che dice solo «Prosecco» - mentre «Prosecco Spumante» sta
     li' accanto, nella stessa denominazione. Da quella tipologia vengono il
-    colore e la categoria: 1.045 bollicine risultavano vini fermi, 986 con
-    tanto di citazione.
+    colore e la categoria: senza questa regola 1.045 bollicine risulterebbero
+    vini fermi, 986 con tanto di citazione.
     """
 
     def test_il_brut_sceglie_la_tipologia_con_le_bolle(self, m):
@@ -1093,7 +1096,7 @@ class TestLaCitazioneSiRipulisce:
     Trentanove citazioni cominciano col verbo - «é fresco, piacevole» - e chi
     le riporta ce ne mette un altro davanti: «il gusto è é fresco». Altre
     centoventisei sono troncate, con l'ultima parola appesa: «giallo
-    paglierino più o meno intenso, il». Sentite tutte e due sul dispositivo.
+    paglierino più o meno intenso, il». Lette a voce, si sentono tutte e due.
     """
 
     def _riga(self, **kw):
@@ -1120,7 +1123,8 @@ class TestLaCitazioneSiRipulisce:
         assert c["odore"] == "vinoso, fresco"
 
     def test_la_parola_tagliata_in_testa(self):
-        """«tico di moscato» era «aromatico»: il taglio viene dal documento."""
+        """«tico di moscato» e' quel che resta di «aromatico»: il taglio viene
+        dal documento."""
         from amelie.matcher import _citazioni_utili
 
         c = _citazioni_utili(self._riga(desc_odore="tici, caratteristici di moscato"))
@@ -1147,17 +1151,17 @@ class TestLaCitazioneSiRipulisce:
 
 
 class TestIlProduttoreScrittoSullEtichetta:
-    """«ALBAROSSA NEGROAMARO PALAMÀ VINICOLA DEL SALENTO», letta sul dispositivo.
+    """«ALBAROSSA NEGROAMARO PALAMÀ VINICOLA DEL SALENTO», come la legge il dispositivo.
 
     «Palamà» si legge benissimo - e' una delle 6.168 cantine dell'archivio, e
     sulle 139 etichette di prova la cantina si legge nell'81% dei casi - ma
-    finiva buttata via ogni volta che la cascata scendeva sotto il vino: il
-    dispositivo diceva «Questo è un Salento» e basta.
+    quando la cascata scende sotto il vino non se la porta dietro, e il
+    dispositivo direbbe «Questo è un Salento» e basta.
 
-    Il record giusto perdeva perche' ha cinque parole di cui l'OCR ne legge
-    una (il nome del vino e' in un carattere decorativo), mentre un Negroamaro
-    di un ALTRO produttore ne ha due, generiche, tutte lette. Cosi' vinceva un
-    vino di cui non si sa il produttore, e da li' si scendeva al vitigno.
+    Il record giusto perde perche' ha cinque parole di cui l'OCR ne legge una
+    (il nome del vino e' in un carattere decorativo), mentre un Negroamaro di
+    un ALTRO produttore ne ha due, generiche, tutte lette. Vince cosi' un vino
+    di cui non si sa il produttore, e da li' si scende al vitigno.
 
     Qui non si sceglie un vino: si aggiunge un fatto che e' scritto sulla
     bottiglia. Sulle 139 etichette vere: 16 produttori recuperati, zero
@@ -1181,7 +1185,7 @@ class TestIlProduttoreScrittoSullEtichetta:
             f"attribuito a {f.cantina!r}"
 
     def test_un_luogo_non_firma_un_produttore(self, m):
-        """«Vigneti del Salento» si faceva provare da «salento», che
+        """«Vigneti del Salento» non si fa provare da «salento», che
         sull'etichetta e' l'indicazione geografica."""
         f = m.cerca(["SALENTO", "NEGROAMARO", "2021"])
         assert not f.cantina or "salento" not in f.cantina.lower(), \
@@ -1203,8 +1207,8 @@ class TestIlProduttoreScrittoSullEtichetta:
 
 class TestIVitigniFinti:
     """«na» e' un buco del registro, non un'uva: e' collegato a 691 tipologie,
-    a volte come vitigno principale, e il racconto diceva «Si ottiene da na.»
-    - sul dispositivo, per un Garda Cabernet."""
+    a volte come vitigno principale, e senza filtro il racconto direbbe «Si
+    ottiene da na.» - per esempio per un Garda Cabernet."""
 
     def test_non_finisce_fra_i_vitigni(self, m):
         f = m.fatti_di("tipologia", 1973)          # Garda Cabernet

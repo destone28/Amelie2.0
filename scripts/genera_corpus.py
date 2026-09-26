@@ -6,24 +6,15 @@
     python3 scripts/genera_corpus.py --rigenera          rifa' anche i fatti
     python3 scripts/genera_corpus.py --solo vitigno
 
-Perché esiste, accanto a `pregenera.py` che usa il modello locale.
-
 Una bottiglia che il dispositivo non riconosce fino al produttore deve comunque
-avere qualcosa di **vero** da dire: il suo vino generico. Per averlo pronto in
-due lingue su tutte le denominazioni, tipologie e vitigni servirebbero, col
-modello da un miliardo di parametri, giorni di calcolo sulla board — e il testo
-che ne esce è stato misurato: il 23% viene scartato dalla verifica
-anti-invenzione, e ciò che passa è italiano che non si può far leggere a un ospite.
+avere qualcosa di **vero** da dire: il suo vino generico. Questi racconti si
+compongono dai fatti con il lessico, come fa `amelie.narrator`: ogni frase nasce
+da un campo del database, quindi non c'è nulla da verificare perché non c'è
+nulla di inventato. Nel modo «generativa» fanno da ripiego quando il modello
+non scrive.
 
-Il testo costruito dal template invece è **vero per costruzione**: ogni frase
-nasce da un campo del database, non c'è nulla da verificare perché non c'è nulla
-di inventato. Ed è istantaneo. Quindi il corpus di base si genera così, e il
-modello resta quello che era previsto: una miglioria, applicabile voce per voce
-dove serve e dove supera la verifica, non l'unica fonte.
-
-La colonna `modello` distingue le due provenienze: `template` qui, il nome del
-modello in `pregenera.py`. Chi vuole far riscrivere una voce al modello sa quali
-sono ancora da toccare, e chi legge il database sa da dove viene ogni riga.
+La colonna `modello` dice da dove viene ogni riga: `template` per quelle
+scritte qui.
 """
 from __future__ import annotations
 
@@ -85,34 +76,28 @@ def fatti_per(m: Matcher, ambito: str, ident: int) -> Fatti:
             "vitigno": m._fatti_vitigno}[ambito](ident)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--lingua", action="append",
-                    help="ripetibile; senza, tutte quelle del lessico")
-    ap.add_argument("--solo", choices=AMBITI, action="append")
-    ap.add_argument("--rigenera", action="store_true",
-                    help="riscrive anche le voci gia' presenti da template")
-    ap.add_argument("--limite", type=int)
-    args = ap.parse_args()
+def genera(db: Path, lingue: list[str] | None = None, ambiti: list[str] | None = None,
+           rigenera: bool = False, limite: int | None = None,
+           stampa=print) -> tuple[int, int]:
+    """Scrive i racconti che mancano in `db`. Ritorna (scritti, saltati).
 
-    if not DB.exists():
-        sys.exit(f"non trovo {DB}")
-
+    La usa anche data/build_db.py, sul database in costruzione.
+    """
     lex = carica()
-    lingue = args.lingua or list(lex.lingue)
-    ambiti = args.solo or list(AMBITI)
+    lingue = lingue or list(lex.lingue)
+    ambiti = ambiti or list(AMBITI)
 
-    m = Matcher(DB)
-    con = sqlite3.connect(DB)
+    m = Matcher(db)
+    con = sqlite3.connect(db)
     quando = datetime.now(timezone.utc).isoformat(timespec="seconds")
     scritti = vuoti = 0
 
     for lingua in lingue:
         for ambito in ambiti:
-            coda = da_fare(con, ambito, lingua, args.rigenera)
-            if args.limite:
-                coda = coda[: args.limite]
-            print(f"  {lingua}/{ambito}: {len(coda)} da scrivere")
+            coda = da_fare(con, ambito, lingua, rigenera)
+            if limite:
+                coda = coda[:limite]
+            stampa(f"  {lingua}/{ambito}: {len(coda)} da scrivere")
             for ident, _nome in coda:
                 testo = corpo_neutro(fatti_per(m, ambito, ident), lex, lingua)
                 if not testo:
@@ -137,8 +122,25 @@ def main() -> None:
     m.chiudi()
     totale = con.execute("SELECT count(*) FROM racconto").fetchone()[0]
     con.close()
-    print(f"\n  {scritti} racconti scritti, {vuoti} saltati per mancanza di fatti")
-    print(f"  {totale} righe in archivio")
+    stampa(f"\n  {scritti} racconti scritti, {vuoti} saltati per mancanza di fatti")
+    stampa(f"  {totale} righe in archivio")
+    return scritti, vuoti
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--lingua", action="append",
+                    help="ripetibile; senza, tutte quelle del lessico")
+    ap.add_argument("--solo", choices=AMBITI, action="append")
+    ap.add_argument("--rigenera", action="store_true",
+                    help="riscrive anche le voci gia' presenti da template")
+    ap.add_argument("--limite", type=int)
+    ap.add_argument("--db", type=Path, default=DB)
+    args = ap.parse_args()
+
+    if not args.db.exists():
+        sys.exit(f"non trovo {args.db}")
+    genera(args.db, args.lingua, args.solo, args.rigenera, args.limite)
 
 
 if __name__ == "__main__":

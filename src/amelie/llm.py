@@ -1,26 +1,22 @@
 """Il modello linguistico locale, via llama-server.
 
 Gira come servizio residente su 127.0.0.1, non come processo lanciato a ogni
-bottiglia: caricare un modello da 700 MB costa secondi che l'ospite pagherebbe
-in attesa.
+bottiglia: caricare un modello da qualche centinaio di megabyte costa secondi
+che l'ospite pagherebbe in attesa.
 
 ## Il numero che decide tutto
 
-Misurato su questa board, Gemma 3 1B Q4_K_M sui quattro Cortex-A53:
-
-    prefill (lettura del prompt)   ~8 token/s
-    generazione                    ~4,2 token/s
-
-Il prefill è la sorpresa. Un prompt di 270 token costa **34 secondi prima di
-produrre una parola**, e infatti una generazione completa a freddo ne ha
-richiesti 75. Per questo:
+Sui quattro Cortex-A53 della board il collo di bottiglia e' il prefill, la
+lettura del prompt: e' piu' lento della generazione, e un prompt lungo costa
+decine di secondi prima di produrre una parola. Per questo:
 
 1. le istruzioni fisse stanno **all'inizio** del prompt e i fatti in fondo, così
    `--cache-reuse` riconosce il prefisso già elaborato e non lo rilegge;
 2. il testo si genera **in streaming**, per far partire la voce sulla prima
    frase invece che alla fine;
-3. e soprattutto, la strada normale non è questa: è il testo pre-generato.
-   Il modello dal vivo serve solo per ciò che il database non conosce.
+3. e soprattutto, la strada predefinita non è questa: il modo «archivio»
+   compone il racconto dai fatti (vedi `amelie.narrator`), e il modello
+   scrive solo nel modo «generativa», sperimentale.
 """
 
 from __future__ import annotations
@@ -39,8 +35,7 @@ log = logging.getLogger(__name__)
 class ImpostazioniLLM:
     url: str = "http://127.0.0.1:8081"
     max_token: int = 120
-    # Misurato con `scripts/valuta_generativa.py`, trenta vini, stesso
-    # modello, tre temperature:
+    # Misurato su trenta vini, stesso modello, tre temperature:
     #
     #     0,7   18 su 30 passano la verifica   1,2 parole fuori dai fatti a testo
     #     0,2   20 su 30                       0,7
@@ -64,7 +59,7 @@ class ImpostazioniLLM:
     stop: tuple[str, ...] = (
         "\n\n", "FATTI:", "Racconto:", "Descrizione:",
         # Il modello, finito il paragrafo, tende a proseguire con un blocco di
-        # codice o con una nota su cio' che ha scritto: visto sul campo.
+        # codice o con una nota su cio' che ha scritto.
         "```", "Nota:", "(Nota", "---",
     )
     timeout_s: float = 180.0

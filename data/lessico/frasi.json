@@ -354,7 +354,7 @@
     }
   },
   "voce": {
-    "_nota": "Frasi che il dispositivo PRONUNCIA e non scrive. Sono poche e sempre uguali, quindi si pre-sintetizzano all'avvio e escono all'istante. Sono lunghe di proposito: il DSP di questa board impiega piu' di un secondo a cominciare a rendere davvero il suono dopo l'apertura del flusso, e una frase di due parole veniva mangiata quasi tutta - se ne sentiva l'ultima sillaba e basta.",
+    "_nota": "Frasi che il dispositivo PRONUNCIA e non scrive. Sono poche e sempre uguali, quindi si pre-sintetizzano all'avvio e escono all'istante. Sono lunghe di proposito: il DSP di questa board impiega piu' di un secondo a cominciare a rendere davvero il suono dopo l'apertura del flusso, e una frase di due parole verrebbe mangiata quasi tutta - se ne sentirebbe l'ultima sillaba e basta.",
     "conferma_lingua": {
       "it": "Lingua italiana. Da adesso racconto i vini in italiano.",
       "en": "English language. From now on I will describe the wines in English."
@@ -452,7 +452,7 @@
     },
     "mirino_torna": {
       "it": "torna al racconto",
-      "en": "back to wines"
+      "en": "back to the story"
     },
     "mirino_legge": {
       "it": "Cosa legge",

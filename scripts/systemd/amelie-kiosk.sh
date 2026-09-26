@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # Amelie 2.0 - il browser a schermo intero.
 #
-# Chromium in modalita' chiosco su una pagina locale. La scelta e' di tempo, non
-# di eleganza: HTML e' l'unico ambiente in cui in due giorni si ottiene una
-# tipografia da tavolo di ristorante, con font serif veri e testo che appare
-# mentre viene scritto.
+# Chromium in modalita' chiosco su una pagina locale: HTML da' con poco lavoro
+# una tipografia da tavolo di ristorante, con font serif veri e testo che
+# appare mentre viene scritto.
 #
 # Il consumo di memoria e' l'unico rischio, ed e' tenuto sotto controllo dai
-# flag e dal MemoryMax dell'unita': su 3,6 GiB condivisi con un modello da
-# 800 MB non c'e' margine per un browser lasciato libero.
+# flag e dal MemoryMax dell'unita': su 3,6 GiB condivisi con il modello
+# linguistico, l'OCR e la voce non c'e' margine per un browser lasciato libero.
 set -uo pipefail
 
 export DISPLAY="${DISPLAY:-:0}"
@@ -22,9 +21,9 @@ if [ -z "${XAUTHORITY:-}" ]; then
     done
 fi
 
-# La proposta di tradurre la pagina e' comparsa lo stesso, malgrado i flag:
-# nelle versioni recenti e' una bolla, non piu' una infobar, e si spegne solo
-# dalle preferenze del profilo. Su un chiosco da ristorante una finestrella di
+# La proposta di tradurre la pagina compare malgrado i flag: nelle versioni
+# recenti di Chromium e' una bolla, non una infobar, e si spegne solo dalle
+# preferenze del profilo. Su un chiosco da ristorante una finestrella di
 # Google sopra il marchio non e' un fastidio, e' un difetto.
 PROFILO=/home/arduino/.config/amelie-kiosk/Default
 mkdir -p "$PROFILO"
@@ -37,16 +36,14 @@ fi
 # quindi esiste gia': compare in un paio di secondi, col marchio, e resta finche'
 # il dispositivo non e' pronto davvero - poi e' lei a portarsi sull'applicazione.
 #
-# Prima si aspettava che il server rispondesse, e per tutta l'attesa - otto
-# secondi di ExecStartPre piu' i trenta del caricamento - lo schermo mostrava la
-# scrivania del sistema operativo. Aspettare qui significa mostrare qualcos'altro
-# li'.
+# Aspettare qui che il server risponda vorrebbe dire mostrare, per tutta
+# l'attesa, la scrivania del sistema operativo.
 AVVIO="${AMELIE_AVVIO:-/home/arduino/amelie/src/amelie/ui/static/avvio.html}"
 if [ -r "$AVVIO" ]; then
     PARTENZA="file://$AVVIO"
 else
-    # Senza la schermata d'avvio si torna al comportamento di prima, aspettando
-    # il server: meglio qualche secondo di scrivania che un errore di Chromium.
+    # Senza la schermata d'avvio si aspetta il server: meglio qualche secondo
+    # di scrivania che un errore di Chromium.
     echo "schermata d'avvio non trovata in $AVVIO" >&2
     for _ in $(seq 1 90); do
         curl -sf -m 2 http://127.0.0.1:8080/ >/dev/null 2>&1 && break
@@ -71,11 +68,11 @@ command -v "$browser" >/dev/null 2>&1 || { echo "nessun browser trovato" >&2; ex
 #
 # --disable-rgba-4444-textures: in modalita' «dispositivo modesto» Chromium
 # dipinge lo schermo a riquadri di quattro bit per colore, per risparmiare
-# memoria. Sedici livelli per canale: la sfumatura bordeaux del fondo andava a
-# gradini, l'oro del marchio si spostava, e riquadri vicini dello stesso nero
-# uscivano di due toni diversi - nell'editor della correzione si vedeva un
-# rettangolo. Misurato sulla UNO Q: stessi megabyte (GPU 156 contro 147,
-# pagina 119 contro 127), e i colori tornano a otto bit.
+# memoria. Sedici livelli per canale: la sfumatura bordeaux del fondo va a
+# gradini, l'oro del marchio si sposta, e riquadri vicini dello stesso nero
+# escono di due toni diversi. Con questo flag i colori restano a otto bit, e
+# la memoria resta quasi la stessa: misurato sulla UNO Q, GPU 156 MB contro
+# 147, pagina 119 contro 127.
 exec "$browser" \
     --kiosk "$PARTENZA" \
     --noerrdialogs \

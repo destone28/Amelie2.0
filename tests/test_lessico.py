@@ -177,10 +177,10 @@ class TestElencaInLingua:
 class TestFrasi:
     """L'impalcatura delle frasi, che senza controllo si traduce a meta'.
 
-    Il rischio non e' teorico: i vocabolari erano bilingui da sempre, ma i
-    periodi che tengono insieme le parole erano italiani cablati nel codice.
-    Con lingua="en" il dispositivo diceva parole inglesi dentro frasi italiane,
-    e nessun test se ne accorgeva.
+    Tradurre le parole non basta: sono i periodi a tenerle insieme, e un
+    periodo che esiste solo in italiano fa dire al dispositivo, con
+    lingua="en", parole inglesi dentro frasi italiane. Questi test se ne
+    accorgono prima di chi ascolta.
     """
 
     def test_ogni_frase_esiste_in_ogni_lingua(self):

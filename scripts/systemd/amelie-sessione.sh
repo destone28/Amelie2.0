@@ -4,10 +4,10 @@
 # ── PERCHE' NON BASTA SPEGNERE LE COSE UNA PER UNA ───────────────────────────
 #
 # L'immagine della UNO Q avvia XFCE completo: xfdesktop disegna uno sfondo e le
-# icone, xfce4-panel una barra, e l'autostart apre App Lab. Amelie-scrivania.sh
-# ne spegneva i pezzi peggiori uno per uno, ed era una rincorsa: ogni cosa nuova
-# che la distribuzione decide di avviare va scoperta e disattivata dopo averla
-# vista comparire davanti a un ospite.
+# icone, xfce4-panel una barra, e l'autostart apre App Lab. Spegnerne i pezzi
+# uno per uno, come fa amelie-scrivania.sh con i peggiori, e' una rincorsa: ogni
+# cosa nuova che la distribuzione decide di avviare va scoperta e disattivata
+# dopo averla vista comparire davanti a un ospite.
 #
 # Qui la scrivania non c'e' proprio. Questa sessione avvia due cose: un gestore
 # di finestre e nient'altro. Il chiosco resta un servizio a se' (amelie-kiosk),
@@ -20,7 +20,7 @@
 #     sudo rm /etc/lightdm/lightdm.conf.d/60-amelie-sessione.conf
 #     sudo systemctl restart lightdm
 #
-# e per rimetterla com'era, di nuovo `bash scripts/install.sh`.
+# e per tornare alla sessione di Amelie, di nuovo `bash scripts/install.sh`.
 set -uo pipefail
 
 export DISPLAY="${DISPLAY:-:0}"

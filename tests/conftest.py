@@ -1,14 +1,14 @@
 """Quello che vale per tutti i test.
 
-Per ora una cosa sola, e viene da un errore vero: la suite girata sulla board
-ha lasciato le proprie scansioni nel giornale di bordo del dispositivo. Aprendolo
-per capire perché una bottiglia non era stata riconosciuta, dentro c'erano
-racconti di prova — «x.» — insieme a quelli veri.
+Una cosa sola: la suite non tocca il giornale di bordo del dispositivo. Girata
+sulla board, lascerebbe le proprie scansioni accanto a quelle vere, e chi apre
+il giornale per capire perché una bottiglia non è stata riconosciuta ci
+troverebbe racconti di prova — «x.» — mescolati a quelli dell'ospite.
 
 Un test non deve scrivere nel `var` del progetto, e nemmeno trovarci quello di
-ieri. Qui si sposta la cartella del giornale in una tutta sua, diversa a ogni
-test, **prima** che qualcuno costruisca un `Amelie`: la costanti la legge il
-costruttore, e spostarla dopo non sposterebbe niente.
+un'esecuzione precedente. Qui si sposta la cartella del giornale in una tutta
+sua, diversa a ogni test, **prima** che qualcuno costruisca un `Amelie`: la
+costante la legge il costruttore, e spostarla dopo non sposterebbe niente.
 """
 
 import pytest

@@ -5,10 +5,10 @@
     ssh arduino@amelie.local 'cd ~/amelie && PYTHONPATH=src ./venv/bin/python scripts/mirino.py'
     # poi dal PC, nel browser:  http://<indirizzo-della-board>:8090/
 
-**Lo stesso mirino sta ora sul dispositivo**, e si accende dal vetro: angolo in
-basso a destra tenuto tre secondi, poi l'interruttore «Mirino». Quello non
+**Lo stesso mirino sta anche sul dispositivo**, e si accende dal vetro: angolo
+in basso a destra tenuto tre secondi, poi l'interruttore «Debug camera». Quello non
 richiede di fermare il servizio ne' di avere un PC, ed e' la strada normale.
-Questo script resta per chi vuole guardare da lontano, su uno schermo grande,
+Questo script serve a chi vuole guardare da lontano, su uno schermo grande,
 con la posa o il ritaglio cambiati da riga di comando senza toccare il codice.
 
 La logica e' la stessa: `amelie.mirino`. Qui attorno c'e' solo cio' che vale al
@@ -43,10 +43,10 @@ basta: mostra le **tre cose che decidono se l'etichetta verrà letta**.
    fotogramma: gira sull'ultimo disponibile e aggiorna quando ha finito. Il
    video resta fluido.
 
-**Va lanciato a servizio FERMO**, e ora è obbligatorio invece che consigliato:
-la camera si apre un processo per volta, e da quando è lei a riconoscere la
-bottiglia sul piatto il dispositivo tiene lo stream acceso fra una sbirciata e
-l'altra. A servizio acceso questo mirino non vede niente.
+**Va lanciato a servizio FERMO**: la camera si apre un processo per volta, e il
+dispositivo, che riconosce la bottiglia sul piatto con la camera, tiene lo
+stream acceso fra una sbirciata e l'altra. A servizio acceso questo mirino non
+vede niente.
 
 **E cambia l'esposizione**: la mette in manuale come fa il dispositivo, con gli
 stessi valori. Quando si chiude, il servizio la rimette da sé al primo scatto.
@@ -121,9 +121,9 @@ class MirinoDaBanco:
 
     Il mirino vero e proprio sta in `amelie.mirino`, ed è lo stesso che il
     dispositivo mostra sul suo vetro: una copia sola, perché due copie
-    divergono e quella che diverge è sempre quella che sta sul dispositivo
-    in sala. Qui restano le due cose che valgono solo al banco — accendere
-    l'anello a mano e dire a voce alta cosa si sta guardando.
+    divergono, e quella che resta indietro è sempre quella sul dispositivo.
+    Qui restano le due cose che valgono solo al banco — accendere l'anello a
+    mano e dire a voce alta cosa si sta guardando.
     """
 
     def __init__(self, imp, con_luce: bool, con_ocr: bool) -> None:

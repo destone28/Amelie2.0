@@ -18,12 +18,13 @@ VENGONO le parole:
    `verifica`, e se inventa due volte di fila si scende al testo pronto per
    quel record, se qualcuno l'ha scritto, e poi alla composizione. Misurato
    sul dispositivo: cinque testi su dodici con un errore di fatto, e la
-   verifica non li prendeva tutti. Ogni giro di regole trova una forma nuova
+   verifica non li prende tutti. Ogni regola in più scopre una forma nuova
    di errore: per questo non è il modo predefinito.
 
 `verifica` è un controllo deterministico in Python — numeri, nomi propri,
 colori, rapporti fra nomi veri — che il modello non può aggirare, e che si
-applica anche ai testi pronti, perché li ha scritti lo stesso modello.
+applica anche ai racconti pronti del database, che nel modo generativo fanno
+da ripiego.
 
 Il tono cambia con il livello raggiunto dalla cascata del riconoscimento:
 sotto il primo gradino non si attribuisce mai a un produttore sconosciuto ciò
@@ -32,6 +33,7 @@ che non si è verificato.
 
 from __future__ import annotations
 
+import functools
 import logging
 import re
 import sqlite3
@@ -71,12 +73,12 @@ class Racconto:
 
 # Si spezza dopo un punto SOLO se quello che segue comincia come una frase:
 # maiuscola, virgoletta o parentesi. Altrimenti «Un Barolo D.O.C.G. del 2016»
-# si spaccava dentro la sigla e ne usciva un frammento che comincia in
+# si spaccherebbe dentro la sigla e ne uscirebbe un frammento che comincia in
 # minuscolo - una pausa sbagliata nella voce, e una didascalia a meta'.
 # E non dopo un'iniziale puntata: «di M. Marengo», «Abbazia di S. Gaudenzio»,
-# «F.lli Vincenzi» sono nomi di cantina, e la voce ci faceva una pausa in
-# mezzo - «...di emme.» «Marengo.» - mentre a schermo si illuminava la frase
-# sbagliata. Sul dispositivo si sente, e sono centinaia di cantine.
+# «F.lli Vincenzi» sono nomi di cantina, e la voce ci farebbe una pausa in
+# mezzo - «...di emme.» «Marengo.» - con la frase sbagliata illuminata a
+# schermo. Sono centinaia di cantine.
 _FINE_FRASE = re.compile(
     r"""(?<=[.!?…])(?<!\b[A-ZÀ-Ý].)\s+(?=[A-ZÀ-Ý«"“'(])""")
 
@@ -92,6 +94,36 @@ def spezza_in_frasi(testo: str) -> list[str]:
     modello scrive: qui il testo c'è già tutto.
     """
     return [f.strip() for f in _FINE_FRASE.split(testo) if f.strip()]
+
+
+_SCHEDE_VITIGNI = Path(__file__).resolve().parents[2] / "data" / "vitigni.json"
+
+
+@functools.lru_cache(maxsize=None)
+def _in_minuscolo(lingua: str) -> frozenset[str]:
+    """Le parole che nelle schede dei vitigni compaiono anche in minuscolo."""
+    import json
+    try:
+        schede = json.loads(_SCHEDE_VITIGNI.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return frozenset()
+    campo = "descrizione" if lingua == "it" else f"descrizione_{lingua}"
+    parole: set[str] = set()
+    for scheda in schede.get("vitigni", []):
+        if isinstance(scheda, dict):
+            parole.update(re.findall(r"\b[a-zà-ÿ]\w*", scheda.get(campo) or ""))
+    return frozenset(parole)
+
+
+def dopo_i_due_punti(testo: str, lingua: str) -> str:
+    """Il seguito dopo i due punti comincia in minuscolo - «Nasce da
+    Chardonnay: borgognone, ovunque nel mondo» - tranne quando la prima parola
+    è un nome: in inglese «Sicilian» resta maiuscolo. È un nome se nelle schede
+    dei vitigni non compare mai in minuscolo."""
+    parola = re.match(r"\w+", testo)
+    if not parola or parola.group(0).lower() not in _in_minuscolo(lingua):
+        return testo
+    return testo[:1].lower() + testo[1:]
 
 
 # ---------------------------------------------------------------- verifica
@@ -119,6 +151,13 @@ def _senza_accenti(s: str) -> str:
     ).lower()
 
 
+def _regione_in(fatti: Fatti, lingua: str) -> str | None:
+    """La regione dei fatti come la dice il racconto in questa lingua."""
+    if not fatti.regione:
+        return None
+    return carica().traduci("regione", fatti.regione, lingua=lingua)
+
+
 def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[str]]:
     """Il testo afferma solo cose presenti nei fatti?
 
@@ -127,12 +166,12 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
     compaiano da nessuna parte nel blocco dei fatti. Preferisce un falso
     allarme — che costa una rigenerazione — a una bugia detta all'ospite.
 
-    **La lingua conta**, ed è costato scoprirlo: i fatti si componevano sempre
-    in italiano, e un racconto inglese veniva confrontato con parole italiane.
+    **La lingua conta**: i fatti si compongono nella lingua del racconto,
+    perché un racconto inglese confrontato con parole italiane non torna mai.
     «Tuscany» non sta in un blocco che dice «Toscana», e nemmeno «Italy»,
-    «Piedmont», «Bordeaux»: sui 9.660 racconti in archivio la verifica ne
-    bocciava 3.401, quasi tutti per questo. Un controllo che grida sempre non
-    è un controllo severo, è un controllo spento.
+    «Piedmont», «Bordeaux»: confrontando in italiano, sui 9.660 racconti in
+    archivio la verifica ne boccia 3.401, quasi tutti per questo. Un controllo
+    che grida sempre non è un controllo severo, è un controllo spento.
 
     >>> f = Fatti(livello=Livello.VINO, nome="Cannubi", cantina="Marchesi")
     >>> verifica("Il Cannubi di Marchesi.", f)[0]
@@ -141,10 +180,10 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
     False
     """
     # L'apostrofo tipografico vale come quello dritto: il modello lo scrive,
-    # e «dall’incontro» non trovava piu' il contesto delle uve.
+    # e senza normalizzarlo «dall’incontro» non troverebbe il contesto delle uve.
     testo = testo.replace("’", "'").replace("‘", "'")
     # E lo stesso dall'altra parte: «Valled’aosta» sta nel registro con
-    # l'apostrofo tipografico, e il testo normalizzato non lo ritrovava piu'.
+    # l'apostrofo tipografico, e il testo normalizzato non lo ritroverebbe.
     ammesso = _senza_accenti(
         " ".join(filter(None, [
             fatti.blocco_fatti(lingua=lingua),
@@ -158,6 +197,7 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
             fatti.nome or "",
             fatti.cantina or "",
             fatti.regione or "",
+            _regione_in(fatti, lingua) or "",
             str(fatti.annata or ""),
             fatti.temperatura_c or "",
             " ".join(fatti.note_sensoriali),
@@ -184,30 +224,29 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
     if contraddizione := _colore_sbagliato(testo, fatti, ammesso):
         invenzioni.append(contraddizione)
 
-    # Le quattro classi che seguono sono uscite da una rilettura dei testi del
-    # modello addestrato: passavano tutte, e cio' che la verifica non vede
-    # diventa un'abitudine del modello.
+    # Le quattro classi che seguono sono errori tipici del modello addestrato
+    # che un controllo sui soli nomi propri non vede: e cio' che la verifica
+    # non vede diventa un'abitudine del modello.
     invenzioni.extend(_gradi_sbagliati(testo, fatti))
     if "disciplinar" in _senza_accenti(testo) and not fatti.disciplinare:
         invenzioni.append("disciplinare invocato senza citazioni")
     invenzioni.extend(_cibi_inventati(testo, ammesso))
     invenzioni.extend(_provenienze_inventate(testo, ammesso))
-    # Le due classi che seguono sono uscite da una rilettura di dodici testi
-    # generati sul dispositivo: cinque erano sbagliati e la verifica li aveva
-    # promossi tutti, perche' non inventavano NOMI, inventavano RAPPORTI fra
-    # nomi veri. «Sangiovese e Amarena, i vitigni piu' coltivati d'Italia» -
-    # tre volte su dodici: l'amarena e' una nota olfattiva dei fatti, non
-    # un'uva. «Amarone della Valpolicella, un vitigno compagno dei
-    # Rondinella»: e' il vino, non un vitigno. E «questa spumante» detto di un
-    # Amarone.
+    # Le due classi che seguono non inventano NOMI, inventano RAPPORTI fra
+    # nomi veri, e un controllo sui nomi le promuove: su dodici testi generati
+    # sul dispositivo, cinque sbagliano cosi'. «Sangiovese e Amarena, i
+    # vitigni piu' coltivati d'Italia» - tre volte su dodici: l'amarena e' una
+    # nota olfattiva dei fatti, non un'uva. «Amarone della Valpolicella, un
+    # vitigno compagno dei Rondinella»: e' il vino, non un vitigno. E «questa
+    # spumante» detto di un Amarone.
     invenzioni.extend(_vitigni_che_non_lo_sono(testo, fatti, lingua))
     if contraddizione := _categoria_sbagliata(testo, fatti, ammesso):
         invenzioni.append(contraddizione)
-    # Seconda rilettura, dopo la prima stretta: «da servire con amarena,
-    # prugna o tannino morbido», «nasce dall'incontro di mela verde e fiori
-    # bianchi, il vitigno Prosecco», «gradevole, fine, delicato, delicate».
-    # Le note olfattive finivano nei posti delle uve e dei cibi, in
-    # minuscolo, dove il controllo sui nomi propri non guarda.
+    # Le classi che seguono guardano il POSTO delle parole: «da servire con
+    # amarena, prugna o tannino morbido», «nasce dall'incontro di mela verde e
+    # fiori bianchi, il vitigno Prosecco», «gradevole, fine, delicato,
+    # delicate». Le note olfattive finiscono nei posti delle uve e dei cibi,
+    # in minuscolo, dove il controllo sui nomi propri non guarda.
     invenzioni.extend(_produttore_al_posto_del_luogo(testo, fatti))
     invenzioni.extend(_colore_al_posto_del_gusto(testo, fatti))
     invenzioni.extend(_uve_al_posto_del_produttore(testo, fatti))
@@ -215,9 +254,9 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
     invenzioni.extend(_note_al_posto_sbagliato(testo, fatti, lingua))
     invenzioni.extend(_cibi_al_posto_dei_profumi(testo, fatti, lingua))
     # Le ripetizioni che stanno dentro una citazione del registro non sono
-    # nostre: il registro enumera le sfumature ammesse - «rosso rubino piu' o
-    # meno intenso, rosa piu' o meno intenso» - e noi le riportiamo. Si
-    # riprende quel che si e' ripetuto, non chi l'ha scritto.
+    # del racconto: il registro enumera le sfumature ammesse - «rosso rubino
+    # piu' o meno intenso, rosa piu' o meno intenso» - e il racconto le
+    # riporta. Si riprende quel che si e' ripetuto, non chi l'ha scritto.
     citazioni = _citazioni_come_si_dicono(fatti, lingua)
     invenzioni.extend(x for x in _parole_ripetute(testo)
                       if x.removeprefix("ripetizione: ") not in citazioni)
@@ -228,7 +267,7 @@ def verifica(testo: str, fatti: Fatti, lingua: str = "it") -> tuple[bool, list[s
 # I numeri che il modello addestrato dice a voce sono scritti in lettere - e'
 # cosi' che il corpus glieli ha insegnati, perche' una voce sintetica legge
 # «17-19» come «diciassette trattino diciannove». Il controllo sulle cifre non
-# li vedeva. Si guardano solo nelle frasi che parlano di gradi: «due vitigni»
+# li vede. Si guardano solo nelle frasi che parlano di gradi: «due vitigni»
 # e' un conteggio, non un fatto da verificare.
 _IN_LETTERE = {
     "cinque": 5, "sei": 6, "sette": 7, "otto": 8, "nove": 9, "dieci": 10,
@@ -298,35 +337,34 @@ def _provenienze_inventate(testo: str, ammesso: str) -> list[str]:
 # Dove un testo dichiara i vitigni: quel che segue fino alla fine della frase
 # e' un elenco di uve, e ogni nome proprio li' dentro dev'essere un'uva.
 _CONTESTO_VITIGNI = re.compile(
-    # «dall'incontro»: dopo l'apostrofo non c'e' spazio, e la prima versione
-    # di questa espressione lo pretendeva - e non prendeva proprio la frase
-    # che l'ha fatta nascere.
+    # «dall'incontro»: dopo l'apostrofo non c'e' spazio, e l'espressione non
+    # lo pretende.
     # L'elenco delle uve finisce alla prima virgola o a un «con»/«che»: dopo
     # comincia un'altra cosa - «Nasce dal Sangiovese, con note di amarena» ha
     # l'amarena al posto giusto, e il controllo non deve leggerla come uva.
     # «vitigno» e «uve» aprono un elenco solo se seguono con un nome proprio:
-    # «vitigno veronese dal colore tenue» e' un aggettivo, non un elenco, e la
-    # scheda della Molinara finiva bocciata per «acidita' viva detta come
-    # uva». E l'elenco continua oltre una virgola solo se dopo la virgola
-    # viene un altro nome proprio: «Sangiovese, Amarena e Canaiolo» e' un
-    # elenco intero e va guardato tutto; «Isabella, ibrido americano dal
+    # «vitigno veronese dal colore tenue» e' un aggettivo, non un elenco, e
+    # altrimenti la scheda della Molinara verrebbe bocciata per «acidita'
+    # viva detta come uva». E l'elenco continua oltre una virgola solo se dopo
+    # la virgola viene un altro nome proprio: «Sangiovese, Amarena e Canaiolo»
+    # e' un elenco intero e va guardato tutto; «Isabella, ibrido americano dal
     # profumo di fragola» finisce a Isabella, e la fragola non e' un'uva
     # detta male, e' un profumo detto bene.
-    # Il «da» liscio mancava: c'erano «dal», «dalla», «dall'», «dai», non
-    # «nasce da Barbaresco» - letto sul dispositivo, e Barbaresco e' il vino.
+    # Anche il «da» liscio, oltre a «dal», «dalla», «dall'», «dai»: in
+    # «nasce da Barbaresco», Barbaresco e' il vino.
     r"(?:nasce\s+(?:dall'|dalla\s+|dalle\s+|dal\s+|dai\s+|da\s+)\s*(?:solo\s+|incontro\s+di\s+)?"
     # «Nasce dall'incontro di tre vitigni: Trebbiano, Toscano, Abruzzese e
-    # Soave»: i due punti chiudevano il pezzo catturato, e l'elenco vero -
-    # quello dopo - non si leggeva affatto.
+    # Soave»: se i due punti chiudessero il pezzo catturato, l'elenco vero -
+    # quello dopo - non si leggerebbe affatto.
     r"|vitign[oi]\s*:?\s*(?=(?-i:[A-ZÀ-Ý]))|uv[ae]\s+(?:di\s+)?(?=(?-i:[A-ZÀ-Ý]))"
     # «It comes from Ripa Teatina», «It is made from Nebbiolo»: sono le frasi
-    # inglesi del lessico, e quel che segue sono uve. Mancavano, e un luogo
-    # detto al posto di un vitigno passava - letto sul dispositivo.
+    # inglesi del lessico, e quel che segue sono uve. Senza, un luogo detto
+    # al posto di un vitigno passerebbe.
     # Non «from the»: e' troppo generico, e dentro la scheda di un vitigno
-    # - «Arneis: Piedmontese, from the Roero» - diceva che il Roero e' un'uva.
+    # - «Arneis: Piedmontese, from the Roero» - direbbe che il Roero e' un'uva.
     # «Si ottiene da {vitigni}» e' una frase del lessico, quindi il modello
-    # l'ha imparata: e quel che segue sono uve per definizione. Mancava, e
-    # «Si ottiene da Restivo» - il produttore - passava.
+    # l'ha imparata: e quel che segue sono uve per definizione. Senza,
+    # «Si ottiene da Restivo» - il produttore - passerebbe.
     r"|si\s+ottien(?:e|gono)\s+(?:da(?:i|l|lla|lle|gli)?\s*)(?=(?-i:[A-ZÀ-Ý]))"
     r"|ottenut[oaie]\s+(?:da(?:i|l|lla|lle|gli)?\s*)(?=(?-i:[A-ZÀ-Ý]))"
     r"|grapes?\s+(?=(?-i:[A-Z]))"
@@ -339,9 +377,9 @@ _CONTESTO_VITIGNI = re.compile(
     r"|(?<=vitigni):|(?<=vitigno):|(?<=uve):|(?<=grapes):|(?<=varieties):)*)", re.I)
 _UN_VITIGNO = re.compile(r"\b(un|a)\s+(?:grande\s+)?(vitigno|grape)\b", re.I)
 # «Nebbiolo in purezza» e' l'apertura che il corpus insegna, e quel che sta
-# davanti DEVE essere un'uva. Letto sul dispositivo: «Etna in purezza, il
-# vitigno siciliano di Sicilia» - l'Etna e' la denominazione, e la frase
-# passava perche' «Etna» sta nei fatti.
+# davanti DEVE essere un'uva. «Etna in purezza, il vitigno siciliano di
+# Sicilia»: l'Etna e' la denominazione, e un controllo sui soli nomi
+# promuove la frase perche' «Etna» sta nei fatti.
 _IN_PUREZZA = re.compile(
     r"([A-ZÀ-Ý][\w'’ -]{2,40}?)\s+in\s+(?:purezza|pura\s+essenza)\b")
 
@@ -358,18 +396,19 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
     uve = {_senza_accenti(v).lower() for v in fatti.vitigni + fatti.vitigni_ammessi}
     note = {_senza_accenti(n).lower()
             for n in list(fatti.note_sensoriali) + list(fatti.sensoriali_in(lingua))}
-    # La cantina c'e' dentro, e non e' un di piu': «Si ottiene da Restivo»,
-    # letto sul dispositivo, dove Restivo e' il produttore. Passava perche' il
-    # nome sta nei fatti e nessuna regola guardava in che posto fosse finito.
+    # La cantina c'e' dentro, e non e' un di piu': in «Si ottiene da Restivo»
+    # Restivo e' il produttore. Il nome sta nei fatti, e lo tradisce solo il
+    # posto in cui e' finito.
     vino = {_senza_accenti(x).lower() for x in (fatti.nome, fatti.tipologia,
                                                   fatti.denominazione,
                                                   fatti.cantina) if x}
     # I luoghi in un elenco di uve capitano per il verso giusto - «Nasce dal
     # Sangiovese, Toscana» - e non sono un'uva detta male.
-    luoghi = {_senza_accenti(x).lower() for x in (fatti.regione, fatti.denominazione) if x}
+    luoghi = {_senza_accenti(x).lower() for x in (fatti.regione, fatti.denominazione,
+                                                    _regione_in(fatti, lingua)) if x}
     # Quel che sta fra virgolette e' il nome sull'etichetta, e la scheda del
     # vitigno e' roba dei fatti riportata: nessuno dei due afferma che quelle
-    # parole siano uve di questo vino. Guardarci dentro dava sedici allarmi
+    # parole siano uve di questo vino. Guardarci dentro da' sedici allarmi
     # falsi sui racconti composti - «Da Uve Garganega Monte Fiorentine»,
     # «Fragolino: nome popolare dell'uva Isabella».
     pulito = re.sub(r"[«“\"][^»”\"]*[»”\"]", " ", testo)
@@ -401,21 +440,22 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
             if any(n in x for x in note):
                 fuori.append(f"{nome} detto vitigno, ma e' una nota olfattiva")
     # Il nome del vino, o della sua denominazione, messo dove vanno le uve:
-    # «It comes from Ripa Teatina», che e' un paese. Passava perche' quel
-    # nome STA nei fatti - e' la denominazione - e nessuna regola guardava in
-    # che posto fosse finito. Si flagga solo se nell'elenco non compare
-    # nessuna delle uve vere: «Brachetto d'Acqui» contiene il Brachetto, ed e'
-    # un modo legittimo di dirlo.
+    # «It comes from Ripa Teatina», che e' un paese. Quel nome STA nei fatti
+    # - e' la denominazione - e lo tradisce solo il posto in cui e' finito.
+    # Si flagga solo se nell'elenco non compare nessuna delle uve vere:
+    # «Brachetto d'Acqui» contiene il Brachetto, ed e' un modo legittimo di
+    # dirlo.
     # «It comes from Trentino-Alto Adige» dice da DOVE viene, ed e' vero: in
     # inglese la stessa apertura serve alle uve e alla provenienza. Se nel
     # pezzo c'e' la regione dei fatti, si sta parlando di quella.
     regione = _senza_accenti(fatti.regione or "").lower()
+    regione_detta = _senza_accenti(_regione_in(fatti, lingua) or "").lower()
     # Ogni VOCE dell'elenco deve contenere un'uva vera. «Brachetto d'Acqui»
     # e' una voce sola e contiene il Brachetto: legittimo. «Trebbiano,
     # Toscano, Abruzzese e Soave» sono quattro voci, e tre non sono uve - la
     # scheda del Trebbiano dice che la famiglia comprende «il Toscano,
-    # l'Abruzzese, quello di Soave», e il modello ne ha fatto quattro vitigni
-    # di questo vino. Parole vere, fatto falso.
+    # l'Abruzzese, quello di Soave», e il modello ne fa quattro vitigni di
+    # questo vino. Parole vere, fatto falso.
     for m in _CONTESTO_VITIGNI.finditer(per_voci):
         for voce in re.split(r",|\be\b|\bed\b|\band\b", m.group(1)):
             if not re.search(r"[A-ZÀ-Ý]", voce):
@@ -433,7 +473,7 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
         elenco = _senza_accenti(m.group(1)).lower()
         if any(re.search(r"\b" + re.escape(u) + r"\b", elenco) for u in uve if u):
             continue
-        if regione and regione in elenco:
+        if (regione and regione in elenco) or (regione_detta and regione_detta in elenco):
             continue
         for v in vino:
             if v and len(v) > 4 and v in elenco:
@@ -445,10 +485,10 @@ def _vitigni_che_non_lo_sono(testo: str, fatti: Fatti, lingua: str) -> list[str]
         if nome and not any(nome in u or u in nome for u in uve):
             fuori.append(f"«{m.group(1).strip()}» detto in purezza, ma non e' un vitigno")
     # «Amarone della Valpolicella, un vitigno compagno...»: il vino stesso
-    # presentato come uva. Il nome deve stare ATTACCATO a «un vitigno»: la
-    # prima versione guardava i sessanta caratteri prima, e bocciava la scheda
-    # del vitigno che dice «Non un vitigno ma una famiglia numerosa» subito
-    # dopo il nome del vino. Su 360 racconti composti, 7 falsi allarmi cosi'.
+    # presentato come uva. Il nome deve stare ATTACCATO a «un vitigno»: una
+    # finestra dei sessanta caratteri prima boccerebbe la scheda del vitigno
+    # che dice «Non un vitigno ma una famiglia numerosa» subito dopo il nome
+    # del vino - su 360 racconti composti, 7 falsi allarmi cosi'.
     piano = _senza_accenti(testo).lower()
     for v in vino:
         if not v or any(v in u for u in uve):
@@ -480,7 +520,7 @@ def _colore_al_posto_del_gusto(testo: str, fatti: Fatti) -> list[str]:
     «On the palate, bright ruby red». Il modello ha tre citazioni del
     disciplinare - colore, odore, sapore - e ogni tanto mette quella del
     colore nel giro di frase del gusto. Le parole sono tutte vere, il posto
-    no, e la verifica non guardava in che posto fossero.
+    no: per questo si guarda il posto.
 
     Misurato sui racconti salvati dei due modelli: succede nel 3-9% dei testi
     scritti dal modello, in tutte e due le lingue.
@@ -500,8 +540,8 @@ def _uve_al_posto_del_produttore(testo: str, fatti: Fatti) -> list[str]:
     """I vitigni messi dove va la cantina.
 
     «This is the "Barbera del Monferrato" by Grignolino, Freisa, Dolcetto and
-    Barbera», letto sul dispositivo: quelle sono le uve, e quel record una
-    cantina non ce l'ha nemmeno - e' una denominazione.
+    Barbera»: quelle sono le uve, e quel record una cantina non ce l'ha
+    nemmeno - e' una denominazione.
     """
     uve = [_senza_accenti(v).lower() for v in fatti.vitigni + fatti.vitigni_ammessi
            if len(v) > 3]
@@ -554,8 +594,8 @@ _CONTESTO_LUOGO = re.compile(
 def _produttore_al_posto_del_luogo(testo: str, fatti: Fatti) -> list[str]:
     """Il nome della cantina messo dove va la regione.
 
-    «Si produce in Produttori di Manduria», letto sul dispositivo: quello e'
-    chi lo fa, non dove si fa. Il modello impara la frase «Si produce in
+    «Si produce in Produttori di Manduria»: quello e' chi lo fa, non dove si
+    fa. Il modello impara la frase «Si produce in
     {regione}» e, quando la regione nei fatti non c'e', la riempie col primo
     nome proprio che trova.
 
@@ -596,10 +636,10 @@ def _citazioni_come_si_dicono(fatti: Fatti, lingua: str) -> str:
     """Le citazioni del registro nella lingua in cui il racconto le dira'.
 
     In italiano sono quelle, parola per parola; in inglese sono una resa
-    nostra, e confrontare un testo inglese con la citazione italiana non
-    trova niente: «from pale straw yellow to straw yellow» veniva da «da
-    giallo paglierino scarico a giallo paglierino», e la ripetizione
-    risultava nostra.
+    propria (vedi `amelie.organolettico`), e confrontare un testo inglese con
+    la citazione italiana non trova niente: «from pale straw yellow to straw
+    yellow» viene da «da giallo paglierino scarico a giallo paglierino», e
+    senza la resa la ripetizione risulterebbe del racconto.
     """
     pezzi = list((fatti.disciplinare or {}).values())
     if lingua != "it" and fatti.disciplinare:
@@ -616,9 +656,10 @@ def _cibi_al_posto_dei_profumi(testo: str, fatti: Fatti, lingua: str) -> list[st
     """Piatti detti come profumi: «note sensoriali tipiche di manzo,
     cacciagione, agnello e pasta».
 
-    Passava la verifica perche' quelle parole stanno nei fatti - sono gli
-    abbinamenti - ed e' l'errore che questo controllo cerca: un rapporto
-    sbagliato fra parole vere. Lo specchio di `_note_al_posto_sbagliato`.
+    Un controllo sui nomi lo promuove, perche' quelle parole stanno nei
+    fatti - sono gli abbinamenti - ed e' l'errore che questo controllo
+    cerca: un rapporto sbagliato fra parole vere. Lo specchio di
+    `_note_al_posto_sbagliato`.
     """
     # Tradotti: in `fatti.abbinamenti` stanno le CHIAVI del vocabolario, che
     # sono inglesi («Beef»), e il testo dice «manzo».
@@ -664,8 +705,8 @@ def _note_al_posto_sbagliato(testo: str, fatti: Fatti, lingua: str) -> list[str]
 # punto o fine: «delicato, delicato, fruttato» e' il modello che gira a vuoto,
 # ma «Schiava, Schiava Gentile e Schiava Grigia» e' un elenco di uve,
 # «Pantelleria Pantelleria-Bianco» e «Carso/Carso-Kras» sono nomi del
-# registro, e «dolci, dolci secchi» e' una lista di piatti. Visti tutti su
-# 360 racconti composti dai fatti, dove non c'e' niente da bocciare.
+# registro, e «dolci, dolci secchi» e' una lista di piatti. Compaiono tutti
+# nei 360 racconti composti dai fatti, dove non c'e' niente da bocciare.
 _RIPETUTA = re.compile(r"\b(\w{4,})[,\s]+\1(?=\s*(?:[,.;!?]|$))", re.I)
 # La stessa parola due volte con solo uno spazio in mezzo, e in minuscolo:
 # «delicato delicato e fruttato» si'; «Pantelleria Pantelleria-Bianco» e «Il
@@ -686,8 +727,8 @@ def _coppie_ripetute(testo: str) -> list[str]:
         viste: set[str] = set()
         # Le parole con l'originale davanti: un nome proprio ripetuto -
         # «Nasce dal Cabernet Sauvignon ... il Cabernet Sauvignon» - non e'
-        # il modello che gira a vuoto, e' il nome del vitigno. Misurato: la
-        # prima versione bocciava «Malvasia Nera» e «Moscato Giallo».
+        # il modello che gira a vuoto, e' il nome del vitigno. Senza questa
+        # eccezione si boccerebbero «Malvasia Nera» e «Moscato Giallo».
         # Sulla frase ORIGINALE, perche' `_senza_accenti` toglie anche le
         # maiuscole, e senza maiuscole non si distingue un nome.
         parole = re.findall(r"[A-Za-zÀ-ÿ]{4,}", frase)
@@ -706,7 +747,7 @@ def _parole_ripetute(testo: str) -> list[str]:
     """Il modello che gira a vuoto: «delicato, delicato, fruttato», «delicato
     delicato e fruttato». Non prende «delicato, delicate» - due parole
     diverse - ne' «bella acidita' e buona acidita'», e non deve: una regola
-    sulla stessa parola a poche parole di distanza bocciava «cheese and
+    sulla stessa parola a poche parole di distanza boccerebbe «cheese and
     matured cheese», «frutta e frutta secca», «di bella struttura, con bella
     acidita'» - sessanta racconti composti dai fatti su duemilaquattrocento,
     dove non c'e' niente da bocciare. Ogni regola in piu' qui e' un allarme
@@ -753,9 +794,9 @@ def _colore_sbagliato(testo: str, fatti: Fatti, ammesso: str = "") -> str | None
 
     `ammesso` è il testo dei fatti: una parola che sta LÌ non è una
     contraddizione, è una citazione. La scheda del Friulano dice «passito di
-    grande dolcezza sostenuta da un tannino insolito», e il tannino faceva
-    gridare al rosso su un vino bianco — ma quelle parole le abbiamo scritte
-    noi, nei fatti, apposta.
+    grande dolcezza sostenuta da un tannino insolito», e senza questa
+    eccezione il tannino farebbe gridare al rosso su un vino bianco — per
+    parole che stanno nei fatti apposta.
     """
     dichiarato = " ".join(filter(None, [
         _senza_accenti(fatti.colore or ""),
@@ -775,8 +816,7 @@ def _colore_sbagliato(testo: str, fatti: Fatti, ammesso: str = "") -> str | None
     if e_rosso and not e_bianco and fuori_dai_fatti(t := _BIANCO.search(testo)):
         return f"colore contraddetto ({t.group(1)}, ma è rosso)"
     # Un rosato non e' ne' rosso ne' bianco. «Il vino è rosato, di colore
-    # rosso», su un rosé: passava, perche' il rosato non era un colore che
-    # la regola conoscesse.
+    # rosso», su un rosé, e' una contraddizione come le altre.
     if e_rosato and not (e_rosso or e_bianco):
         for rx in (_ROSSO_PURO, _BIANCO):
             if fuori_dai_fatti(t := rx.search(testo)):
@@ -815,11 +855,11 @@ def _seme_per(seme: int, chiave: str) -> int:
 
     Un hash vero di «seme|chiave», non uno XOR e nemmeno un crc col seme
     come valore iniziale. Con lo XOR, sulle liste a due o quattro forme
-    l'indice dipendeva solo dai bit bassi del seme e la costante della chiave
-    era una permutazione fissa: su ventimila semi diversi uscivano QUATTRO
-    combinazioni di scelte. Col crc a valore iniziale non cambiava: il valore
+    l'indice dipende solo dai bit bassi del seme e la costante della chiave
+    e' una permutazione fissa: su ventimila semi diversi escono QUATTRO
+    combinazioni di scelte. Col crc a valore iniziale non cambia: il valore
     iniziale entra in modo lineare, e per chiavi della stessa lunghezza nello
-    stesso modo. Misurato tutte e due le volte.
+    stesso modo. Misurati tutti e due.
     """
     import hashlib
 
@@ -912,7 +952,7 @@ def _che_tipo_di_vino(f: Fatti, lex: Lessico, lingua: str) -> str:
         return ""
     # Il colore lo mette il lessico, perche' ogni lingua lo vuole in un posto
     # diverso: «uno spumante rosato», «a rosé sparkling wine». Accodato, in
-    # inglese usciva «a sparkling wine rosé».
+    # inglese uscirebbe «a sparkling wine rosé».
     pezzi = [" ".join(g(base or "vino", colore=g(colore) if colore else "").split())]
     if "metodo" in parole:
         pezzi.append(g("metodo"))
@@ -929,8 +969,8 @@ def titolo_generico(f: Fatti, lex: Lessico, lingua: str) -> str:
     """Il titolo della schermata al livello generico: il tipo di vino senza
     articolo, con la maiuscola - «Spumante rosato metodo classico, brut».
 
-    Era la frase del racconto tale e quale, e a schermo il titolo diventava
-    «uno spumante rosato metodo classico, brut».
+    La frase del racconto tale e quale darebbe a schermo il titolo «uno
+    spumante rosato metodo classico, brut».
     """
     testo = _ARTICOLO.sub("", _che_tipo_di_vino(f, lex, lingua), count=1)
     return testo[:1].upper() + testo[1:]
@@ -939,12 +979,12 @@ def titolo_generico(f: Fatti, lex: Lessico, lingua: str) -> str:
 def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
     """Le frasi dopo l'apertura: poche, e ognuna nata da un campo dell'archivio.
 
-    Al massimo quattro. Prima erano fino a sette - vitigno, tre frasi di
-    disciplinare, corpo e acidita', abbinamenti, temperatura - e un racconto
-    da sette frasi di formula si sente che e' una formula. Qui si sceglie:
-    da dove viene; che cosa ne dice il disciplinare, in due frasi al massimo;
-    corpo e acidita' solo se il disciplinare tace; e una frase sola per
-    temperatura e tavola, che prima erano due.
+    Al massimo quattro. Con una frase per campo sarebbero fino a sette -
+    vitigno, tre frasi di disciplinare, corpo e acidita', abbinamenti,
+    temperatura - e un racconto da sette frasi di formula si sente che e'
+    una formula. Qui si sceglie: da dove viene; che cosa ne dice il
+    disciplinare, in due frasi al massimo; corpo e acidita' solo se il
+    disciplinare tace; e una frase sola per temperatura e tavola insieme.
 
     Ogni frase ha piu' forme equivalenti nel lessico e il seme sceglie quale:
     vedi `seme_di`. Le forme dicono la stessa cosa - il test del lessico
@@ -961,11 +1001,11 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
     #    una formula, ma nella sua prima frase sola: e' quella che lo
     #    presenta, le altre approfondiscono, e qui si deve essere brevi.
     #
-    #    La scheda senza il nome davanti era un difetto visto su 360 racconti
-    #    composti: «Questo e' un Valdinievole. Il vitigno piu' coltivato
-    #    d'Italia e l'anima della Toscana...» - e quale? Non lo diceva mai.
+    #    La scheda senza il nome davanti non dice di quale uva parla:
+    #    «Questo e' un Valdinievole. Il vitigno piu' coltivato d'Italia e
+    #    l'anima della Toscana...» - e quale?
     #    Quattro uve e non tre: il Bardolino ne ha quattro principali a pari
-    #    merito, e con tre si perdeva la Corvina - l'unica che tutti conoscono.
+    #    merito, e con tre si perderebbe la Corvina - l'unica che tutti conoscono.
     #    Oltre le quattro si taglia, e si dice «da»: e' un elenco, non una
     #    ricetta.
     nel_nome = " ".join(x for x in (f.nome, f.tipologia, f.denominazione) if x).lower()
@@ -974,7 +1014,7 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
     prima = (spezza_in_frasi(nota) or [""])[0] if nota else ""
     vitigno = f.vitigni[0] if f.vitigni else ""
     #    E la scheda dice di quale uva parla. Senza, la sua prima frase -
-    #    «Borgognone, ovunque nel mondo» - finiva attaccata al vino: parole
+    #    «Borgognone, ovunque nel mondo» - finirebbe attaccata al vino: parole
     #    vere dell'archivio, soggetto sbagliato. In 197 schede su 224 la prima
     #    frase non nomina il vitigno. Con un'uva sola la scheda si aggancia
     #    alla frase delle uve con i due punti - «Nasce da Chardonnay:
@@ -983,7 +1023,7 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
     if uve and not all(v.lower() in nel_nome for v in uve):
         frase_uve = d("nasce_da", vitigni=elenca_in_lingua(uve, lingua))
         if prima and len(uve) == 1 and vitigno.lower() not in prima.lower():
-            frasi.append(f"{frase_uve.rstrip('.')}: {prima}")
+            frasi.append(f"{frase_uve.rstrip('.')}: {dopo_i_due_punti(prima, lingua)}")
             prima = ""
         else:
             frasi.append(frase_uve)
@@ -991,20 +1031,22 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
         if not vitigno or vitigno.lower() in prima.lower():
             frasi.append(prima)
         else:
-            frasi.append(d("scheda_vitigno", vitigno=vitigno, nota=prima))
+            frasi.append(d("scheda_vitigno", vitigno=vitigno,
+                           nota=dopo_i_due_punti(prima, lingua)))
 
     #    E dove si produce, ma solo quando c'e' poco altro da dire. Su 1.932
-    #    denominazioni e tipologie provate, 227 non avevano ne' vitigni ne'
-    #    citazioni ne' abbinamenti: il racconto era una frase sola, il nome e
-    #    basta. La regione sta in archivio per 375 denominazioni su 532, e
-    #    nessuno la leggeva.
+    #    denominazioni e tipologie, 227 non hanno ne' vitigni ne' citazioni
+    #    ne' abbinamenti: senza la regione il racconto sarebbe una frase sola,
+    #    il nome e basta. La regione sta in archivio per 375 denominazioni su
+    #    532.
     if len(frasi) < 2 and f.regione and not (
             f.denominazione and f.regione in f.denominazione):
-        frasi.append(d("dove_si_produce", regione=f.regione))
+        frasi.append(d("dove_si_produce",
+                       regione=lex.traduci("regione", f.regione, lingua=lingua)))
 
     # 2. Il disciplinare: la descrizione sensoriale VERA di questo vino. In
     #    italiano e' la citazione parola per parola; in inglese e' una resa
-    #    nostra (vedi `amelie.organolettico`), e per questo la frase dice cosa
+    #    propria (vedi `amelie.organolettico`), e per questo la frase dice cosa
     #    il disciplinare CHIEDE invece di virgolettare - metterla fra
     #    virgolette attribuirebbe a un ente pubblico parole che non ha scritto.
     #
@@ -1055,7 +1097,7 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
     piatti = ""
     if (abbinamenti := f.abbinamenti_in(lingua)):
         # Senza doppioni DOPO la traduzione: «Dessert» e «Sweet» sono due
-        # chiavi e una parola sola, «dolci», e il racconto diceva «dolci,
+        # chiavi e una parola sola, «dolci», e il racconto direbbe «dolci,
         # dolci e antipasti».
         tradotti = _senza_doppioni_di_elenco(list(dict.fromkeys(
             lex.traduci_molti("abbinamento", abbinamenti, lingua=lingua))))
@@ -1081,14 +1123,13 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
         frasi.append(d("temperatura_puntuale", gradi=gradi))
 
     # E alla fine, quando non c'e' nient'altro da dire, si dice PERCHE'. Non e'
-    # un'esitazione - quelle si sono tolte, e riguardavano il leggere - e' un
-    # fatto: questa bottiglia in archivio non c'e'. Senza, un racconto di due
-    # righe sembra un dispositivo rotto; con, e' un dispositivo onesto.
+    # un'esitazione sul leggere, e' un fatto: questa bottiglia in archivio non
+    # c'e'. Senza, un racconto di due righe sembra un dispositivo rotto; con,
+    # e' un dispositivo onesto.
     #
     # Ma solo se qualcosa si e' detto. Senza colore ne' tipo, l'apertura ripiega
     # su «provi a girare l'etichetta», e dirle dietro «quello che le ho detto e'
     # scritto sull'etichetta» significa vantare una risposta che non c'e' stata.
-    # Sentito sul dispositivo, parola per parola.
     if f.livello is Livello.GENERICO and (f.qualificatori or f.colore):
         frasi.append(d("generico_limite"))
 
@@ -1101,7 +1142,7 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
 # «sono asciutti, armonici...» - plurale, perche' parlano di piu' tipologie -
 # e in inglese la resa puo' cominciare con «may be» o «ranging from». Messe
 # dopo «Il sapore è» danno «Il sapore è sono asciutti»; dopo «lo vuole» danno
-# «lo vuole che va dal». Letti sul dispositivo, uno per uno.
+# «lo vuole che va dal».
 #
 # Quindi la forma si sceglie dopo aver guardato la citazione: quelle con la
 # virgola davanti al buco - «In bocca, {valore}» - reggono tutto; quelle col
@@ -1239,8 +1280,8 @@ def template(f: Fatti, lex: Lessico | None = None, lingua: str = "it") -> str:
     disciplinare, dentro una forma del lessico che il seme sceglie fra
     equivalenti. Non c'e' nessun passaggio in cui una parola possa nascere da
     un'altra parte: e' il modo «archivio», ed e' l'unico di cui si possa dire
-    che non inventa - misurato, il modello sul dispositivo sbagliava un fatto
-    in cinque testi su dodici, e la verifica a posteriori non li prendeva
+    che non inventa - misurato sul dispositivo, il modello sbaglia un fatto
+    in cinque testi su dodici, e la verifica a posteriori non li prende
     tutti.
     """
     lex = lex or carica()
@@ -1248,8 +1289,8 @@ def template(f: Fatti, lex: Lessico | None = None, lingua: str = "it") -> str:
     pezzi = [_apertura(f, lex, lingua, seme)]
     # Il produttore, quando si e' letto ma il vino non si sa. Al livello
     # «vino» sta gia' dentro l'apertura - «il "Cannubi" di Marchesi di
-    # Barolo» - e ripeterlo sarebbe goffo; piu' in basso non lo diceva
-    # nessuno, e si buttava via la cosa piu' identificante dell'etichetta.
+    # Barolo» - e ripeterlo sarebbe goffo; piu' in basso, senza questa
+    # frase, si butterebbe via la cosa piu' identificante dell'etichetta.
     if f.cantina and f.livello is not Livello.VINO:
         pezzi.append(lex.frase("apertura", "cantina_sola", lingua=lingua,
                                seme=_seme_per(seme, "cantina_sola"),
@@ -1312,10 +1353,10 @@ def prompt(f: Fatti, *, per_cache: bool = False, lingua: str = "it") -> str:
 # stato addestrato, parola per parola: un modello affinato su una forma e
 # interrogato con un'altra e' un modello che non hai affinato.
 #
-# Misurato sulla board dandogli per sbaglio il prompt del modello generico -
-# le istruzioni lunghe piu' il blocco esteso: 63,8 secondi invece di 27, e la
-# prosa tornata sgrammaticata («Il Abruzzo Spumante Bianco Charmat e' un solo
-# vitigno»). Le regole non gli servono: le ha imparate. Gli serve la forma.
+# Misurato sulla board dandogli il prompt del modello generico - le
+# istruzioni lunghe piu' il blocco esteso: 63,8 secondi invece di 27, e prosa
+# sgrammaticata («Il Abruzzo Spumante Bianco Charmat e' un solo vitigno»).
+# Le regole non gli servono: le ha imparate. Gli serve la forma.
 ISTRUZIONE_ADDESTRATA = {
     "it": "Scrivi la scheda di sala di questo vino, in quattro frasi.",
     "en": "Write this wine's tasting note, in four sentences.",
@@ -1335,7 +1376,7 @@ def _abbastanza_per_il_modello(f: Fatti) -> bool:
     senza riempire i buchi da solo?
 
     La risposta e' una sola, ed e' misurata: **la citazione del registro**.
-    Su 210 bottiglie stratificate, italiano, modello v6:
+    Su 210 bottiglie stratificate, italiano, modello addestrato:
 
         con la citazione     84 su 85 passano la verifica   98,8 %
         senza la citazione  104 su 125                      83,2 %
@@ -1344,7 +1385,7 @@ def _abbastanza_per_il_modello(f: Fatti) -> bool:
     quelli in cui il modello inventa i piatti - «si serve bene con pesce,
     verdure e verdoli», dove «verdoli» non e' nemmeno una parola - e mette i
     cibi al posto dei profumi: «note sensoriali tipiche di manzo, cacciagione,
-    agnello e pasta». Quelli con la citazione sono buoni:
+    agnello e pasta». Quelli con la citazione si possono far sentire in sala:
     «Aglianico e Montepulciano, i vitigni del grande rosso del Sud, fra
     Taurasi e Vulture. Il disciplinare lo vuole rosa piu' o meno intenso...»
 
@@ -1380,13 +1421,12 @@ class Narratore:
         self.lingua = lingua
         # Quale forma di prompt vuole il modello che c'e' dietro: vedi
         # `prompt_addestrato`. Sbagliarla costa il doppio del tempo e tutta la
-        # qualita' che l'addestramento aveva comprato.
+        # qualita' guadagnata con l'addestramento.
         self.modello_addestrato = modello_addestrato
-        # La gabbia: vedi `amelie.gabbia`. Sta a FALSE, ed e' una misura che
-        # ha rovesciato la precedente - su trenta bottiglie facili sembrava
-        # guadagnare tre testi, su duecentodieci stratificate ne perde otto e
-        # sui record poveri produce italiano rotto. Chi la vuole deve dare un
-        # `genera` che accetti la grammatica come secondo argomento.
+        # La gabbia: vedi `amelie.gabbia`. Sta a FALSE per misura: su trenta
+        # bottiglie facili guadagna tre testi, su duecentodieci stratificate ne
+        # perde otto, e sui record poveri produce italiano rotto. Chi la vuole
+        # deve dare un `genera` che accetti la grammatica come secondo argomento.
         self.gabbia = gabbia
         # Chi sa dare il testo a pezzi. Senza, `racconta_a_frasi` funziona
         # lo stesso ma aspetta la fine: e' il modo in cui degrada, non un caso
@@ -1426,9 +1466,9 @@ class Narratore:
         Il testo pronto e' solo quello del record esatto, non dei gradini di
         ripiego: di un vino riconosciuto fino al produttore si conoscono corpo,
         acidita' e abbinamenti suoi, e raccontarlo col testo generico del suo
-        vitigno - scritto prima, in un'altra forma, senza nemmeno il nome
-        dell'uva - sarebbe buttarli via. Successo, su un Gavi: usciva la
-        scheda del Cortese senza mai dire Cortese.
+        vitigno - scritto in un'altra forma, a volte senza nemmeno il nome
+        dell'uva - sarebbe buttarli via: su un Gavi uscirebbe la scheda del
+        Cortese senza mai dire Cortese.
         """
         if f.vuoto:
             return Racconto(
@@ -1438,9 +1478,9 @@ class Narratore:
 
         # Le «descrizioni generate», se qualcuno le ha accese dalle
         # impostazioni. Ribaltano l'ordine di proposito: il modello va per
-        # primo, non per ultimo. E' una scelta di chi gestisce il locale, non
-        # nostra - costa l'attesa della generazione e in cambio il racconto e'
-        # scritto per quella bottiglia li'.
+        # primo, non per ultimo. E' una scelta di chi gestisce il locale -
+        # costa l'attesa della generazione e in cambio il racconto e' scritto
+        # per quella bottiglia li'.
         #
         # Non e' un salto nel vuoto: `_dal_modello` verifica quel che scrive e
         # torna None se il modello ha inventato due volte di fila. Allora si
@@ -1455,8 +1495,8 @@ class Narratore:
         # costruzione.
         #
         # Dare quei quattro fatti a un modello e chiedergli una descrizione e'
-        # chiedergli di riempire il resto, e il resto se lo inventa. Visto sul
-        # dispositivo, su un Lambrusco Grasparossa: «Nasce dai vitigni
+        # chiedergli di riempire il resto, e il resto se lo inventa. Per
+        # esempio, su un Lambrusco Grasparossa: «Nasce dai vitigni
         # Lambrusco e Grasparossa, tipico della zona castellana. Colore giallo,
         # con sapore delicato e acidita' equilibrata. In bocca e' un vino di
         # media struttura, con bella acidita' e buona acidita'.» Un rosso
@@ -1464,20 +1504,20 @@ class Narratore:
         # volte.
         #
         # `verifica` non lo prende, e non e' un suo difetto: controlla che non
-        # si nominino vitigni e denominazioni che non ci sono - e infatti su un
-        # altro tentativo ha scartato «Pinot Noir, Cabernet Sauvignon» - ma il
-        # colore di un vino non e' un nome, e' un'affermazione. A questo
-        # livello non ci sono affermazioni da fare.
+        # si nominino vitigni e denominazioni che non ci sono - e scarta, per
+        # esempio, un «Pinot Noir, Cabernet Sauvignon» detto dello stesso
+        # vino - ma il colore di un vino non e' un nome, e' un'affermazione.
+        # A questo livello non ci sono affermazioni da fare.
         genera_qui = (consenti_modello and self.genera is not None
                       and f.livello is not Livello.GENERICO
                       and _abbastanza_per_il_modello(f))
         # Il modo «generativa» e' l'unico in cui un testo scritto da un
-        # modello - dal vivo o dalla cache, che e' lo stesso modello un giorno
-        # prima - arriva in bocca al dispositivo. Nel modo «archivio» non ci
-        # arriva mai: il racconto e' composto dai fatti, e basta. Prima la
-        # cache si usava anche li', e un Franciacorta in modo «archivio»
-        # diceva «Borgognone, ovunque nel mondo». La garanzia vale solo se
-        # non ha eccezioni.
+        # modello - dal vivo o dalla cache, che e' lo stesso modello eseguito
+        # in anticipo - arriva in bocca al dispositivo. Nel modo «archivio» non
+        # ci arriva mai: il racconto e' composto dai fatti, e basta. Se la cache
+        # si usasse anche li', un Franciacorta in modo «archivio» potrebbe dire
+        # «Borgognone, ovunque nel mondo». La garanzia vale solo se non ha
+        # eccezioni.
         if preferisci_modello:
             if genera_qui and (vivo := self._dal_modello(f)) is not None:
                 return vivo
@@ -1507,23 +1547,22 @@ class Narratore:
                 ).fetchone()
             if not r:
                 continue
-            # L'apertura si compone ADESSO, perche' dice quanto siamo sicuri; il
-            # corpo viene dalla cache. Un testo pre-generato non puo' sapere se
-            # l'etichetta e' stata letta bene, ne' quale bottiglia sia: per
-            # questo il corpo e' scritto sul vino generico e l'apertura no.
-            # Verificato come un testo del modello, perche' LO E': la cache e'
-            # stata scritta dallo stesso modello, prima. Sul dispositivo un
-            # Franciacorta usciva dalla cache cosi': «Borgognone, ovunque nel
-            # mondo» - e nessuno l'aveva mai riletto. Un testo pronto che non
-            # regge si salta, e si scende al gradino dopo o al template.
+            # L'apertura si compone ADESSO, perche' dice quanto e' sicuro il
+            # riconoscimento; il corpo viene dalla cache. Un testo pre-generato
+            # non puo' sapere se l'etichetta e' stata letta bene, ne' quale
+            # bottiglia sia: per questo il corpo e' scritto sul vino generico e
+            # l'apertura no.
+            # Verificato come un testo del modello: la colonna `modello` dice
+            # chi l'ha scritto, e un racconto pronto che non regge alla
+            # verifica si salta, e si scende al gradino dopo o al template.
             ok, invenzioni = verifica(r["testo"], f, self.lingua)
             if not ok:
                 log.warning("cache %s/%s scartata, ha inventato: %s",
                             ambito, ident, invenzioni)
                 continue
-            # Quarantotto testi pronti sono stati scritti quando il vitigno
-            # «na» del registro passava per un'uva: «Nasce da na.», «It is
-            # made from na.». Si saltano come quelli che inventano.
+            # Il vitigno «na» del registro non e' un'uva, e un testo pronto che
+            # lo nomina - «Nasce da na.», «It is made from na.», quarantotto in
+            # archivio - si salta come quelli che inventano.
             if _UVA_FINTA.search(r["testo"]):
                 log.warning("cache %s/%s scartata: nomina un vitigno che non c'e'",
                             ambito, ident)
@@ -1546,9 +1585,9 @@ class Narratore:
         """Le frasi del racconto, una per volta, appena sono pronte E verificate.
 
         Vale la stessa regola di `racconta`: senza `preferisci_modello` il
-        modello non parla, e le frasi sono quelle della composizione. Nessuno
-        chiama questa via dal dispositivo oggi, ma una porta aperta in una
-        classe che dichiara una garanzia e' una garanzia a meta'.
+        modello non parla, e le frasi sono quelle della composizione. Il
+        dispositivo non chiama questa via, ma una porta aperta in una classe
+        che dichiara una garanzia e' una garanzia a meta'.
 
         Serve a coprire l'attesa. Sulla board il prefill dei fatti costa dodici
         secondi prima che esca la prima lettera, e sono dodici secondi di
@@ -1558,8 +1597,9 @@ class Narratore:
         Mentre la voce la pronuncia, il modello lavora.
 
         L'apertura e' anche l'unica frase che il modello non scrive mai: dipende
-        dalla CERTEZZA, che si conosce solo al momento. Dirla noi e lasciare a
-        lui il resto non e' una ripetizione, e' la divisione naturale.
+        dalla CERTEZZA, che si conosce solo al momento. Comporla dai fatti e
+        lasciare al modello il resto non e' una ripetizione, e' la divisione
+        naturale.
 
         **Ogni frase si verifica prima di uscire di qui.** Una frase detta non
         si riprende: aspettare il testo intero per verificarlo tutto insieme
@@ -1651,8 +1691,8 @@ def _ripulisci(testo: str) -> str:
         testo = " ".join(parole[:PAROLE_MAX])
     if not testo.endswith(("…", ".", "!", "?")):
         # Il modello si e' fermato a meta' frase - il tetto dei token, o il
-        # nostro taglio qui sopra. Quattro testi su dodici, sul dispositivo,
-        # finivano cosi': «Da servire fra i diciassette e i dici». Si chiude
+        # taglio qui sopra. Misurato sul dispositivo, quattro testi su dodici
+        # finiscono cosi': «Da servire fra i diciassette e i dici». Si chiude
         # sull'ultima frase intera, ma solo se questo non butta via piu' di
         # meta' del testo: meglio un troncamento dichiarato con i puntini che
         # due parole al posto di cento.

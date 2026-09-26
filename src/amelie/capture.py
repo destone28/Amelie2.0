@@ -1,12 +1,11 @@
 """Cattura del fotogramma dell'etichetta.
 
 La geometria è fissa e nota: la lente sta 30 mm sopra il piano d'appoggio, 60 mm
-davanti alla bottiglia, con l'asse inclinato di 53° sopra l'orizzonte. I disegni
-da cui vengono questi numeri stanno fuori dal repo, in `Project/Amelie2.0/`
-insieme al CAD; le quote che servono a montare sono in
-`docs/06-ASSEMBLAGGIO-BANCO.md`. La distanza ottica al centro dell'etichetta è ~100 mm e la fascia a
-fuoco copre una finestra di circa 60 × 36 mm, che su qualunque etichetta
-commerciale contiene produttore, denominazione e annata.
+davanti alla bottiglia, con l'asse inclinato di 53° sopra l'orizzonte. Le quote
+che servono a montare sono in `docs/it/03-montaggio.md`. La distanza
+ottica al centro dell'etichetta è ~100 mm e la fascia a fuoco copre una finestra
+di circa 60 × 36 mm, che su qualunque etichetta commerciale contiene produttore,
+denominazione e annata.
 
 Tre accorgimenti valgono più di qualunque scelta di libreria:
 
@@ -16,24 +15,22 @@ Tre accorgimenti valgono più di qualunque scelta di libreria:
    ferme: si può permettere un tempo di posa lungo e guadagno a zero, che dà
    **molto più segnale di quanto possano darne i LED**.
 
-   È anche il motivo per cui togliere il secondo Modulino Pixels — quello che
-   faceva da flash — costa meno di quanto sembri: la luce non era il fattore
-   dominante. Resta l'anello alla base, che sale a bianco per la durata della
-   raffica. Quanto basti va misurato sul banco, con l'etichetta vera e la luce
-   del locale.
+   È anche il motivo per cui basta una sola sorgente di luce: l'anello alla
+   base, che sale a bianco per la durata della raffica. I LED non sono il
+   fattore dominante — le misure sono in `ImpostazioniCamera.esposizione`.
 
 2. **Scartare i primi fotogrammi.** Il buffer UVC contiene immagini precedenti
    all'accensione della luce. Il primo fotogramma letto dopo è quasi sempre
    vecchio: è l'errore più comune nelle pipeline OpenCV.
 
-3. **Raffica e varianza del laplaciano.** Cinque fotogrammi, si tiene il più
-   nitido. Costa 200 ms e salva dai casi in cui la bottiglia oscilla ancora.
+3. **Raffica e varianza del laplaciano.** Qualche fotogramma, e si tiene il più
+   nitido: salva dai casi in cui la bottiglia oscilla ancora.
 
 Il ritaglio centrale limita la distorsione a barile e la vignettatura, che
 stanno agli angoli. La frazione è un compromesso, e va nella direzione opposta a
 quella che verrebbe da pensare: stringere migliora ogni singolo carattere ma
 toglie righe intere, e il riconoscimento lavora su parole, non su caratteri. Vedi
-`ImpostazioniCamera.ritaglio`.
+`ImpostazioniCamera.ritaglio_largo`.
 """
 
 from __future__ import annotations
@@ -68,11 +65,11 @@ class ImpostazioniCamera:
     altezza: int = 1080
     fourcc: str = "MJPG"
 
-    # Esposizione fissa, in unità da 100 µs: 900 = 90 ms.
+    # Esposizione di partenza, in unità da 100 µs: 900 = 90 ms.
     #
-    # Era 300, e **misurato sul banco** in una stanza in penombra quella posa
-    # non leggeva NIENTE: luminosità media 11 su 255, e l'OCR restituiva zero
-    # righe. A 900 la media sale a 30 e l'etichetta si legge; a 2000 sale a 55.
+    # **Misurato sul banco** in una stanza in penombra: a 300 non si legge
+    # NIENTE, luminosità media 11 su 255 e l'OCR restituisce zero righe. A 900
+    # la media sale a 30 e l'etichetta si legge; a 2000 sale a 55.
     #
     # E la luce dell'anello non c'entra quasi niente. Misurato, sempre lì:
     #
@@ -82,9 +79,9 @@ class ImpostazioniCamera:
     #     anello bianco pieno    11,7
     #
     # Cinque livelli su 255 fra spento e acceso al massimo. La posa, invece,
-    # triplica il segnale triplicandola. È quello che questo modulo dichiarava
-    # fin dall'inizio — «un tempo di posa lungo dà molto più segnale di quanto
-    # possano darne i LED» — e che aver tolto il flash ha reso decisivo.
+    # triplica il segnale triplicandola: un tempo di posa lungo dà molto più
+    # segnale di quanto possano darne i LED, e con una sola sorgente di luce è
+    # la posa a decidere.
     #
     # Costa: 90 ms per fotogramma, per i fotogrammi della raffica. Ed è il primo
     # valore da alzare se il locale è buio: dal mirino, con `--esposizione`,
@@ -97,8 +94,8 @@ class ImpostazioniCamera:
     # la sera la stanza è un'altra, e la posa giusta cambia con lei: prima di
     # ogni raffica si guarda quanta luce c'è davvero e si corregge.
     #
-    # Misurato sul dispositivo nella scocca, con l'anello bianco e la luce
-    # della stanza SPENTA — che è la condizione di un ristorante a cena:
+    # Misurato con il dispositivo montato nella scocca, l'anello bianco e la
+    # luce della stanza SPENTA — che è la condizione di un ristorante a cena:
     #
     #      900   luce 47   `` (niente)
     #     1500   luce 62   `` (niente)
@@ -106,7 +103,7 @@ class ImpostazioniCamera:
     #     3000   luce 88   `ULIGSA · TENUTH · CERASUOLO · D'ABRUZZO`
     #     4000   luce 99   `ULISSE · TENLITA · CERASUOLO · D'ABRUZZO`
     #
-    # A 900 — la posa che il dispositivo aveva — non si legge NIENTE. A 3000
+    # A 900 — la posa di partenza — non si legge NIENTE. A 3000
     # compare la denominazione, a 4000 anche il nome del produttore, che è
     # quello che decide se il racconto sarà del vino o della cantina.
     #
@@ -129,7 +126,7 @@ class ImpostazioniCamera:
     #
     # che è `luce ∝ posa^0,54`. Correggere in proporzione diretta, come
     # verrebbe naturale, sottostima ogni volta: da 47 a 90 servirebbero tre
-    # giri, e il primo tentativo fatto così finiva sempre contro il tetto.
+    # giri.
     #
     # L'esponente qui è 1,5 e non 1,85 — cioè meno di quanto la misura
     # chiederebbe — perché quel 0,54 è una proprietà della scena, non solo
@@ -150,40 +147,37 @@ class ImpostazioniCamera:
     # racconto, e una bottiglia che oscilla viene mossa.
     posa_minima: int = 300
     # NON il massimo della camera. `v4l2-ctl` dice `exposure_time_absolute
-    # max=5000`, ed era stato alzato fino li' perche' nella sala a luci basse
-    # si arrivava contro il 4000. Ma a 5000 la camera SI FERMA: visto sul
-    # dispositivo una sera,la sala si e' fatta buia, la posa e'
-    # salita a 5000 e undici secondi dopo non e' piu' arrivato un fotogramma -
-    # ogni bottiglia un guasto, e solo spegnere e riaccendere la sbloccava,
-    # perche' ogni riapertura riapplicava 5000. Misurato a camera sola, otto
-    # fotogrammi per posa: fino a 4900 arrivano (lenti, uno al secondo), a
-    # 4999 e a 5000 nessuno in dodici secondi. 4500 lascia un margine; e se su
-    # un'altra camera la soglia fosse piu' bassa, vedi `_a_vuoto`.
+    # max=5000`, e in una sala a luci basse la regolazione arriva davvero oltre
+    # il 4000. Ma a 5000 la camera SI FERMA: smette di dare fotogrammi, ogni
+    # bottiglia diventa un guasto, e riaprire lo stream non la sblocca,
+    # perche' ogni riapertura riapplica la stessa posa. Misurato a camera
+    # sola, otto fotogrammi per posa: fino a 4900 arrivano (lenti, uno al
+    # secondo), a 4999 e a 5000 nessuno in dodici secondi. 4500 lascia un
+    # margine; e se su un'altra camera la soglia fosse piu' bassa, vedi
+    # `_a_vuoto`.
     posa_massima: int = 4500
     # La posa da cui si riparte quando lo stream resta muto: quella di
     # partenza, che al buio legge poco ma legge.
     posa_sicura: int = 900
 
-    # Raffica. Erano cinque e cinque, scelti quando un fotogramma costava 30 ms.
-    # A 90 ms costavano un secondo intero, e la scena è FERMA: bottiglia e
-    # camera non si muovono, quindi i fotogrammi si somigliano tutti e tenerne
-    # tre invece di cinque non cambia quale si sceglie. Lo scarto serve a
-    # buttare via il buffer USB, non a mediare.
+    # Raffica: quanti fotogrammi si buttano e quanti se ne guardano. A 90 ms
+    # l'uno, cinque e cinque costerebbero quasi un secondo, e la scena è FERMA:
+    # bottiglia e camera non si muovono, quindi i fotogrammi si somigliano
+    # tutti e tenerne tre invece di cinque non cambia quale si sceglie. Lo
+    # scarto serve a buttare via il buffer USB, non a mediare.
     fotogrammi_da_scartare: int = 3
     fotogrammi_raffica: int = 3
 
     # Il ritaglio, in due frazioni: quanto si tiene in LARGHEZZA e quanto in
     # ALTEZZA. Due, e non una, perché una bottiglia non è quadrata.
     #
-    # La storia di questo numero è tutta una storia di compromessi sbagliati,
-    # e lo erano perché la frazione era una sola. Era 0,58, per tenere la
-    # distorsione a barile sotto l'1%: e le etichette non venivano riconosciute
-    # anche quando erano nitide e ben illuminate, perché cadevano fuori le
-    # prime e le ultime lettere e il riconoscimento lavora su PAROLE INTERE.
-    # Poi 0,80, poi 0,85 — quest'ultimo per il tempo, non per la qualità: la
-    # stanza dietro costa cara, perché il rilevatore trova una regione di testo
-    # per ogni numero di un calendario appeso al muro e ognuna passa poi dal
-    # modello che la legge.
+    # Con una frazione sola ogni valore è un compromesso sbagliato. Stretta —
+    # 0,58, che tiene la distorsione a barile sotto l'1% — le etichette non si
+    # riconoscono nemmeno quando sono nitide e ben illuminate, perché cadono
+    # fuori le prime e le ultime lettere e il riconoscimento lavora su PAROLE
+    # INTERE. Larga — 0,80 o 0,85 — entra la stanza dietro, e la stanza costa
+    # cara: il rilevatore trova una regione di testo per ogni numero di un
+    # calendario appeso al muro, e ognuna passa poi dal modello che la legge.
     #
     # Con due frazioni il compromesso sparisce, perché i due mestieri stanno su
     # assi diversi: in larghezza si stringe per buttare fuori la parete, in
@@ -207,17 +201,18 @@ class ImpostazioniCamera:
     # Di quanto si allarga ai lati il riquadro trovato sulla bottiglia vera,
     # in frazione della sua larghezza.
     #
-    # Si STRINGEVA, del 6 %: il bordo e' dove il vetro curva via, e le lettere
-    # che stanno li' sembravano perse comunque. Sul dispositivo, una sera,
-    # con le bottiglie tenute in mano davanti alla camera, erano
-    # proprio quelle che mancavano: «GRASPAROSSA DI CASTELVETRO» arrivava
-    # all'OCR come «SPAROSSA DI CASTEL», e la carta non la riconosceva. E la
-    # sagoma, con una mano che regge il collo, puo' finire spostata di lato:
-    # stringerla ancora vuol dire tagliare l'etichetta due volte.
+    # Si allarga, e non si stringe, anche se il bordo e' dove il vetro curva
+    # via e le lettere che stanno li' sembrano perse comunque: con le bottiglie
+    # tenute in mano davanti alla camera sono proprio quelle che mancano.
+    # Stringendo del 6 %, «GRASPAROSSA DI CASTELVETRO» arriva all'OCR come
+    # «SPAROSSA DI CASTEL», e la carta non la riconosce. E la sagoma, con una
+    # mano che regge il collo, puo' finire spostata di lato: stringerla vuol
+    # dire tagliare l'etichetta due volte.
     #
     # Allargando un poco si lascia all'etichetta il suo bordo. Quello che
-    # resta tagliato lo recupera `Lettore.allarga`, rileggendo a tutta
-    # larghezza le sole righe che toccano il bordo.
+    # resta tagliato lo recupera `Lettore.allarga`, che quando una riga di
+    # parole tocca il bordo rilegge il ritaglio allargato fino al bordo del
+    # fotogramma da quella parte.
     allarga_riquadro: float = 0.08
 
     # Di quanto ruotare il fotogramma prima di guardarlo, in gradi orari.
@@ -227,24 +222,22 @@ class ImpostazioniCamera:
     # fotogramma nativo ha la bottiglia coricata col collo a sinistra; qui si
     # rimette in piedi, e il testo dell'etichetta torna orizzontale.
     #
-    # Il montaggio e' cambiato due volte, e ogni volta questo numero e' rimasto
-    # indietro di un giro. Nella scocca la camera era prima dritta (0) e il
-    # dispositivo non riconosceva piu' niente; girandola di lato e' tornata a
-    # 90. Vale la pena ricordare perche' si e' girata:
+    # Perche' di lato e non dritta:
     #
     #                    largo    alto     tolleranza laterale
     #     camera dritta   200 mm  112 mm   +-60 mm
     #     camera di lato  112 mm  200 mm   +-18 mm
     #
     # Un'etichetta da vino e' alta un centinaio di millimetri, piu' il
-    # collarino: 112 mm di campo verticale non bastavano, e si vedeva - la
-    # denominazione cadeva sotto il bordo e il dispositivo raccontava il vino
-    # sbagliato. E i 200 mm di campo orizzontale che si perdono erano campo che
-    # si PAGAVA: e' li' che stava la parete che il rilevatore legge come testo.
+    # collarino: 112 mm di campo verticale non bastano - la denominazione cade
+    # sotto il bordo e il dispositivo racconta il vino sbagliato. E i 200 mm
+    # di campo orizzontale che si perdono sono campo che si PAGA: e' li' che
+    # sta la parete che il rilevatore legge come testo.
     #
-    # Un verso sbagliato non degrada la lettura: la annulla. Se il montaggio
-    # cambiera' di nuovo, `Lettore.leggi_comunque` prova gli altri versi e il
-    # dispositivo continua a leggere, piu' lentamente, invece di ammutolire.
+    # Un verso sbagliato non degrada la lettura: la annulla. Se questo numero
+    # non corrisponde al montaggio, `Lettore.leggi_comunque` prova gli altri
+    # versi e il dispositivo continua a leggere, piu' lentamente, invece di
+    # ammutolire.
     rotazione: int = 90
 
     # Attesa fra accensione della luce dello scatto e primo fotogramma utile.
@@ -355,11 +348,11 @@ def ritaglia_centro(immagine: np.ndarray, largo: float,
     diversi. In larghezza si stringe per buttare fuori la parete; in altezza si
     tiene quasi tutto, perché è lì che sta l'etichetta.
 
-    Con una frazione sola si era costretti a scegliere: stringendo si perdeva
-    la denominazione, allargando entrava il calendario. Vedi
+    Con una frazione sola si è costretti a scegliere: stringendo si perde la
+    denominazione, allargando entra il calendario. Vedi
     `ImpostazioniCamera.ritaglio_largo`.
 
-    Se `alto` non si dice, vale `largo`: il ritaglio quadrato di prima.
+    Se `alto` non si dice, vale `largo`: la stessa frazione sui due assi.
     """
     alto = largo if alto is None else alto
     for nome, f in (("largo", largo), ("alto", alto)):
@@ -409,13 +402,15 @@ def quanto_diverso(a: np.ndarray, b: np.ndarray, tolleranza: float = 20.0) -> fl
 
 
 class PresenzaOttica:
-    """Decide se c'è una bottiglia guardandola, invece di misurarne la distanza.
+    """Il piatto visto dalla camera: che cosa c'e' davanti, e dove sta.
 
-    Il sensore di distanza faceva questo lavoro e lo faceva male: il fondo di
-    una bottiglia è quasi speculare e il lobo riflesso esce dal cono di
-    ricezione appena la bottiglia non è centrata, così la misura salta. La
-    camera invece la bottiglia la vede, e la vede grande: a dieci centimetri
-    dalla lente occupa quasi tutta la fascia centrale del fotogramma.
+    Che una bottiglia ci sia lo decide il sensore di distanza (vedi
+    `amelie.bridge.Presenza`). Questa classe fa il resto: impara com'e' il
+    piatto vuoto e, per differenza, trova la sagoma di cio' che e' arrivato,
+    cosi' all'OCR va il riquadro di QUESTA bottiglia invece di uno fisso (vedi
+    `riquadro`). Le soglie qui sotto non fanno partire nessuna lettura:
+    servono a sapere quando la scena e' tornata il piatto vuoto, per
+    aggiornarne lo sfondo, e a non imparare come sfondo una bottiglia.
 
     Non si riconosce «una bottiglia»: si riconosce che al posto della stanza
     c'è **qualcosa d'altro**. È una distinzione onesta — il dispositivo non sa
@@ -423,7 +418,7 @@ class PresenzaOttica:
     decide davvero è l'OCR subito dopo: se non c'è un'etichetta, non c'è nulla
     da raccontare.
 
-    L'isteresi resta **asimmetrica**, come sul sensore e per lo stesso motivo:
+    L'isteresi è **asimmetrica**, come sul sensore e per lo stesso motivo:
     per dire che è arrivata basta che la scena sia cambiata; per dire che è
     andata via bisogna che la scena sia tornata quella di prima. Una bottiglia
     spostata di un dito cambia la fascia del 15-30 %, abbastanza da non
@@ -449,12 +444,11 @@ class PresenzaOttica:
         self.tolleranza = tolleranza
         self.presente = False
         self.differenza = 0.0            # l'ultima misura, per la diagnostica
-        # Lo sfondo: la fascia com'è quando sul piatto non c'è niente. `None`
-        # vuol dire «non lo so ancora», e capita due volte: all'accensione, e
-        # quando si scopre che la bottiglia c'era già prima di accendere.
         # Lo sfondo è il fotogramma INTERO com'è quando sul piatto non c'è
         # niente. La striscia centrale — quella su cui si decide — si ricava da
-        # qui quando serve: una sola immagine, due domande diverse.
+        # qui quando serve: una sola immagine, due domande diverse. `None`
+        # vuol dire «non lo so ancora», e capita due volte: all'accensione, e
+        # quando si scopre che la bottiglia c'era già prima di accendere.
         self._sfondo: np.ndarray | None = None
         self._intera: np.ndarray | None = None
         # La scena con la bottiglia, usata solo finché lo sfondo è ignoto.
@@ -485,8 +479,8 @@ class PresenzaOttica:
             return self.presente
 
         # Una scena che si sta ancora muovendo non si giudica: è la mano che
-        # posa la bottiglia. Costa una sbirciata di ritardo e vale
-        # l'assestamento che prima si aspettava a tempo.
+        # posa la bottiglia. Costa una sbirciata di ritardo, e prende il posto
+        # di un'attesa di assestamento fissa.
         if self._diverso(sbirciata, precedente) >= self.soglia_fermo:
             self._diverse = self._uguali = 0
             return self.presente
@@ -584,8 +578,8 @@ class PresenzaOttica:
         # finché a cambiare è una striscia; ma una bottiglia larga cambia metà
         # fotogramma, le statistiche si spostano dietro di lei, e la
         # correzione va a riscalare anche lo sfondo che non è cambiato.
-        # Misurato: la maschera passava dal 13 % al 93 %, cioè da una sagoma a
-        # una macchia grande quanto il vetro.
+        # Misurato: con la normalizzazione la maschera passa dal 13 % al 93 %,
+        # cioè da una sagoma a una macchia grande quanto il vetro.
         #
         # Qui non serve: fra lo sfondo imparato e adesso la posa è la stessa e
         # la luce è quella di un attimo fa. E se davvero è cambiata, la
@@ -770,12 +764,13 @@ def imposta_posa(device: str, centesimi_di_ms: int) -> None:
 
 
 class Camera:
-    """Apre il device solo per il tempo dello scatto.
+    """La camera: stream acceso mentre si guarda, spento mentre si parla.
 
-    Tenere `/dev/video0` aperto non serve e costa: con il DisplayPort attivo il
-    link USB scende a 2.0 e camera e audio si dividono un solo bus. Chiudendo
-    lo stream prima di parlare, il problema della banda isocrona non si pone
-    proprio — e la pipeline è comunque sequenziale.
+    Con il DisplayPort attivo il link USB scende a 2.0 e camera e audio si
+    dividono un solo bus. Chiudendo lo stream prima di parlare (`chiudi`), il
+    problema della banda isocrona non si pone proprio — e la pipeline è
+    comunque sequenziale. Fra una sbirciata e l'altra, invece, lo stream resta
+    acceso: vedi `_apri` per il conto.
     """
 
     def __init__(self, impostazioni: ImpostazioniCamera | None = None) -> None:
@@ -825,11 +820,11 @@ class Camera:
         che ci mette il sensore a partire, e si paga una volta. Tenerlo acceso
         costa invece **0,9 % di CPU e nessun grado** — misurato con lo stream
         aperto dodici secondi senza leggere niente, e la temperatura non si è
-        mossa da 48 °C. Il timore era di caricare una board senza ventola; il
-        conto dice che caricava molto di più riaprire ogni volta.
+        mossa da 48 °C. Su una board senza ventola il timore sarebbe il carico;
+        il conto dice che carica molto di più riaprire ogni volta.
 
         Si spegne quando parla la voce (`chiudi`): lì la banda USB serve
-        all'audio, ed è la ragione per cui questo modulo apriva e chiudeva.
+        all'audio.
         """
         if self._cap is not None:
             return self._cap
@@ -879,8 +874,8 @@ class Camera:
         quando e' la POSA a fermare la camera, perche' ogni riaccensione la
         riapplica. Alla seconda lettura a vuoto di fila con una posa lunga si
         riparte dalla posa sicura: al buio si leggera' meno, ma si leggera', e
-        la regolazione risale da li' - fino al tetto, che adesso sta sotto la
-        soglia in cui questa camera si ferma.
+        la regolazione risale da li' - fino al tetto, che sta sotto la soglia in
+        cui questa camera si ferma (vedi `ImpostazioniCamera.posa_massima`).
         """
         self._vuoti += 1
         if self._vuoti >= 2 and self.imp.esposizione > self.imp.posa_sicura:
@@ -908,11 +903,11 @@ class Camera:
     def sorveglia(self) -> None:
         """Tiene lo stream in moto, perché scattare non costi niente.
 
-        Lo scatto costava settecento millesimi e li spendeva quasi tutti ad
-        aspettare: centocinquanta perché la luce si assestasse, tre fotogrammi
-        buttati per svuotare il buffer USB, la ricerca della posa, e infine i
-        tre della raffica. Novanta millesimi l'uno, e tutti dopo che la
-        bottiglia era già lì.
+        Uno scatto a camera ferma (`scatta`) costa settecento millesimi e li
+        spende quasi tutti ad aspettare: centocinquanta perché la luce si
+        assesti, tre fotogrammi buttati per svuotare il buffer USB, la ricerca
+        della posa, e infine i tre della raffica. Novanta millesimi l'uno, e
+        tutti dopo che la bottiglia è già lì.
 
         Con la camera già in moto non c'è niente da svuotare e niente da
         assestare: il fotogramma buono è quello che sta arrivando comunque, e
@@ -920,8 +915,8 @@ class Camera:
         millesimi, spesso zero.
 
         Costa tenere aperto uno stream che per lo più nessuno guarda. Il conto
-        era già stato fatto quando si è smesso di riaprire la camera a ogni
-        scatto: dodici secondi di stream aperto, temperatura ferma a 48 °C.
+        è in `_apri`: dodici secondi di stream aperto, temperatura ferma a
+        48 °C.
         """
         if self._guardiano is not None and self._guardiano.is_alive():
             return
@@ -1047,17 +1042,17 @@ class Camera:
 
         Si prende il primo fotogramma abbastanza nitido, e se non ne arriva
         nessuno si tiene il migliore visto. **È l'assestamento fatto
-        guardando**, al posto dei sei decimi di attesa fissa che c'erano prima:
-        una bottiglia appoggiata piano è ferma subito e non si aspetta niente,
-        una appoggiata di slancio oscilla e si aspetta lei — invece di
-        aspettare sempre, per il caso peggiore, anche quando non serve.
+        guardando**, al posto di un'attesa fissa: una bottiglia appoggiata
+        piano è ferma subito e non si aspetta niente, una appoggiata di slancio
+        oscilla e si aspetta lei — invece di aspettare sempre, per il caso
+        peggiore, anche quando non serve.
 
         L'attesa è un tetto, non un costo: ci si ferma al primo fotogramma
-        nitido, e una bottiglia appoggiata da una mano ferma lo dà subito. Era
-        un quarto di secondo, due o tre fotogrammi, ed è bastato finché le
-        bottiglie si posavano. Una serale si teneva in mano davanti
-        alla camera, e in un quarto di secondo non arrivava nessun fotogramma
-        fermo: si leggeva il migliore dei mossi, «ASTI» grande come mezza
+        nitido, e una bottiglia appoggiata da una mano ferma lo dà subito. Un
+        secondo e non un quarto: un quarto di secondo, due o tre fotogrammi,
+        basta per le bottiglie posate, non per quelle tenute in mano davanti
+        alla camera. Lì in un quarto di secondo non arriva nessun fotogramma
+        fermo, e si legge il migliore dei mossi: «ASTI» grande come mezza
         etichetta e nemmeno una riga trovata. In un secondo i fotogrammi sono
         dieci, e fra dieci uno fermo c'è quasi sempre. Il prezzo si paga solo
         quando la scena non arriva mai a fuoco - davanti a un piatto vuoto la
@@ -1079,8 +1074,8 @@ class Camera:
             ritaglio = frame[posto[1]:posto[3], posto[0]:posto[2]]
             # La nitidezza si misura sul RITAGLIO e non sul fotogramma intero:
             # costa meno, e dice quello che conta davvero, cioè se è a fuoco
-            # dove si legge. Una stanza nitida dietro una bottiglia mossa
-            # faceva un numero alto e una lettura vuota.
+            # dove si legge. Sul fotogramma intero, una stanza nitida dietro
+            # una bottiglia mossa fa un numero alto e una lettura vuota.
             n = nitidezza(ritaglio)
             viste.append(n)
             if migliore is None or n > migliore.nitidezza:
@@ -1098,12 +1093,11 @@ class Camera:
     def fascia(self, frame) -> np.ndarray:
         """Il fotogramma INTERO, in grigio e piccolo.
 
-        Si chiamava cosi' perche' restituiva solo la striscia centrale, e per
-        decidere se c'e' una bottiglia quella basta. Adesso restituisce tutto,
-        e la striscia se la ritaglia chi decide: perche' la stessa immagine
-        serve a una seconda cosa - capire DOVE sta la bottiglia, per dare
-        all'OCR il suo riquadro invece di un riquadro fisso. Vedi
-        `PresenzaOttica.riquadro`.
+        Non solo la striscia centrale, anche se per decidere se c'e' una
+        bottiglia quella basta: la striscia se la ritaglia chi decide, perche'
+        la stessa immagine serve a una seconda cosa - capire DOVE sta la
+        bottiglia, per dare all'OCR il suo riquadro invece di un riquadro
+        fisso. Vedi `PresenzaOttica.riquadro`.
 
         Il fotogramma arriva gia' in piedi: raddrizzarlo e' compito di chi lo
         legge dal device, una volta sola. Vedi `_fotogramma`.
@@ -1212,14 +1206,14 @@ class Camera:
 
         Il driver applica la posa nuova con qualche fotogramma di ritardo —
         misurato: tre, nei due versi, su uno stream letto senza pause. Contarli
-        non basta, e nel servizio, dove lo stream sta fermo fra una sbirciata e
-        l'altra, il fotogramma dopo i tre scarti tornava ancora con la posa
-        vecchia: la ricerca rimisurava, correggeva una seconda volta nello
-        stesso verso, e finiva contro il tetto **qualunque fosse la luce** —
-        sembrando pure funzionare, perché al buio il tetto è la risposta
-        giusta.
+        non basta: nel servizio, dove lo stream sta fermo fra una sbirciata e
+        l'altra, il fotogramma dopo i tre scarti può tornare ancora con la posa
+        vecchia. Senza aspettare, la ricerca rimisura, corregge una seconda
+        volta nello stesso verso, e finisce contro il tetto **qualunque sia la
+        luce** — e sembra pure funzionare, perché al buio il tetto è la
+        risposta giusta.
 
-        Aspettare che la luce *cominci* a muoversi non bastava neanche: il
+        Aspettare che la luce *cominci* a muoversi non basta neanche: il
         primo fotogramma diverso può essere ancora a metà strada, e una misura
         presa a metà strada porta la correzione successiva ancora più in là.
         Si aspetta che due fotogrammi di fila dicano la stessa cosa.
@@ -1260,7 +1254,7 @@ class Camera:
     def posto(self, frame) -> tuple[int, int, int, int]:
         """Dove sta il ritaglio nel fotogramma: (x0, y0, x1, y1) in pixel.
 
-        Una funzione sola per tre clienti - il ritaglio, il mirino che lo
+        Una funzione sola per tre chiamanti - il ritaglio, il mirino che lo
         disegna e la rilettura che lo allarga - perche' tre copie dello stesso
         conto finiscono per non essere piu' lo stesso conto.
 
@@ -1283,12 +1277,12 @@ class Camera:
     def _cerca_la_posa(self, cap) -> float:
         """Regola il tempo di posa sulla luce che c'è davvero, ora, qui.
 
-        La posa fissa era la scelta giusta e resta giusta: con
-        l'auto-esposizione servono 500-800 ms di assestamento dopo ogni cambio
-        di luce e i risultati non sono ripetibili. Ma «fissa» voleva dire fissa
-        alla stanza in cui si è misurata, e il dispositivo va in una sala che
-        la sera abbassa le luci. Misurato al buio con l'anello bianco, a posa
-        900 l'OCR non leggeva **niente**; a 3000 leggeva la denominazione.
+        La posa non è automatica: con l'auto-esposizione servono 500-800 ms di
+        assestamento dopo ogni cambio di luce e i risultati non sono
+        ripetibili. Ma una posa fissa è fissa alla stanza in cui si è misurata,
+        e il dispositivo va in una sala che la sera abbassa le luci. Misurato
+        al buio con l'anello bianco, a posa 900 l'OCR non legge **niente**; a
+        3000 legge la denominazione.
 
         Quindi la posa resta manuale — si sa sempre qual è e non cambia durante
         la raffica — ma si sceglie guardando: un fotogramma, la sua luce media,
@@ -1340,9 +1334,9 @@ class Camera:
                 if cap.grab():
                     scartati += 1
             # PRIMA si buttano i fotogrammi vecchi, POI si misura la luce. Al
-            # contrario, la prima misura cadeva su un fotogramma catturato
-            # mentre l'anello era ancora spento, e la posa partiva da un buio
-            # che non c'era.
+            # contrario, la prima misura cadrebbe su un fotogramma catturato
+            # mentre l'anello era ancora spento, e la posa partirebbe da un
+            # buio che non c'è.
             self._cerca_la_posa(cap)
 
             migliore: np.ndarray | None = None
