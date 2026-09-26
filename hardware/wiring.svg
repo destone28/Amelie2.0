@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" font-family="Helvetica, Arial, sans-serif">
+  <title>Amelie 2.0 — wiring diagram</title>
+  <defs>
+    <marker id="freccia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="context-stroke"/>
+    </marker>
+    <style>
+      .scatola { fill: #ffffff; stroke: #2b2b2b; stroke-width: 2.5; }
+      .principale { fill: #e8f4f4; stroke: #008184; stroke-width: 3; }
+      .titolo { font-size: 26px; font-weight: 700; fill: #1d1d1d; }
+      .nome { font-size: 22px; font-weight: 700; fill: #1d1d1d; }
+      .nota { font-size: 16px; fill: #4a4a4a; }
+      .porta { font-size: 15px; fill: #2b2b2b; }
+      .cavo { fill: none; stroke-width: 4; marker-end: url(#freccia); }
+      .alimentazione { stroke: #d1342f; }
+      .usb { stroke: #1f6fd1; }
+      .hdmi { stroke: #7b3fb4; }
+      .audio { stroke: #2e9b48; }
+      .qwiic { stroke: #e0891a; }
+      .etichetta { font-size: 15px; fill: #2b2b2b; }
+      .sfondo-etichetta { fill: #ffffff; }
+    </style>
+  </defs>
+  <rect width="1600" height="1000" fill="#fafafa"/>
+  <text x="40" y="50" class="titolo">Amelie 2.0 — wiring</text>
+  <text x="40" y="78" class="nota">Everything plugs in: no soldering. Connect the two Modulino boards before powering on.</text>
+
+  <!-- Power bank -->
+  <rect x="40" y="140" width="300" height="120" rx="14" class="scatola"/>
+  <text x="60" y="180" class="nome">Power bank</text>
+  <text x="60" y="206" class="nota">Charmast 26,800 mAh</text>
+  <text x="60" y="232" class="porta">USB-A out · USB-C in/out</text>
+
+  <!-- Charging inlet -->
+  <rect x="40" y="340" width="300" height="100" rx="14" class="scatola"/>
+  <text x="60" y="380" class="nome">Rear charging inlet</text>
+  <text x="60" y="406" class="nota">USB-C extension, female to male</text>
+
+  <!-- Switch -->
+  <rect x="420" y="150" width="240" height="100" rx="14" class="scatola"/>
+  <text x="440" y="190" class="nome">On/off switch</text>
+  <text x="440" y="216" class="nota">inline USB cable</text>
+
+  <!-- Hub -->
+  <rect x="740" y="120" width="330" height="330" rx="16" class="scatola"/>
+  <text x="760" y="160" class="nome">USB-C hub</text>
+  <text x="760" y="186" class="nota">UGREEN Revodok 105</text>
+  <text x="760" y="230" class="porta">USB-C PD in</text>
+  <text x="760" y="270" class="porta">integrated USB-C cable</text>
+  <text x="760" y="310" class="porta">HDMI</text>
+  <text x="760" y="350" class="porta">USB-A 3.0</text>
+  <text x="760" y="385" class="porta">USB-A 2.0</text>
+  <text x="760" y="420" class="porta">USB-A 2.0</text>
+
+  <!-- UNO Q -->
+  <rect x="1160" y="120" width="400" height="200" rx="16" class="principale"/>
+  <text x="1180" y="162" class="nome">Arduino® UNO™ Q (4 GB)</text>
+  <text x="1180" y="190" class="nota">Linux + STM32 microcontroller</text>
+  <text x="1180" y="240" class="porta">USB-C (host mode)</text>
+  <text x="1180" y="290" class="porta">Qwiic connector (I²C)</text>
+
+  <!-- Modulino, right under the UNO Q -->
+  <rect x="1160" y="350" width="190" height="110" rx="16" class="scatola"/>
+  <text x="1176" y="388" class="nome">Modulino®</text>
+  <text x="1176" y="412" class="nome">Pixels</text>
+  <text x="1176" y="440" class="nota">I²C 0x36 · 8 RGB LEDs</text>
+  <rect x="1370" y="350" width="190" height="110" rx="16" class="scatola"/>
+  <text x="1386" y="388" class="nome">Modulino®</text>
+  <text x="1386" y="412" class="nome">Distance</text>
+  <text x="1386" y="440" class="nota">I²C 0x29 · bottle</text>
+
+  <!-- Display -->
+  <rect x="1160" y="520" width="400" height="180" rx="16" class="scatola"/>
+  <text x="1180" y="560" class="nome">5" HDMI touchscreen</text>
+  <text x="1180" y="586" class="nota">800×480, driven at 1280×720</text>
+  <text x="1180" y="620" class="porta">HDMI in</text>
+  <text x="1180" y="652" class="porta">micro-USB: touch + power</text>
+  <text x="1180" y="684" class="porta">audio out</text>
+
+  <!-- Speakers -->
+  <rect x="1160" y="790" width="400" height="110" rx="16" class="scatola"/>
+  <text x="1180" y="832" class="nome">2 × speakers</text>
+  <text x="1180" y="858" class="nota">audio from the display</text>
+
+  <!-- Camera -->
+  <rect x="740" y="560" width="330" height="120" rx="16" class="scatola"/>
+  <text x="760" y="600" class="nome">USB camera</text>
+  <text x="760" y="626" class="nota">InnoMaker U20CAM 1080p, M12 lens</text>
+  <text x="760" y="652" class="nota">mounted rotated 90°</text>
+
+  <!-- Power: charger inlet → power bank -->
+  <path d="M190 340 V260" class="cavo alimentazione"/>
+  <!-- Power bank → switch → hub PD -->
+  <path d="M340 200 H420" class="cavo alimentazione"/>
+  <path d="M660 200 H740" class="cavo alimentazione"/>
+  <!-- Hub integrated USB-C → UNO Q -->
+  <path d="M1070 262 C1110 262 1120 232 1160 232" class="cavo usb"/>
+  <!-- Hub HDMI → display -->
+  <path d="M1070 302 C1100 302 1100 615 1160 615" class="cavo hdmi"/>
+  <!-- Hub USB-A → display micro-USB -->
+  <path d="M1070 380 C1115 380 1115 647 1160 647" class="cavo usb"/>
+  <!-- Hub USB-A → camera -->
+  <path d="M905 450 V560" class="cavo usb"/>
+  <!-- Hub USB-A → speakers power -->
+  <path d="M1070 415 C1135 415 1105 845 1160 845" class="cavo alimentazione"/>
+  <!-- Display audio → speakers -->
+  <path d="M1360 700 V790" class="cavo audio"/>
+  <!-- UNO Q Qwiic → Pixels → Distance -->
+  <path d="M1255 320 V350" class="cavo qwiic"/>
+  <path d="M1350 405 H1370" class="cavo qwiic"/>
+
+  <!-- Legend -->
+  <rect x="40" y="560" width="600" height="300" rx="14" fill="#ffffff" stroke="#c8c8c8" stroke-width="1.5"/>
+  <text x="60" y="600" class="nome">Cables</text>
+  <line x1="60" y1="636" x2="130" y2="636" stroke="#d1342f" stroke-width="5"/><text x="145" y="641" class="etichetta">Power (USB)</text>
+  <line x1="60" y1="676" x2="130" y2="676" stroke="#1f6fd1" stroke-width="5"/><text x="145" y="681" class="etichetta">USB data</text>
+  <line x1="60" y1="716" x2="130" y2="716" stroke="#7b3fb4" stroke-width="5"/><text x="145" y="721" class="etichetta">HDMI (video and audio)</text>
+  <line x1="60" y1="756" x2="130" y2="756" stroke="#2e9b48" stroke-width="5"/><text x="145" y="761" class="etichetta">Audio</text>
+  <line x1="60" y1="796" x2="130" y2="796" stroke="#e0891a" stroke-width="5"/><text x="145" y="801" class="etichetta">Qwiic (I²C), daisy-chained, any order</text>
+  <text x="60" y="840" class="nota">Sound leaves the UNO Q over HDMI and comes out of the display.</text>
+</svg>
