@@ -184,7 +184,7 @@ Every test and what to do when it fails are in [docs/en/04-testing.md](https://g
 
 ## Using Amelie
 
-For guests there is nothing to learn. Place the bottle on the plate with the label turned towards the screen, and listen. The controls under the text start over, go back, pause or skip ahead. The cross at the bottom left stops the story. The flags at the top right change language, and the speaker at the top left changes the volume. When the bottle is lifted, Amelie goes back to its home language, ready for the next table.
+For guests there is nothing to learn. Place the bottle on the plate with the label turned towards the screen, and listen. The controls under the text start over, go back, pause or skip ahead. The cross at the bottom left stops the story. The flags at the top right change language, and the speaker at the top left changes the volume. When the story is over and the bottle is taken away, Amelie goes back to its home language, ready for the next table.
 
 For staff, the settings open by holding a finger on the bottom-right corner of the screen for three seconds. They contain:
 

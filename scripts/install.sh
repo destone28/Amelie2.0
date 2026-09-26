@@ -51,8 +51,10 @@ LIBERI=$(df --output=avail -BG "$HOME" | tail -1 | tr -dc 0-9)
 echo "    utente arduino, $CASA, in rete, ${LIBERI} GB liberi"
 
 # Una sola password per tutta l'installazione: la compilazione di llama.cpp
-# dura piu' dei quindici minuti per cui sudo la ricorda.
-sudo -v
+# dura piu' dei quindici minuti per cui sudo la ricorda. `sudo -v` la chiede
+# anche a chi ha sudo senza password, se una qualunque regola la vuole: prima
+# si prova senza.
+sudo -n true 2>/dev/null || sudo -v || muori "serve la password di arduino per sudo"
 ( while kill -0 "$$" 2>/dev/null; do sudo -n true; sleep 50; done ) 2>/dev/null &
 
 cd "$RADICE"

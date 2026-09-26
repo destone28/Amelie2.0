@@ -38,13 +38,8 @@ The script asks once for the `arduino` user's password (for `sudo`) and then
 works on its own. It takes about an hour, almost all of it spent compiling
 llama.cpp and downloading the Python packages. If the SSH connection drops
 halfway, run the same command again: each step skips what is already done. To
-avoid depending on the connection you can run it inside `tmux` or `screen`, or
-like this:
-
-```bash
-nohup bash scripts/install.sh > ~/installazione.log 2>&1 &
-tail -f ~/installazione.log
-```
+avoid depending on the connection, run it inside `tmux` (`sudo apt install
+tmux`, then `tmux`; if the connection drops, get back in with `tmux attach`).
 
 Two optional variables:
 

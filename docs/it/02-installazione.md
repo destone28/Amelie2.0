@@ -38,12 +38,8 @@ Lo script chiede una volta la password dell'utente `arduino` (per `sudo`) e poi
 lavora da solo. Ci vuole circa un'ora, quasi tutta per compilare llama.cpp e
 scaricare i pacchetti Python. Se la connessione SSH cade a metà, rilancia lo
 stesso comando: ogni passo salta ciò che è già fatto. Per non dipendere dalla
-connessione puoi lanciarlo dentro `tmux` o `screen`, oppure così:
-
-```bash
-nohup bash scripts/install.sh > ~/installazione.log 2>&1 &
-tail -f ~/installazione.log
-```
+connessione, lancialo dentro `tmux` (`sudo apt install tmux`, poi `tmux`; se la
+connessione cade, ci si rientra con `tmux attach`).
 
 Due variabili facoltative:
 

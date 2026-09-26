@@ -184,7 +184,7 @@ Ogni prova, e che cosa fare quando fallisce, è in [docs/it/04-collaudo.md](http
 
 ## Usare Amelie
 
-Per gli ospiti non c'è niente da imparare. Si posa la bottiglia sul piatto con l'etichetta rivolta verso lo schermo, e si ascolta. I comandi sotto il testo ricominciano da capo, tornano indietro, mettono in pausa o vanno avanti. La croce in basso a sinistra ferma il racconto. Le bandiere in alto a destra cambiano lingua, e l'altoparlante in alto a sinistra cambia il volume. Quando la bottiglia viene sollevata, Amelie torna alla lingua di casa, pronta per il tavolo successivo.
+Per gli ospiti non c'è niente da imparare. Si posa la bottiglia sul piatto con l'etichetta rivolta verso lo schermo, e si ascolta. I comandi sotto il testo ricominciano da capo, tornano indietro, mettono in pausa o vanno avanti. La croce in basso a sinistra ferma il racconto. Le bandiere in alto a destra cambiano lingua, e l'altoparlante in alto a sinistra cambia il volume. Quando il racconto è finito e la bottiglia viene tolta, Amelie torna alla lingua di casa, pronta per il tavolo successivo.
 
 Per il personale, le impostazioni si aprono tenendo il dito sull'angolo in basso a destra dello schermo per tre secondi. Contengono:
 
