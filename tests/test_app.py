@@ -1065,6 +1065,9 @@ class TestFirmwareEPythonDAccordo:
         from amelie.bridge import PROTOCOLLO_ATTESO
         assert corpo["protocollo"] == PROTOCOLLO_ATTESO
         assert corpo["moduli"] == {"anello": True, "distanza": True}
+        # Senza camera non si finge nessun fotogramma: la diagnostica lo legge.
+        assert corpo["camera"] is False
+        assert corpo["fotogramma_s"] is None
 
     def test_la_versione_del_protocollo_e_la_stessa_nei_due_linguaggi(self):
         """È il numero che impedisce di leggere a rovescio i bit di un MCU non

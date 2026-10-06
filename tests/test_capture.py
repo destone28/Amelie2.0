@@ -411,6 +411,51 @@ class TestLaPosaSiCerca:
         assert c._cerca_la_posa(Muta()) == 0.0
 
 
+class TestLaCameraDiceSeFunziona:
+    """`/stato` deve dire se la camera da' fotogrammi, non solo se il servizio
+    ne ha una: la seconda cosa resta vera anche col cavo staccato."""
+
+    class Viva:
+        def read(self):
+            return True, np.zeros((100, 200, 3), dtype=np.uint8)
+
+        def release(self):
+            pass
+
+    class Muta(Viva):
+        def read(self):
+            return False, None
+
+    @staticmethod
+    def camera(stream):
+        from amelie.capture import Camera
+
+        c = Camera(ImpostazioniCamera())
+        c._percorso = "/dev/finto"
+        c._cap = stream
+        return c
+
+    def test_un_fotogramma_letto_si_ricorda(self):
+        c = self.camera(self.Viva())
+        assert c.ultimo_fotogramma is None
+        assert c._fotogramma(bloccante=True) is not None
+        assert c.ultimo_fotogramma is not None
+
+    def test_una_lettura_a_vuoto_non_conta(self):
+        c = self.camera(self.Muta())
+        assert c._fotogramma(bloccante=True) is None
+        assert c.ultimo_fotogramma is None
+
+    def test_spegnere_lo_stream_non_lo_dimentica(self):
+        """Durante il racconto lo stream si spegne apposta, e non e' un guasto:
+        l'ultimo fotogramma visto resta."""
+        c = self.camera(self.Viva())
+        c._fotogramma(bloccante=True)
+        visto = c.ultimo_fotogramma
+        c.chiudi()
+        assert c.ultimo_fotogramma == visto
+
+
 class TestLoSfondoSiRicorda:
     """Il piatto vuoto è una proprietà dell'installazione, non del processo."""
 

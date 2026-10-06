@@ -57,6 +57,7 @@ Le voci più frequenti, e che cosa fare:
 | «… non abilitato (…): rilancia scripts/install.sh», «manca …: rilancia scripts/install.sh» | rilancia `bash scripts/install.sh` |
 | «il microcontrollore non risponde: …» | il router è fermo o il firmware non è caricato. Se la sezione 8 dice «arduino-router fermo», `sudo systemctl restart arduino-router`; altrimenti ricarica il firmware, `rm -f var/firmware/.caricato && bash scripts/install.sh`, poi spegni e riaccendi con l'interruttore |
 | «voce non caricata: il racconto si leggera' soltanto» | mancano le voci: rilancia `bash scripts/install.sh` |
+| «la camera non ha mai dato un fotogramma all'applicazione: …», «la camera non da' fotogrammi da … s: …» | l'applicazione non riceve immagini dalla camera: controlla il cavo USB della camera e la sua presa sull'hub, poi `sudo systemctl restart amelie` |
 | «nessuna camera USB: controlla il cavo della camera» | il cavo USB della camera non arriva all'hub |
 
 Per schermo, touch, audio e Modulino, le sezioni qui sotto.

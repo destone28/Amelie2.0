@@ -113,7 +113,21 @@ else
     else
         bad "il microcontrollore non risponde: firmware non caricato o router fermo (systemctl status arduino-router)"
     fi
-    [ "$(campo camera)" = True ] && ok "camera in uso dall'applicazione" || bad "l'applicazione non ha la camera"
+    # `camera` e' vero anche col cavo staccato: se la camera funziona lo dice
+    # `fotogramma_s`, i secondi dall'ultimo fotogramma. A riposo il guardiano ne
+    # prende undici al secondo; durante il racconto la camera e' spenta.
+    FOTO=$(campo fotogramma_s)
+    if [ "$(campo camera)" != True ]; then
+        bad "l'applicazione gira senza camera (--senza-camera)"
+    elif [ "$FOTO" = None ]; then
+        bad "la camera non ha mai dato un fotogramma all'applicazione: cavo della camera, poi sudo systemctl restart amelie"
+    elif [ "$(campo stato)" != attesa ]; then
+        info "ultimo fotogramma della camera $FOTO s fa (fuori dall'attesa la camera puo' essere spenta)"
+    elif awk -v s="$FOTO" 'BEGIN { exit !(s <= 5) }'; then
+        ok "la camera da' fotogrammi all'applicazione"
+    else
+        bad "la camera non da' fotogrammi da $FOTO s: cavo della camera, poi sudo systemctl restart amelie"
+    fi
     [ "$(campo voce)" = True ] && ok "voce caricata" || bad "voce non caricata: il racconto si leggera' soltanto"
 fi
 

@@ -779,6 +779,11 @@ class Camera:
         self._da_guardare = 1
         # Letture di fila senza fotogramma. Vedi `_a_vuoto`.
         self._vuoti = 0
+        # Quando la camera ha dato l'ultimo fotogramma, per qualunque strada:
+        # guardiano, mirino o scatto. A differenza di `_recente` non si azzera
+        # quando lo stream si spegne: non dice se la camera e' accesa adesso,
+        # dice se funziona. Lo legge `/stato`.
+        self.ultimo_fotogramma: float | None = None
 
     @property
     def percorso(self) -> str:
@@ -961,6 +966,7 @@ class Camera:
                 continue
             self._vuoti = 0
             self._recente = (time.monotonic(), frame)
+            self.ultimo_fotogramma = self._recente[0]
             self._ritocca_la_posa(frame)
 
     def _ritocca_la_posa(self, frame) -> None:
@@ -1127,6 +1133,7 @@ class Camera:
                 self._spegni()
                 return None
             self._vuoti = 0
+            self.ultimo_fotogramma = time.monotonic()
             return self._raddrizza(frame)
         except CameraNonDisponibile as e:
             log.warning("camera non disponibile: %s", e)
@@ -1342,6 +1349,7 @@ class Camera:
                 raise CameraNonDisponibile(
                     f"nessun fotogramma letto da {self.percorso}"
                 )
+            self.ultimo_fotogramma = time.monotonic()
 
         # Prima si raddrizza, poi si ritaglia: il ritaglio si misura sul
         # fotogramma in piedi, e su un'immagine coricata terrebbe la fascia

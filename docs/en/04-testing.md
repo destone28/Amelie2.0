@@ -58,6 +58,7 @@ The most common items, and what to do:
 | "… non abilitato (…): rilancia scripts/install.sh", "manca …: rilancia scripts/install.sh" (not enabled, or missing: run scripts/install.sh again) | run `bash scripts/install.sh` again |
 | "il microcontrollore non risponde: …" (the microcontroller does not respond) | the router is stopped or the firmware is not uploaded. If section 8 says "arduino-router fermo" (arduino-router stopped), `sudo systemctl restart arduino-router`; otherwise upload the firmware again, `rm -f var/firmware/.caricato && bash scripts/install.sh`, then switch off and on with the power switch |
 | "voce non caricata: il racconto si leggera' soltanto" (voice not loaded: the story will only be read) | the voices are missing: run `bash scripts/install.sh` again |
+| "la camera non ha mai dato un fotogramma all'applicazione: …", "la camera non da' fotogrammi da … s: …" (the camera has never delivered a frame to the application; the camera has delivered no frames for … s) | the application receives no images from the camera: check the camera's USB cable and its socket on the hub, then `sudo systemctl restart amelie` |
 | "nessuna camera USB: controlla il cavo della camera" (no USB camera: check the camera cable) | the camera's USB cable does not reach the hub |
 
 For the screen, touch, audio and Modulino boards, see the sections below.

@@ -433,7 +433,7 @@ I campi più utili:
 |---|---|
 | `stato` | lo stato del dispositivo (vedi sotto) |
 | `mcu`, `protocollo`, `moduli` | se il microcontrollore risponde con il firmware di Amelie, con quale versione del protocollo (quella attesa è 2), e se vede la luce (`anello`) e il sensore di distanza (`distanza`) |
-| `camera`, `posa` | se il servizio usa la camera, e l'esposizione in uso |
+| `camera`, `fotogramma_s`, `posa` | se il servizio usa la camera; da quanti secondi la camera non dà un fotogramma (a riposo meno di un secondo, `null` se non ne ha mai dato uno; durante il racconto la camera è spenta e il numero cresce); l'esposizione in uso |
 | `bottiglia` | se il sensore di distanza vede una bottiglia |
 | `differenza`, `soglia` | quanto il piatto, visto dalla camera, differisce da quello vuoto, in percentuale, e la soglia oltre la quale la camera ci vede qualcosa |
 | `voce`, `volume`, `pronta` | se c'è il modello della voce in uso, il volume, se il dispositivo ha finito di prepararsi |

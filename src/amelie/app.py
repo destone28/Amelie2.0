@@ -3092,6 +3092,16 @@ def crea_app(amelie: Amelie):
             # questa pagina si guarda quando qualcosa non risponde.
             **amelie.ponte.diagnosi(),
             "camera": amelie.camera is not None,
+            # `camera` dice solo che il servizio ne ha una, e lo dice anche col
+            # cavo staccato. Questo dice se funziona: da quanti secondi non da'
+            # un fotogramma, `None` se non ne ha mai dato uno. A riposo il
+            # guardiano ne prende undici al secondo; durante il racconto lo
+            # stream e' spento apposta, e il numero cresce senza che sia un
+            # guasto.
+            "fotogramma_s": (
+                round(time.monotonic() - amelie.camera.ultimo_fotogramma, 1)
+                if amelie.camera is not None
+                and amelie.camera.ultimo_fotogramma is not None else None),
             # Il piatto: se il sensore vede una bottiglia, e come lo vede la
             # camera. Sono i tre numeri con cui si verifica il riconoscimento
             # della bottiglia SENZA smontare niente: a piatto vuoto `differenza`

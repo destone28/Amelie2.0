@@ -440,7 +440,7 @@ The most useful fields:
 |---|---|
 | `stato` | the state of the device (see below) |
 | `mcu`, `protocollo`, `moduli` | whether the microcontroller responds with the Amelie firmware, which protocol version it speaks (the expected one is 2), and whether it sees the light (`anello`) and the distance sensor (`distanza`) |
-| `camera`, `posa` | whether the service uses the camera, and the exposure in use |
+| `camera`, `fotogramma_s`, `posa` | whether the service uses the camera; how many seconds have passed since the camera last delivered a frame (under a second at rest, `null` if it has never delivered one; during the story the camera is off and the number grows); the exposure in use |
 | `bottiglia` | whether the distance sensor sees a bottle |
 | `differenza`, `soglia` | how much the plate, as seen by the camera, differs from the empty plate, as a percentage, and the threshold beyond which the camera sees something on it |
 | `voce`, `volume`, `pronta` | whether the model of the voice in use is there, the volume, whether the device has finished getting ready |
