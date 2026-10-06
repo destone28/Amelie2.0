@@ -200,12 +200,12 @@ svg { display: block; }
 
    Il simbolo e' un calice, non una goccia: da sola, sul fondo scuro, una
    goccia rossa fa pensare al sangue prima che al vino. Il calice non lascia
-   dubbi: la coppa a
-   tulipano, il vino fino al punto piu' largo, dove lo si versa davvero, e un
-   riflesso. E' lo stesso calice di tutta l'interfaccia - l'icona del
-   racconto, la lettura, la scrittura, l'avvio - disegnato una volta in un
-   riquadro di 120x170 e cambiato solo di misura; la coppa che ritaglia il
-   vino e la sfumatura del vino stanno una volta sola, in `.definizioni`.
+   dubbi: la coppa a tulipano, il vino fino al punto piu' largo, dove lo si
+   versa davvero, e un riflesso. E' lo stesso calice di tutta l'interfaccia -
+   l'icona del racconto, la lettura, la scrittura, l'avvio - disegnato una
+   volta in un riquadro di 120x170 e cambiato solo di misura; la coppa che
+   ritaglia il vino e la sfumatura del vino stanno una volta sola, in
+   `.definizioni`.
 
    Il nome non e' TESTO: e' disegnato a tracciati, ricavati dal carattere (EB
    Garamond a peso 440). Cosi' e' identico qui, nella schermata d'avvio - che
@@ -287,9 +287,9 @@ svg { display: block; }
 
    Una bottiglia si inclina e versa in un calice, che si riempie; poi si
    raddrizza, il vino sfuma e si ricomincia. Niente gocce che cadono da sole:
-   sul fondo scuro, una goccia rossa sembrerebbe sangue. Lo stesso
-   ciclo e la stessa curva per tutto cio' che aspetta: la lettura qui, la
-   scrittura col suo calicino, l'avvio col calice del marchio.
+   sul fondo scuro, una goccia rossa sembrerebbe sangue. Lo stesso ciclo e la
+   stessa curva per tutto cio' che aspetta: la lettura qui, la scrittura col
+   suo calicino, l'avvio col calice del marchio.
 
    Deve reggere sia sei decimi di secondo sia venticinque senza diventare
    irritante: il ciclo e' lento e senza rimbalzi. Si muove solo per
@@ -1654,8 +1654,8 @@ rendiToccabile($("v-apri"), alternaVolume);
 /* Rotta a se', non un'azione del racconto: `comanda()` parla con
    `/racconto/<azione>`, e quella rotta non fa NIENTE quando non c'e' un
    riproduttore acceso - cioe' nei secondi dopo la fine, e quando la lingua
-   non ha voce. Il pulsante sarebbe
-   morto proprio nei casi in cui serve di piu'. */
+   non ha voce. Il pulsante sarebbe morto proprio nei casi in cui serve di
+   piu'. */
 rendiToccabile($("annulla"), () => fetch("/annulla", { method: "POST" }).catch(() => {}));
 
 
@@ -2077,8 +2077,7 @@ function aggiornaLettura() {
         e.innerHTML = "<p class=fioco>" + sicuro(d.stato) + "</p>";
         return;
       }
-      const cl = d.livello === "certo" ? "certo"
-               : d.livello === "dubbio" ? "dubbio" : "nulla";
+      const cl = d.fascia || "nulla";
       e.innerHTML =
         "<h3>" + sicuro(p.legge || "Cosa legge") + " · " + d.durata + " s</h3>" +
         (d.righe.length

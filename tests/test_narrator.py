@@ -78,9 +78,9 @@ class TestVerifica:
 class TestColoreContraddetto:
     """L'errore piu' visibile, e quello che un modello piccolo fa piu' spesso.
 
-    Un caso vero, dalla pre-generazione: il modello scrive che la Falanghina -
-    vitigno a bacca BIANCA - e' «un vino rosso di campagna con tannicita'
-    bassa». Non e' un'imprecisione: e' falso, e un sommelier lo coglie subito.
+    Un caso vero: il modello scrive che la Falanghina - vitigno a bacca
+    BIANCA - e' «un vino rosso di campagna con tannicita' bassa». Non e'
+    un'imprecisione: e' falso, e un sommelier lo coglie subito.
     """
 
     @pytest.fixture
@@ -957,9 +957,10 @@ class TestUnTestoTroncoSiChiudeSullaFraseIntera:
 
 
 class TestAncheLaCacheSiVerifica:
-    """La cache l'ha scritta lo stesso modello, in anticipo: un testo come
-    «Borgognone, ovunque nel mondo» su un Franciacorta ne uscirebbe senza che
-    nessuno l'abbia mai riletto."""
+    """Un racconto pronto si verifica come un testo del modello, chiunque
+    l'abbia scritto: la tabella `racconto` puo' contenere righe che non
+    vengono dal template, e un testo come «Borgognone, ovunque nel mondo» su
+    un Franciacorta ne uscirebbe senza che nessuno l'abbia mai riletto."""
 
     def test_un_testo_pronto_che_inventa_si_salta(self, tmp_path, monkeypatch):
         import sqlite3
@@ -1088,8 +1089,9 @@ class TestIlRaccontoCompostoDaiFatti:
 
 
 class TestInArchivioIlModelloNonParlaMai:
-    """La garanzia vale solo se non ha eccezioni: in modo «archivio» ne' il
-    modello dal vivo ne' la cache, che e' lo stesso modello un giorno prima."""
+    """La garanzia vale solo se non ha eccezioni: in modo «archivio» non
+    parlano ne' il modello dal vivo ne' la cache, che puo' contenere testi
+    scritti da un modello. Il racconto si compone sempre al momento."""
 
     def test_in_archivio_la_cache_non_si_legge(self, tmp_path):
         import sqlite3
@@ -1546,7 +1548,8 @@ class TestIlColoreNonSiBeve:
 
     Il modello ha tre citazioni - colore, odore, sapore - e ogni tanto mette
     quella del colore nel giro di frase del gusto. Le parole sono vere, il
-    posto no. Sui racconti salvati dei due modelli succede nel 3-9% dei testi.
+    posto no. Sui racconti scritti dal modello e salvati succede nel 3-9% dei
+    testi.
     """
 
     def _fatti(self, **kw):
@@ -1716,3 +1719,22 @@ def test_un_racconto_pronto_che_nomina_un_uva_finta_si_salta(matcher, tmp_path):
         assert n._dalla_cache(f, solo_esatto=True) is None
     finally:
         n.chiudi()
+
+
+def test_un_dosaggio_letto_da_solo_non_si_racconta_come_un_vino(matcher):
+    """Dall'etichetta esce solo «Brut»: non c'e' un tipo di vino da dire, e
+    l'apertura chiede di girare l'etichetta. Dirle dietro che la bottiglia non
+    e' in archivio contraddirebbe la richiesta."""
+    from amelie.lessico import carica
+    from amelie.narrator import Narratore
+    lex = carica()
+    f = matcher.cerca(["Brut"])
+    for lingua in ("it", "en"):
+        n = Narratore()
+        n.lingua = lingua
+        try:
+            testo = n.racconta(f).testo
+        finally:
+            n.chiudi()
+        assert lex.frase("apertura", "illeggibile", lingua=lingua) in testo
+        assert "archivio" not in testo and "archive" not in testo, testo

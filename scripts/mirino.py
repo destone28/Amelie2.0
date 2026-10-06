@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Il mirino: la camera della board, in diretta sul PC, con quello che legge.
 
-    ssh arduino@amelie.local 'sudo systemctl stop amelie'
+    ssh -t arduino@amelie.local 'sudo systemctl stop amelie'
     ssh arduino@amelie.local 'cd ~/amelie && PYTHONPATH=src ./venv/bin/python scripts/mirino.py'
     # poi dal PC, nel browser:  http://<indirizzo-della-board>:8090/
 
@@ -28,8 +28,8 @@ basta: mostra le **tre cose che decidono se l'etichetta verrà letta**.
    `amelie.capture` usa per scegliere il fotogramma migliore della raffica, ed è
    calcolata **sul ritaglio**, non sull'intera immagine — altrimenti misurerebbe
    la messa a fuoco di cose che l'OCR non vedrà mai. Sopra la soglia il numero è
-   verde. La messa a fuoco è fissa: la si aggiusta spostando la camera, e questo
-   numero dice quando si è arrivati.
+   verde. La messa a fuoco si regola ruotando l'obiettivo M12 nel suo supporto, e
+   questo numero dice quando si è arrivati.
 
 3. LA LUCE. Con `--luce` l'anello va a bianco come durante la raffica vera, così
    si inquadra con la luce che ci sarà davvero, non con quella della stanza.
@@ -84,7 +84,7 @@ PAGINA = """<!doctype html><html lang="it"><head><meta charset="utf-8">
  <h2>Come si legge</h2>
  <p>Il rettangolo è la parte che va all'OCR: fuori di lì non viene mai letto
  niente. Il numero è la <b>nitidezza</b> misurata dentro al rettangolo, verde
- sopra la soglia. La messa a fuoco è fissa: si aggiusta spostando la camera.</p>
+ sopra la soglia. La messa a fuoco si regola ruotando l'obiettivo M12.</p>
  <div id="lettura"></div>
 </aside>
 <script>
@@ -93,8 +93,7 @@ async function aggiorna() {
     const d = await (await fetch("/lettura", {cache: "no-store"})).json();
     const e = document.getElementById("lettura");
     if (d.stato !== "letto") { e.innerHTML = "<h2>OCR</h2><p>" + d.stato + "</p>"; return; }
-    const cl = d.livello === "certo" ? "certo"
-             : d.livello === "dubbio" ? "dubbio" : "nulla";
+    const cl = d.fascia || "nulla";
     e.innerHTML =
       "<h2>Cosa legge (" + d.durata + " s)</h2>" +
       (d.righe.length ? "<ul>" + d.righe.map(r =>

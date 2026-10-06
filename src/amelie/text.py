@@ -56,8 +56,9 @@ def spoglia_accenti(s: str) -> str:
 # archivio chiama `normalizza` cinquecentoventi volte, quasi sempre sulle
 # stesse stringhe - i nomi dei candidati, ripassati a ogni livello della
 # cascata - e senza memoria quelle cinquecentoventi chiamate costano
-# centoundici millesimi sui quattrocento della ricerca intera. La funzione e' pura e l'archivio non
-# cambia mentre il dispositivo e' acceso: ricordare e' lecito.
+# centoundici millesimi sui quattrocento della ricerca intera. La funzione e'
+# pura e l'archivio non cambia mentre il dispositivo e' acceso: ricordare e'
+# lecito.
 #
 # Il tetto tiene il ricordo largo quanto un archivio di candidati e non di
 # piu': oltre, si starebbe tenendo in memoria l'intero database per risparmiare

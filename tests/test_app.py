@@ -7,6 +7,7 @@ bottiglia vera.
 """
 
 import contextlib
+import re
 import threading
 import time
 from pathlib import Path
@@ -91,9 +92,10 @@ class TestLoZeroNonEUnaDistanza:
     Lo stato resta «misura buona» in tutti e due i casi. Per questo il firmware
     restituisce -1 per lo zero, che il ponte traduce in `None`.
 
-    La presenza della bottiglia la decide la camera — vedi `PresenzaOttica` —
-    ma `distanza_mm` la usa `scripts/bus.py`, per chi ha i cavetti in mano, e
-    uno zero preso per una distanza racconterebbe una bugia anche lì.
+    La presenza della bottiglia la decide il sensore: `Amelie._chi_c_e` passa
+    `distanza_mm` a `bridge.Presenza`. La stessa distanza la mostra
+    `scripts/bus.py --sensore` a chi ha i cavetti in mano, e uno zero preso
+    per una distanza racconterebbe una bugia anche lì.
     """
 
     def test_il_ponte_traduce_il_meno_uno(self):
@@ -590,8 +592,8 @@ class TestLingua:
         assert catturati[0]["aiuta"] is True
 
     def test_senza_niente_da_insegnare_si_torna_all_invito(self, amelie):
-        """Nessuna schermata «Puo' togliere la bottiglia»: senza il pulsante
-        per insegnarla, a tentativi finiti si torna subito all'invito."""
+        """Senza il pulsante per insegnarla, a tentativi finiti si torna subito
+        all'invito: chiedere di togliere la bottiglia non servirebbe a niente."""
         amelie.correzioni_attive = False
         catturati = []
         amelie._pubblica = lambda m: catturati.append(m)
@@ -1140,10 +1142,11 @@ class TestNienteFlashSeparato:
         radice = Path(__file__).resolve().parents[1]
         for leggimi in ("README.md", "README.it.md"):
             distinta = (radice / leggimi).read_text(encoding="utf-8")
-            pixels = [r for r in distinta.splitlines()
-                      if r.startswith("- ") and "Modulino Pixels" in r]
-            assert pixels == [r for r in pixels if r.startswith("- 1 × ")], leggimi
-            assert len(pixels) == 1, leggimi
+            # Le righe della distinta cominciano con la quantita': «- 1 × …».
+            distinta_pixels = [r for r in distinta.splitlines()
+                               if re.match(r"- \d+ × ", r) and "Modulino Pixels" in r]
+            assert len(distinta_pixels) == 1, leggimi
+            assert distinta_pixels[0].startswith("- 1 × "), leggimi
 
 
 class TestOgniEffettoHaUnEsecutore:
@@ -1266,7 +1269,7 @@ class TestLuceDelloScatto:
     def test_il_bianco_non_resta_acceso_durante_l_ocr(self):
         """Dopo la raffica c'è l'OCR, che dura quattro secondi.
 
-        Quattro secondi di bianco pieno sotto una bottiglia non sono una luce,
+        Quattro secondi di bianco pieno sulla bottiglia non sono una luce,
         sono un lampeggiante: l'ambra si rimette subito dopo lo scatto, non
         alla fine del metodo.
         """
@@ -1403,13 +1406,13 @@ class TestModuliVisti:
     def test_un_protocollo_diverso_non_viene_letto_a_rovescio(self):
         """Il guasto peggiore che si possa avere montando.
 
-        Nel protocollo 1 il bit 2 è un flash e il sensore sta sul bit 4. Letto
-        senza guardare la versione, un MCU col protocollo 1 direbbe «sensore
-        presente» col flash collegato, e «sensore assente» col sensore: il
-        montaggio è giusto e il dispositivo dice di no, in silenzio. Meglio
-        «non lo so» che una risposta rovesciata.
+        Un MCU che parla un'altra versione del protocollo da' ai bit un altro
+        significato. Letti senza guardare la versione, gli stessi bit
+        direbbero «sensore presente» con un altro modulo collegato, e «sensore
+        assente» col sensore: il montaggio è giusto e il dispositivo dice di
+        no, in silenzio. Meglio «non lo so» che una risposta rovesciata.
         """
-        # 0b011: nel protocollo 1 è anello + flash, sensore ASSENTE.
+        # 0b011 da un MCU che dichiara un protocollo diverso: non si interpreta.
         vecchio = self._ponte(0b011, versione=1)
         assert vecchio.moduli() == {"anello": False, "distanza": False}, \
             "i bit di un protocollo diverso non vanno interpretati"
@@ -1640,9 +1643,20 @@ class TestAnnullamento:
         """
         amelie.cambia_lingua("en")
         assert amelie.lingua == "en"
+        amelie._presente = True
         amelie.macchina.stato = Stato.RACCONTO
         amelie.annulla()
         assert amelie.lingua == "en", "annullare ha riportato la lingua a casa"
+
+    def test_annullando_a_bottiglia_gia_tolta_la_lingua_torna_a_casa(self, amelie):
+        """La bottiglia sollevata per versare non ferma il racconto; se poi
+        si annulla e sul piatto non c'e' niente, il tavolo e' libero: chi
+        arriva dopo deve trovare la lingua di casa."""
+        amelie.cambia_lingua("en")
+        amelie._presente = False
+        amelie.macchina.stato = Stato.RACCONTO
+        amelie.annulla()
+        assert amelie.lingua == "it"
 
     def test_togliendo_la_bottiglia_invece_si(self, amelie):
         """Li' il tavolo cambia davvero, e il dispositivo torna come si trova."""
@@ -1697,8 +1711,8 @@ class TestAnnullamento:
 class TestIlDubbioNonSiChiede:
     """Con un riconoscimento dubbio non c'e' una schermata di scelta.
 
-    Tre candidati e dodici secondi d'attesa non servono: quasi sempre nessuno
-    tocca niente. Si dice il candidato meno specifico (vedi
+    Tre nomi quasi uguali, a un tavolo, a chi non ha chiesto niente, non
+    aiutano. Si dice il candidato meno specifico (vedi
     `Matcher.il_piu_generico`) e si racconta subito.
     """
 

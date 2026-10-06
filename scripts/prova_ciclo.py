@@ -10,8 +10,9 @@
 È il collaudo che si fa con una bottiglia vera davanti al dispositivo: mostra
 ogni passaggio con il suo tempo, così si vede subito dove si perde.
 
-**La posa.** L'unica luce che il dispositivo controlla è l'anello sotto la
-bottiglia. Se l'etichetta viene scura, la prima cosa da provare non è
+**La posa.** L'unica luce che il dispositivo controlla è l'anello: il Modulino
+Pixels nella torre, che illumina l'etichetta attraverso la finestra traslucida.
+Se l'etichetta viene scura, la prima cosa da provare non è
 aggiungere luce: è allungare il tempo di posa. Bottiglia e camera sono ferme
 entrambe, quindi si può salire parecchio senza mosso, ed è la posa a dare il
 grosso del segnale in questa geometria. `--scala-pose` fa la sweep e dice, per

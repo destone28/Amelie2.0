@@ -55,12 +55,12 @@
  * dopo una scrittura ANDATA A BUON FINE: una cosa presente è una cosa che ha
  * risposto, non una che non ha protestato.
  *
- * ── DUE MODULI, NON TRE ──────────────────────────────────────────────────────
+ * ── DUE MODULI ───────────────────────────────────────────────────────────────
  *
- * L'anello e il sensore, e nessun secondo Pixels come flash per la camera: i
- * Pixels nascono tutti a 0x36, quindi un secondo andrebbe riprogrammato a un
- * altro indirizzo, e da fuori i due sarebbero identici. L'etichetta la illumina
- * l'anello, che sale a bianco per la durata della raffica.
+ * L'anello e il sensore. L'anello è il Modulino Pixels nella torre: illumina
+ * l'etichetta attraverso la finestra traslucida, e sale a bianco per la durata
+ * della raffica. Il sensore è il Modulino Distance sotto il disco su cui sta la
+ * bottiglia.
  *
  * ── DUE VINCOLI CHE FANNO FALLIRE IN SILENZIO ────────────────────────────────
  *
@@ -85,9 +85,9 @@
 
 /* ─── tutto ciò che si dichiara, prima di qualsiasi funzione (vincolo 2) ────── */
 
-/* Versione del PROTOCOLLO fra questo firmware e Linux. Si alza quando cambia il
- * SIGNIFICATO di qualcosa, non il codice. Nella 2 il bit 2 di moduli() è il
- * sensore (vedi PROTOCOLLO_ATTESO in amelie.bridge). */
+/* Versione del PROTOCOLLO fra questo firmware e Linux, non del firmware: deve
+ * valere quanto PROTOCOLLO_ATTESO in amelie.bridge. Si alza quando cambia il
+ * SIGNIFICATO di qualcosa, per esempio dei bit di moduli(), non il codice. */
 static const int PROTOCOLLO = 2;
 
 static const uint8_t IND_ANELLO   = 0x36;   /* indirizzo hardware, non 0x6C */
@@ -156,8 +156,8 @@ static uint32_t ultima_ricerca = 0;
 
 /* Dove si e' fermato l'avvio del sensore. 0 = riuscito, -1 = mai tentato,
  * altrimenti il numero del passo che non e' andato. Senza questo, un sensore che
- * non parte dice solo "non ci sono", e per capire perche' si ricarica il
- * firmware con delle stampe - mezz'ora ogni volta. */
+ * non parte dice solo "non ci sono", e per capire perche' bisognerebbe
+ * ricaricare il firmware con delle stampe. */
 static int passo_tof = -1;
 
 /* Il respiro gira su un filo suo finche' il ponte non e' pronto: vedi

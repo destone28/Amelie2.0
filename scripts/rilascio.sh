@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Amelie 2.0 - porta sulla board la copia di lavoro di un PC.
 #
-#   bash scripts/rilascio.sh                               su arduino@amelie.local
-#   bash scripts/rilascio.sh --host arduino@<indirizzo-della-board>   su un'altra board
+#   bash scripts/rilascio.sh                                         su arduino@amelie.local
+#   bash scripts/rilascio.sh --host arduino@<indirizzo-della-board>  su un'altra board
 #
 # E' uno strumento per chi modifica il codice su un PC e vuole provarlo sul
 # dispositivo senza passare dal repository. Per aggiornare una board basta,
@@ -99,6 +99,9 @@ verifica tests/*.py
 # La suite gira sull'hardware vero. Se fallisce lo si dice, ma si riavvia lo
 # stesso: e' il codice appena copiato, e il log dice che cosa guardare.
 echo "### $(ora) suite sulla board (circa due minuti)"
+# pytest non fa parte del dispositivo: lo si installa la prima volta.
+ssh "$HOST" "cd $REMOTO && (venv/bin/python -c 'import pytest' 2>/dev/null \
+        || venv/bin/pip install -q -r requirements-dev.txt)"
 ssh "$HOST" "cd $REMOTO && venv/bin/python -m pytest -q -p no:cacheprovider tests/ \
         > /tmp/amelie-test.log 2>&1; esito=\$?; tail -3 /tmp/amelie-test.log; exit \$esito" \
     || echo "  ATTENZIONE: la suite non e' passata (log completo in /tmp/amelie-test.log sulla board)" >&2
@@ -107,7 +110,8 @@ ssh "$HOST" "cd $REMOTO && venv/bin/python -m pytest -q -p no:cacheprovider test
 # agli eventi, ma la pagina resta quella caricata all'avvio. Ripartendo mostra
 # la schermata d'avvio finche' il server non risponde.
 echo "### $(ora) riavvio"
-ssh "$HOST" 'sudo systemctl restart amelie.service
+# -t: se sudo chiede la password dell'utente arduino, serve un terminale.
+ssh -t "$HOST" 'sudo systemctl restart amelie.service
 sudo systemctl try-restart amelie-kiosk.service 2>/dev/null || true
 sleep 35
 echo "  servizio: $(systemctl is-active amelie.service)"

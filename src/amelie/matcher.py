@@ -611,10 +611,10 @@ _SENZA_VITIGNI_FINTI = (" AND lower(vi.nome) NOT IN ("
                         + ", ".join(f"'{v}'" for v in VITIGNI_FINTI) + ")")
 
 # In che ordine si dicono i vitigni principali. Il registro li elenca in ordine
-# alfabetico, e il primo e' quello di cui si legge la scheda: il Soave diventava
-# «Nasce da Chardonnay: borgognone, ovunque nel mondo». Conta invece quanti vini
-# di quella denominazione, in archivio, dichiarano quell'uva: Garganega 171,
-# Chardonnay 15. Il parametro e' l'id della denominazione.
+# alfabetico, e il primo e' quello di cui si legge la scheda: in quell'ordine il
+# Soave diventerebbe «Nasce da Chardonnay: borgognone, ovunque nel mondo». Conta
+# invece quanti vini di quella denominazione, in archivio, dichiarano quell'uva:
+# Garganega 171, Chardonnay 15. Il parametro e' l'id della denominazione.
 _USO_NEI_VINI = ("(SELECT count(*) FROM vino_vitigno vv JOIN vino v ON v.id = vv.vino_id"
                  " WHERE vv.vitigno_id = vi.id AND v.denominazione_id = ?)")
 
@@ -733,11 +733,12 @@ ORDINE_QUALIFICATORI = (
 # colore, e nel nome nessun'altra parola che faccia da freno. I nomi di
 # menzione valgono quanto gli aggettivi: e' il vino a essere diverso, non il
 # modo di chiamarlo.
+#
 # Spumante e frizzante NON sono qui, e la ragione e' misurata: la cascata li
 # separa gia' da sola, mentre escluderli costerebbe 412 tipologie per
-# correggere quattro attribuzioni. Qui c'e' solo cio' che nasce da uve diverse - appassite,
-# stramature, o fortificate dopo - e che quindi non e' lo stesso vino nemmeno
-# alla lontana.
+# correggere quattro attribuzioni. Qui c'e' solo cio' che nasce da uve diverse
+# - appassite, stramature, o fortificate dopo - e che quindi non e' lo stesso
+# vino nemmeno alla lontana.
 PRODOTTO_DIVERSO = frozenset((
     "passito", "liquoroso", "stramature", "sciacchetra", "vinsanto",
     "vin santo", "recioto", "amarone", "sforzato", "sfursat",
@@ -1046,8 +1047,8 @@ class Matcher:
 
         Qui si legge l'archivio una volta e si tiene un dizionario. Costa una
         scansione al primo uso - la stessa che la query pagherebbe a ogni
-        chiamata - e poi nulla. Si puo' fare perche' la connessione e' in sola lettura: il file
-        non cambia mentre il dispositivo e' acceso.
+        chiamata - e poi nulla. Si puo' fare perche' la connessione e' in sola
+        lettura: il file non cambia mentre il dispositivo e' acceso.
         """
         if self._per_record is None:
             self._per_record = self._indice_per_record()

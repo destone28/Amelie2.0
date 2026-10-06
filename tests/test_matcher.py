@@ -199,11 +199,11 @@ class TestCandidati:
         assert len(f.candidati) == len(set(f.candidati))
 
     def test_le_alternative_sono_leggibili_da_una_persona(self, m):
-        """Sullo schermo di un ristorante non si mostra l'indice di ricerca.
+        """Le alternative le legge una persona, nel giornale e sulla debug camera.
 
         Le voci dell'indice sono normalizzate - minuscole, senza punteggiatura -
-        e mostrarle tali e quali significherebbe proporre all'ospite di scegliere
-        fra "barolo cannubi marchesi di barolo" e "barolo bussia tenuta rocca".
+        e mostrarle tali e quali vorrebbe dire leggere "barolo cannubi marchesi
+        di barolo" e "barolo bussia tenuta rocca" invece dei nomi dei vini.
         """
         f = m.cerca(["MARCHESI DI BAROLO", "BAROLO", "CANNUBI"])
         for voce in f.candidati:
@@ -256,7 +256,8 @@ class TestFigureBrutte:
 
         Il primo classificato e' il produttore SBAGLIATO, e quello giusto
         sta 2.4 punti sotto. Con due nomi cosi' vicini il dispositivo non
-        riconosce: sceglie a caso. Deve chiedere.
+        riconosce: sceglie a caso. Deve restare nel dubbio, e col dubbio si
+        dice il meno specifico (`Matcher.il_piu_generico`).
         """
         f = m.cerca(["Monte", "Antico", "Toscana", "Indicacsione Gecgafica Tipica",
                      "Sangiovese, Merlot", "and Cabernet Saucignon", "Red Wine"])
@@ -678,31 +679,31 @@ class TestDisciplinare:
 class TestCandidatiCheNonAggiungonoNiente:
     """Sull'etichetta c'è «Cerasuolo d'Abruzzo» e basta.
 
-    In archivio ce ne sono tre, di Filari, Lepore e Valori, e mostrarli tutti e
-    tre chiedendo di scegliere sarebbe una domanda senza risposta: la bottiglia
-    non dice di chi è, e nessuno al tavolo lo sa meglio di lei. Chiedere
-    sposta su un ospite una scelta che il riconoscitore ha appena dichiarato
-    impossibile, quando la regola del produttore l'ha fatto scendere al vino
-    generico.
+    In archivio ce ne sono tre, di Filari, Lepore e Valori, e come alternative
+    non aggiungerebbero niente: la bottiglia non dice di chi è, e la regola del
+    produttore ha appena fatto scendere il riconoscimento al vino generico
+    proprio per questo. Elencarli rimetterebbe in gioco una cantina che
+    nessuno ha letto.
     """
 
     def test_senza_cantina_letta_non_si_propone_nessuna_cantina(self, m):
-        """Qualunque riga l'ospite tocchi, il dispositivo stamperebbe il nome
-        di un'azienda che non ha letto: è proprio ciò che la regola del
-        produttore vieta."""
+        """Ogni riga con una cantina sarebbe il nome di un'azienda che il
+        dispositivo non ha letto: è proprio ciò che la regola del produttore
+        vieta."""
         f = m.cerca(["CERASUOLO", "D'ABRUZZO", "DENOMINAZIONE DI ORIGINE PROTETTA"])
         assert f.cantina is None
         for proposta in f.candidati:
             assert " — " not in proposta, proposta
 
     def test_un_vino_davvero_diverso_si_propone_ancora(self, m):
-        """La schermata serve: toglierla del tutto sarebbe l'errore opposto."""
+        """Le alternative servono, al giornale e alla scelta del meno
+        specifico: toglierle del tutto sarebbe l'errore opposto."""
         f = m.cerca(["CERASUOLO", "D'ABRUZZO"])
         assert f.candidati, "senza alternative non si può chiedere niente"
 
     def test_col_produttore_letto_le_alternative_restano(self, m):
         """Se l'etichetta nomina la cantina, due cantine diverse sono due
-        risposte diverse e la domanda ha senso eccome."""
+        risposte diverse, e fra le alternative ci stanno eccome."""
         f = m.cerca(["MARCHESI DI BAROLO", "Barolo", "Cannubi", "2016"])
         assert f.cantina
         assert f.candidati
@@ -729,8 +730,8 @@ class TestIlColoreScrittoSullEtichetta:
             f"ha scelto un {f.colore} per un'etichetta che dice «Rosé»")
 
     def test_e_nemmeno_si_propone(self, m):
-        """Un candidato del colore sbagliato è lo stesso errore, spostato sotto
-        il dito dell'ospite."""
+        """Un candidato del colore sbagliato è lo stesso errore, spostato fra
+        le alternative."""
         f = m.cerca(self.ROSA)
         for nome in f.candidati:
             assert "asti" not in nome.lower() or "rosé" in nome.lower(), nome

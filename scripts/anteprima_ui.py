@@ -184,7 +184,8 @@ SCENE: dict[str, list[dict]] = {
         {"tipo": "stato", "vista": "avviso", "simbolo": "↻", "tono": "invito",
          "frase": _scritta("invito_a_girare", "it"), "aiuta": True}],
 
-    # A tentativi finiti: al posto di «Puo' togliere la bottiglia».
+    # A tentativi finiti, se la bottiglia si puo' insegnare: si dice che non la
+    # si e' riconosciuta e si offre il pulsante per insegnarla.
     "non_riconosciuta": [
         LINGUA_IT,
         {"tipo": "stato", "vista": "avviso", "simbolo": "?", "tono": "neutro",

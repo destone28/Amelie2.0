@@ -12,8 +12,8 @@ mostra le tre cose che decidono se l'etichetta verrà letta.
 
 2. **La nitidezza**, dal vivo, calcolata **sul ritaglio** e non sull'intera
    immagine — altrimenti misurerebbe la messa a fuoco di cose che l'OCR non
-   vedrà mai. La messa a fuoco è fissa: la si aggiusta spostando la camera, e
-   questo numero dice quando si è arrivati.
+   vedrà mai. La messa a fuoco si regola ruotando l'obiettivo M12 nel suo
+   supporto, e questo numero dice quando si è arrivati.
 
 3. **Quello che legge, e cosa ci fa.** L'OCR gira di continuo su un filo a
    parte e mostra le righe trovate, poi le passa al riconoscitore e mostra che
@@ -134,12 +134,24 @@ class LetturaContinua:
             "righe": righe,
             "livello": fatti.livello.value,
             "sicurezza": round(fatti.sicurezza),
+            # Come il dispositivo la racconterebbe: certa, dubbia, o per niente.
+            # La soglia e' quella del riconoscimento, non una copia nella pagina.
+            "fascia": _fascia(fatti),
             "nome": fatti.nome or "",
             "cantina": fatti.cantina or "",
             "annata": fatti.annata or "",
             "vitigni": fatti.vitigni[:3],
             "candidati": fatti.candidati[:3],
         }
+
+
+def _fascia(fatti) -> str:
+    """«certo» se il racconto direbbe «Questo è…», «dubbio» se trova qualcosa
+    ma lo dice con cautela, «nulla» se non trova niente da raccontare."""
+    from .matcher import SOGLIA_CERTA
+    if fatti.vuoto or fatti.livello.value == "nulla":
+        return "nulla"
+    return "certo" if fatti.sicurezza >= SOGLIA_CERTA else "dubbio"
 
 
 def disegna(frame, camera):

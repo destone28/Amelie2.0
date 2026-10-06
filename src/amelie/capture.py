@@ -1,11 +1,11 @@
 """Cattura del fotogramma dell'etichetta.
 
 La geometria è fissa e nota: la lente sta 30 mm sopra il piano d'appoggio, 60 mm
-davanti alla bottiglia, con l'asse inclinato di 53° sopra l'orizzonte. Le quote
-che servono a montare sono in `docs/it/03-montaggio.md`. La distanza
-ottica al centro dell'etichetta è ~100 mm e la fascia a fuoco copre una finestra
-di circa 60 × 36 mm, che su qualunque etichetta commerciale contiene produttore,
-denominazione e annata.
+davanti alla bottiglia, con l'asse inclinato di 53° sopra l'orizzonte: le quote
+le fissano i pezzi stampati, e il montaggio è in `docs/it/03-montaggio.md`. La
+distanza ottica al centro dell'etichetta è ~100 mm e la fascia a fuoco copre una
+finestra di circa 60 × 36 mm, che su qualunque etichetta commerciale contiene
+produttore, denominazione e annata.
 
 Tre accorgimenti valgono più di qualunque scelta di libreria:
 
@@ -15,9 +15,11 @@ Tre accorgimenti valgono più di qualunque scelta di libreria:
    ferme: si può permettere un tempo di posa lungo e guadagno a zero, che dà
    **molto più segnale di quanto possano darne i LED**.
 
-   È anche il motivo per cui basta una sola sorgente di luce: l'anello alla
-   base, che sale a bianco per la durata della raffica. I LED non sono il
-   fattore dominante — le misure sono in `ImpostazioniCamera.esposizione`.
+   È anche il motivo per cui basta una sola sorgente di luce: l'anello, cioè
+   il Modulino Pixels nella torre che illumina l'etichetta attraverso la
+   finestra traslucida, e che sale a bianco per la durata della raffica. I LED
+   non sono il fattore dominante — le misure sono in
+   `ImpostazioniCamera.esposizione`.
 
 2. **Scartare i primi fotogrammi.** Il buffer UVC contiene immagini precedenti
    all'accensione della luce. Il primo fotogramma letto dopo è quasi sempre
@@ -256,9 +258,9 @@ class ImpostazioniCamera:
 
     # A quanto si rimpicciolisce la fascia prima di confrontarla.
     #
-    # Novantasei per centoventotto: un ventesimo di lato. Piccola apposta - a
-    # questa scala un tremolio del tavolo sposta la scena di un decimo di pixel
-    # e sparisce, mentre una bottiglia resta grande come prima.
+    # Novantasei per centosettanta: circa un undicesimo di lato. Piccola
+    # apposta - a questa scala un tremolio del tavolo sposta la scena di un
+    # decimo di pixel e sparisce, mentre una bottiglia resta grande come prima.
     # Largo per alto, e la proporzione e' quella del fotogramma raddrizzato
     # (1080x1920, cioe' 9:16): la sbirciata e' tutto il fotogramma rimpicciolito,
     # e deformarla vorrebbe dire misurare distanze che sull'immagine vera non
@@ -300,9 +302,9 @@ SCARTO_DI_POSA = 2.0
 
 # Quanto vecchio può essere un fotogramma e valere ancora come «adesso».
 #
-# Mezzo secondo è il periodo della sbirciata: un fotogramma più vecchio di
-# così non è quello che il dispositivo avrebbe preso guardando adesso, ed è il
-# tempo entro cui una mano che passa davanti alla camera è ancora lì.
+# Mezzo secondo: un fotogramma più vecchio di così non è quello che il
+# dispositivo avrebbe preso guardando adesso, ed è il tempo entro cui una mano
+# che passa davanti alla camera è ancora lì.
 FRESCHEZZA_S = 0.5
 
 # Ogni quanti fotogrammi il guardiano guarda quanta luce c'è.
@@ -418,12 +420,12 @@ class PresenzaOttica:
     decide davvero è l'OCR subito dopo: se non c'è un'etichetta, non c'è nulla
     da raccontare.
 
-    L'isteresi è **asimmetrica**, come sul sensore e per lo stesso motivo:
-    per dire che è arrivata basta che la scena sia cambiata; per dire che è
-    andata via bisogna che la scena sia tornata quella di prima. Una bottiglia
-    spostata di un dito cambia la fascia del 15-30 %, abbastanza da non
-    somigliare più allo sfondo ma non abbastanza da somigliargli di nuovo:
-    così un racconto non si interrompe perché qualcuno ha versato da bere.
+    L'isteresi è **asimmetrica**, come sul sensore: per dire che è arrivata
+    basta che la scena sia cambiata; per dire che è andata via bisogna che la
+    scena sia tornata quella di prima. Una bottiglia spostata di un dito cambia
+    la fascia del 15-30 %, abbastanza da non somigliare più allo sfondo ma non
+    abbastanza da somigliargli di nuovo, e resta una bottiglia: finché c'è, lo
+    sfondo non si aggiorna.
     """
 
     def __init__(
@@ -447,8 +449,8 @@ class PresenzaOttica:
         # Lo sfondo è il fotogramma INTERO com'è quando sul piatto non c'è
         # niente. La striscia centrale — quella su cui si decide — si ricava da
         # qui quando serve: una sola immagine, due domande diverse. `None`
-        # vuol dire «non lo so ancora», e capita due volte: all'accensione, e
-        # quando si scopre che la bottiglia c'era già prima di accendere.
+        # vuol dire «non lo so ancora»: all'accensione, finché non arriva la
+        # prima sbirciata, e dopo `reimposta` o `c_e_qualcosa`.
         self._sfondo: np.ndarray | None = None
         self._intera: np.ndarray | None = None
         # La scena con la bottiglia, usata solo finché lo sfondo è ignoto.
@@ -462,7 +464,7 @@ class PresenzaOttica:
 
         La DECISIONE guarda solo qui, e le soglie sono misurate qui: fuori da
         questa striscia c'è la stanza, e un cameriere che passa non deve
-        svegliare il dispositivo. Il resto del fotogramma serve a un'altra
+        sembrare una bottiglia. Il resto del fotogramma serve a un'altra
         domanda — dove sta la bottiglia — e quella la fa `riquadro`.
         """
         da, a = self.fascia
@@ -479,8 +481,7 @@ class PresenzaOttica:
             return self.presente
 
         # Una scena che si sta ancora muovendo non si giudica: è la mano che
-        # posa la bottiglia. Costa una sbirciata di ritardo, e prende il posto
-        # di un'attesa di assestamento fissa.
+        # posa la bottiglia, e aspettarla costa una sbirciata di ritardo.
         if self._diverso(sbirciata, precedente) >= self.soglia_fermo:
             self._diverse = self._uguali = 0
             return self.presente
@@ -506,21 +507,6 @@ class PresenzaOttica:
 
         return self._decidi()
 
-    def aggiorna_a_mano(self, c_e: bool) -> bool:
-        """Come `aggiorna`, ma la scena la dichiara chi prova invece della camera.
-
-        Serve al banco e ai test: su un portatile la camera non c'è, e quello
-        che si vuole provare è il ciclo, non il rivelatore. Passa per la stessa
-        isteresi, altrimenti proverebbe qualcosa che il dispositivo non fa.
-        """
-        if c_e:
-            self._diverse += 1
-            self._uguali = 0
-        else:
-            self._uguali += 1
-            self._diverse = 0
-        return self._decidi()
-
     def _decidi(self) -> bool:
         if not self.presente and self._diverse >= self.n_arrivo:
             self.presente = True
@@ -531,12 +517,11 @@ class PresenzaOttica:
     def _aspetta_che_se_ne_vada(self, sbirciata: np.ndarray) -> bool:
         """Il caso in cui non si è mai visto il piatto vuoto.
 
-        Succede quando il dispositivo si accende con una bottiglia già posata:
-        `c_e_qualcosa` ha buttato lo sfondo imparato, che era sbagliato, e finché la
-        bottiglia non viene tolta non c'è modo di conoscerlo. Nel frattempo
-        l'unica cosa che si può riconoscere è il momento in cui quella scena
-        cambia del tutto — e cioè quando la bottiglia se ne va, lasciando in
-        vista proprio lo sfondo che mancava.
+        Succede dopo `c_e_qualcosa`, che butta lo sfondo imparato perché
+        sbagliato: finché la bottiglia non viene tolta non c'è modo di
+        conoscerlo. Nel frattempo l'unica cosa che si può riconoscere è il
+        momento in cui quella scena cambia del tutto — e cioè quando la
+        bottiglia se ne va, lasciando in vista proprio lo sfondo che mancava.
         """
         if self._scena is None:
             self._scena = sbirciata
@@ -623,35 +608,31 @@ class PresenzaOttica:
     def c_e_qualcosa(self) -> None:
         """Sul piatto c'è qualcosa, comunque stessero le cose fin qui.
 
-        Lo dicono due voci, ed è la stessa notizia. L'OCR, quando legge
-        un'etichetta: quello che si vede non è lo sfondo. E l'accensione di una
-        installazione nuova, quando il dispositivo decide di guardare per bene
-        invece di indovinare.
-
-        In tutti e due i casi lo sfondo che il rivelatore ha in mano è
-        sbagliato — se il dispositivo si è acceso con la bottiglia già posata,
-        ha imparato quella, e da lì in poi il piatto gli sembrerebbe vuoto per
-        sempre. Si butta, e si tornerà a conoscerlo quando la bottiglia verrà
-        tolta.
+        Lo dice chi sa che quello che si vede non è lo sfondo — un'etichetta
+        letta, per esempio. Allora lo sfondo che il rivelatore ha in mano è
+        sbagliato: se il dispositivo si è acceso con la bottiglia già posata,
+        ha imparato quella, e da lì in poi il piatto gli sembrerebbe vuoto. Si
+        butta, e si tornerà a conoscerlo quando la bottiglia verrà tolta.
         """
         self.presente = True
         self._sfondo = self._scena = None
         self._diverse = self._uguali = 0
 
     def non_e_una_bottiglia(self, fascia: np.ndarray) -> None:
-        """L'OCR ha guardato e riguardato e non ha trovato niente da leggere.
+        """Quel che si vede non è una bottiglia con un'etichetta: diventa lo sfondo.
+
+        Lo dicono due voci. Il sensore di distanza, quando sul piatto non c'è
+        niente (vedi `Amelie._guarda_il_piatto`); e l'OCR, quando ha guardato e
+        riguardato senza trovare niente da leggere.
 
         Serve a sbloccarsi. Lo sfondo che il rivelatore ha in mano può essere
         sbagliato — ricaricato da un'installazione precedente, imparato con una
-        bottiglia davanti — e allora la differenza resta alta per sempre e il
-        dispositivo crede di avere una bottiglia davanti che non c'è. Qui si
-        dichiara che qualunque cosa ci sia, non è una bottiglia con
-        un'etichetta, e quel che si vede diventa lo sfondo.
+        bottiglia davanti — e allora la sagoma della bottiglia non si trova, e
+        all'OCR arriva il ritaglio fisso con dentro mezza stanza.
 
-        Se invece era una bottiglia con l'etichetta girata, si paga una
-        scansione in più quando verrà tolta: la scena cambierà, non ci sarà
-        niente da leggere, e lo sfondo tornerà quello giusto. Meglio una
-        scansione di troppo che un dispositivo fermo.
+        Se invece era una bottiglia con l'etichetta girata, lo sfondo torna
+        quello giusto appena la si toglie: il sensore dice che il piatto è
+        vuoto, e quel che si vede lo è davvero.
         """
         self.presente = False
         self.differenza = 0.0
@@ -669,7 +650,8 @@ class PresenzaOttica:
 
         Il piatto vuoto è una proprietà dell'installazione, non del processo:
         se non si ricorda, un dispositivo acceso con la bottiglia già posata
-        impara quella come sfondo e resta fermo a guardarla per sempre.
+        impara quella come sfondo, e finché non la si toglie il riquadro della
+        sua etichetta non si trova.
         """
         self.presente = False
         self._sfondo = sfondo
@@ -1166,7 +1148,7 @@ class Camera:
             return self._cerca_la_posa(cap)
 
     def sbircia(self) -> np.ndarray | None:
-        """Un fotogramma solo, ridotto alla fascia della bottiglia.
+        """Un fotogramma solo, intero, in grigio e piccolo: vedi `fascia`.
 
         Restituisce `None` quando la camera è occupata dallo scatto: una
         sbirciata saltata non è un guasto, è una sbirciata saltata. Chi guarda
@@ -1361,8 +1343,9 @@ class Camera:
                     f"nessun fotogramma letto da {self.percorso}"
                 )
 
-        # Prima si raddrizza, poi si ritaglia: il ritaglio è centrato, e su
-        # un'immagine coricata terrebbe la fascia sbagliata della bottiglia.
+        # Prima si raddrizza, poi si ritaglia: il ritaglio si misura sul
+        # fotogramma in piedi, e su un'immagine coricata terrebbe la fascia
+        # sbagliata della bottiglia.
         migliore = self._raddrizza(migliore)
         posto = self.posto(migliore)
         return Scatto(

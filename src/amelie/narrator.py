@@ -522,8 +522,8 @@ def _colore_al_posto_del_gusto(testo: str, fatti: Fatti) -> list[str]:
     colore nel giro di frase del gusto. Le parole sono tutte vere, il posto
     no: per questo si guarda il posto.
 
-    Misurato sui racconti salvati dei due modelli: succede nel 3-9% dei testi
-    scritti dal modello, in tutte e due le lingue.
+    Misurato sui racconti salvati: succede nel 3-9% dei testi scritti dal
+    modello, in tutte e due le lingue.
     """
     fuori = []
     for m in _CONTESTO_GUSTO.finditer(testo):
@@ -1127,10 +1127,11 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
     # c'e'. Senza, un racconto di due righe sembra un dispositivo rotto; con,
     # e' un dispositivo onesto.
     #
-    # Ma solo se qualcosa si e' detto. Senza colore ne' tipo, l'apertura ripiega
-    # su «provi a girare l'etichetta», e dirle dietro «quello che le ho detto e'
-    # scritto sull'etichetta» significa vantare una risposta che non c'e' stata.
-    if f.livello is Livello.GENERICO and (f.qualificatori or f.colore):
+    # Ma solo se qualcosa si e' detto. Senza un tipo di vino da dire - un
+    # «Brut» letto da solo non lo e' - l'apertura ripiega su «provi a girare
+    # l'etichetta», e dirle dietro che la bottiglia non e' in archivio
+    # contraddirebbe la richiesta appena fatta.
+    if f.livello is Livello.GENERICO and _che_tipo_di_vino(f, lex, lingua):
         frasi.append(d("generico_limite"))
 
     return [x for x in frasi if x]

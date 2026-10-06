@@ -143,7 +143,9 @@ for percorso in $VOCI; do
     for est in onnx onnx.json; do
         controlla "$voce.$est" || scarica "$URL_VOCI/$percorso.$est" "models/$voce.$est"
     done
-    controlla "$voce.onnx" || muori "la voce $voce non corrisponde alla somma attesa"
+    for est in onnx onnx.json; do
+        controlla "$voce.$est" || muori "$voce.$est non corrisponde alla somma attesa"
+    done
 done
 echo "    voci: it_IT-serena-medium, en_US-ljspeech-medium"
 if ! controlla "$MODELLO"; then

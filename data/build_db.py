@@ -37,9 +37,10 @@ cui sono stati scritti.
 
 ## La scelta che regge tutto: i fatti separati dallo stile
 
-Un modello da 0,8 miliardi di parametri non sa nulla di vino. Se gli si chiede di
-raccontare un Sagrantino inventa premi, punteggi e note di degustazione. Per
-questo i FATTI vengono da qui e il modello si limita alla PROSA.
+Un modello da 0,5 miliardi di parametri, la taglia che gira sulla board, non sa
+nulla di vino. Se gli si chiede di raccontare un Sagrantino inventa premi,
+punteggi e note di degustazione. Per questo i FATTI vengono da qui e il modello
+si limita alla PROSA.
 
 E i fatti vanno tenuti separati anche fra loro. Il disciplinare dell'Amarone
 IMPONE Corvina, Corvinone e Rondinella, e AMMETTE anche Croatina, Barbera,
@@ -322,9 +323,12 @@ FONTI = [
      "https://doi.org/10.6084/m9.figshare.25393261", "CC BY 4.0",
      "https://creativecommons.org/licenses/by/4.0/",
      "Candiago, Tscholl, Bassani, Fraga, Egarter Vigl (2024)"),
+    # La licenza di X-Wines cambia a seconda di dove si legge (CC0 nel file
+    # LICENSE, ODbL su Kaggle): il database la tratta come ODbL 1.0, la piu'
+    # restrittiva, e cosi' rispetta tutte e due. Vedi docs/it/08-attribuzioni.md.
     ("xwines", "X-Wines",
-     "https://github.com/rogerioxavier/X-Wines", "vedi LICENSE del repository",
-     "https://github.com/rogerioxavier/X-Wines/blob/main/LICENSE",
+     "https://github.com/rogerioxavier/X-Wines", "ODbL 1.0 (citazione obbligatoria)",
+     "https://opendatacommons.org/licenses/odbl/1-0/",
      "de Azambuja, Morais, Filipe (2023), Big Data Cogn. Comput. 7(1):20"),
     ("eambrosia", "Registro UE delle indicazioni geografiche (eAmbrosia)",
      "https://ec.europa.eu/geographical-indications-register/", "CC BY 4.0",
@@ -333,9 +337,12 @@ FONTI = [
     ("documento_unico_ue", "Documenti unici delle DOP e IGP (eAmbrosia)",
      "https://ec.europa.eu/geographical-indications-register/", "CC BY 4.0",
      "https://creativecommons.org/licenses/by/4.0/",
-     "© Unione europea. Il testo riproduce il disciplinare di produzione."),
-    ("amelie", "Conoscenza enologica del progetto",
-     None, "GPL-3.0 / CC BY 4.0", None, "Emilio Destratis"),
+     "© Unione europea. Il testo riassume il disciplinare di produzione; "
+     "tolti i recapiti personali."),
+    ("amelie", "Schede dei vitigni e lessico di Amelie 2.0",
+     "https://github.com/destone28/Amelie2.0", "CC BY 4.0",
+     "https://creativecommons.org/licenses/by/4.0/",
+     "Created by Emilio Destratis (destratis.it) in collaboration with Arduino."),
 ]
 
 
@@ -508,7 +515,7 @@ class Costruttore:
 
         Gli alias servono perche' i dataset chiamano lo stesso vitigno in modi
         diversi - «Syrah/Shiraz», «Pinot Noir», «Glera/Prosecco» - e senza
-        aggancio 1.215 Prosecco restavano senza una riga da dire. Si applicano
+        aggancio 1.215 Prosecco resterebbero senza una riga da dire. Si applicano
         solo i sinonimi VERI, dichiarati a mano nel file: attaccare la
         descrizione della Barbera alla «Barbera Bianca», che e' un altro
         vitigno, sarebbe inventare.
@@ -602,7 +609,7 @@ def solo_vitigni() -> None:
 
     Chi aggiunge un vitigno o una traduzione non deve ricostruire tutto, e
     soprattutto non deve rifare gli identificativi, a cui sono agganciati i
-    testi gia' pre-generati.
+    racconti pronti della tabella `racconto`.
     """
     if not USCITA.exists():
         sys.exit(f"non trovo {USCITA}: serve un database gia' costruito")

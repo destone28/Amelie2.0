@@ -54,6 +54,23 @@ class TestLaLetturaContinua:
         assert esito["sicurezza"] == 87
         assert esito["nome"] == "Barolo DOCG"
         assert esito["durata"] >= 0
+        # Sotto la soglia della certezza il dispositivo lo direbbe con cautela.
+        assert esito["fascia"] == "dubbio"
+
+    def test_la_fascia_segue_la_soglia_del_riconoscimento(self):
+        """Il colore di «Cosa trova» lo decide la stessa soglia con cui il
+        racconto dice «Questo è…», non il nome del livello."""
+        from amelie.matcher import SOGLIA_CERTA, Livello
+
+        def fascia(**campi):
+            return LetturaContinua._leggi(LettoreFinto(), MatcherFinto(**campi),
+                                          "un fotogramma")["fascia"]
+
+        assert fascia(livello=Livello.VINO, sicurezza=float(SOGLIA_CERTA),
+                      nome="Barolo") == "certo"
+        assert fascia(livello=Livello.TIPOLOGIA, sicurezza=70.0,
+                      tipologia="Barolo") == "dubbio"
+        assert fascia(livello=Livello.NULLA, sicurezza=0.0) == "nulla"
 
     def test_un_OCR_che_inciampa_non_spegne_il_mirino(self):
         """Proprio quando l'OCR fallisce è il momento in cui lo si sta

@@ -1,12 +1,12 @@
 """Il ponte verso il microcontrollore.
 
 Il connettore Qwiic della UNO Q è cablato sull'**I²C4 dello STM32U585**, non del
-processore Linux. I Modulino — l'anello di LED e il sensore di distanza — li
-vede quindi solo l'MCU, e Linux ci parla attraverso il router.
+processore Linux. I Modulino — il Pixels che fa da luce e il sensore di
+distanza — li vede quindi solo l'MCU, e Linux ci parla attraverso il router.
 
-Questa divisione non è un fastidio: è ciò che permette al dispositivo di stare
-in attesa a consumo bassissimo. L'MCU fa la guardia sul sensore e sveglia Linux
-solo quando qualcuno appoggia una bottiglia.
+L'MCU legge il sensore di continuo e tiene pronta l'ultima misura; Linux la
+chiede a ogni battito (vedi `Configurazione.periodo_sensore_s` in
+`amelie.app`), e una chiamata risponde in pochi millesimi.
 
 ## Il protocollo
 
@@ -18,8 +18,9 @@ I metodi disponibili sono quelli che lo sketch dichiara con `Bridge.provide()`.
 
 Chiamare `Bridge.call()` **dentro** un gestore registrato con `provide()` manda
 in stallo il canale: è documentato da Arduino. Per questo la macchina a stati di
-Amelie vive su Linux e l'MCU si limita a eseguire e a notificare — gli handler
-qui sotto non richiamano mai l'MCU, mettono solo una bandiera.
+Amelie vive su Linux e l'MCU si limita a eseguire e a notificare — i gestori
+dello sketch non chiamano mai il ponte, mettono solo una bandiera che il
+`loop()` applica.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ SOCKET = "/run/arduino-router.sock"
 # Indirizzi I2C dei Modulino, in forma a 7 bit. Un solo Pixels, quindi
 # l'indirizzo di fabbrica va bene com'è e non c'è niente da riprogrammare prima
 # di montare.
-ANELLO = 0x36     # l'anello sotto la bottiglia
+ANELLO = 0x36     # il Pixels nella torre, che illumina l'etichetta
 DISTANZA = 0x29   # VL53L4CD, indirizzo fisso
 
 # L'ordine è quello dei bit che lo sketch somma in `moduli()`: 1, 2.
@@ -75,11 +76,10 @@ class Colore:
 # del dispositivo.
 #
 # «Solo per la raffica» sono **secondi**, non un lampo: circa 1,7 per lo scatto,
-# di più quando la luce della sala è cambiata
-# e la posa va ricercata (vedi `Effetto.ILLUMINA_E_SCATTA` in `amelie.state`).
-# È un dettaglio che conta per l'alimentazione: 22 di luminosità per ore e 90
-# per qualche secondo sono due carichi diversi da quelli che sembrano leggendo
-# «flash».
+# di più quando la luce della sala è cambiata e la posa va ricercata (vedi
+# `Effetto.ILLUMINA_E_SCATTA` in `amelie.state`). È un dettaglio che conta per
+# l'alimentazione: 22 di luminosità per ore e 90 per qualche secondo sono
+# carichi diversi da quelli di un lampo.
 #
 # Il grosso del segnale, comunque, non lo danno i LED: viene dalla posa lunga a
 # guadagno zero che questa geometria si può permettere perché bottiglia e
@@ -117,9 +117,9 @@ class Ponte:
         una board appena preparata, prima di caricare il firmware.
         """
         try:
-            # Si chiede la distanza non perche' serva - la bottiglia la
-            # riconosce la camera - ma perche' e' il metodo piu' innocuo che
-            # lo sketch di Amelie espone: se risponde, lo sketch c'e'.
+            # Si chiede la distanza perche' e' il metodo piu' innocuo che lo
+            # sketch di Amelie espone: non cambia niente sull'MCU, e se
+            # risponde lo sketch c'e'.
             self.chiama("distanza")
         except ErroreMCU:
             log.warning("il router risponde ma lo sketch di Amelie non c'e': "
@@ -191,7 +191,7 @@ class Ponte:
         diversi che da fuori si somigliano — e distinguerli guardando due schede
         blu quasi identiche è il modo più rapido di sbagliarsi.
 
-        `None` se il firmware è troppo vecchio per saperlo fare.
+        `None` se il firmware non lo sa fare.
         """
         trovati: list[int] = []
         for blocco in range(4):
@@ -209,8 +209,8 @@ class Ponte:
 
         I Modulino sono schede quasi identiche: stesso blu, stessa forma, stessi
         due connettori, e a distinguerli c'è solo il componente al centro e una
-        piccola icona serigrafata. Sbagliare scheda è facile e costa un'ora,
-        perché il sintomo — «non fa niente» — è lo stesso di un guasto.
+        piccola icona serigrafata. Sbagliare scheda è facile, e il sintomo —
+        «non fa niente» — è lo stesso di un guasto.
 
         Qui si nominano solo gli indirizzi di cui si è certi. Tutto il resto è
         «un altro Modulino», senza inventarsi quale: dire il nome sbagliato
@@ -274,12 +274,12 @@ class Ponte:
 
         0 riuscito, -1 mai tentato, e da 2 a 6 il passo che non è andato: il
         chip che non finisce di avviarsi, la configurazione, la calibrazione, i
-        tempi di misura, l'avvio della misura continua. `None` se il firmware è
-        troppo vecchio per saperlo dire.
+        tempi di misura, l'avvio della misura continua. `None` se il firmware
+        non lo sa dire.
 
         Senza questo, un sensore che non parte dice soltanto «non ci sono», e
-        per sapere perché si ricarica il firmware con delle stampe dentro —
-        mezz'ora ogni volta, e la password da digitare a mano.
+        per sapere perché bisognerebbe ricaricare il firmware con delle stampe
+        dentro.
         """
         try:
             return int(self.chiama("stato_tof"))

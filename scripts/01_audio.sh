@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 # Amelie 2.0 - la prova dell'audio HDMI
 #
-# Decide in dieci minuti se la voce puo' uscire dal jack dello schermo, senza
-# comprare niente. Va eseguito SULLA UNO Q, CON LO SCHERMO GIA' ACCESO E
-# COLLEGATO: il driver ANX7625 esce in silenzio se il sink DP non e' rilevato
-# nel momento in cui si apre il flusso, e su questo collegamento non e'
-# registrato alcun jack, quindi niente commuta da solo.
+# Controlla che la voce possa uscire dal jack dello schermo, e lo fa suonare.
+# Va eseguito SULLA UNO Q, CON LO SCHERMO ACCESO E COLLEGATO e con il servizio
+# fermo (sudo systemctl stop amelie): il servizio tiene l'uscita audio aperta,
+# e il driver ANX7625 esce in silenzio se il sink DP non e' rilevato nel
+# momento in cui si apre il flusso.
 #
-#   bash scripts/01_audio.sh          verifica e, se serve, alza il mixer e suona
+#   bash scripts/01_audio.sh                   verifica, se serve apre il mixer, e suona
 #   bash scripts/01_audio.sh --solo-diagnosi   guarda e basta
 #
 # Se il suono esce, l'intera catena e' provata in un colpo solo: kernel, device
-# tree, ALSA, ANX7625, DisplayPort, hub UGREEN, schermo. Se non esce, il piano B
-# e' un adattatore audio USB da 5 euro sull'hub, che salta tutta questa catena.
+# tree, ALSA, ANX7625, DisplayPort, hub, schermo e casse.
 
 set -uo pipefail
 G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; B=$'\033[1m'; N=$'\033[0m'
@@ -167,28 +166,24 @@ cat <<FINE
 ${B}== Come si legge l'esito ==${N}
 
   ${G}Si sente${N}
-      Tutta la catena e' provata: kernel, device tree, ALSA, ANX7625,
-      DisplayPort, hub UGREEN e schermo. Nessun acquisto, nessuna modifica alla
-      scocca. Il cancello del mixer si richiude a ogni avvio: a riaprirlo ci
-      pensa  amelie-audio-guard.service  (e  amelie-audio-rotta.service  se la
-      rotta cambia). Sono gia' abilitati da scripts/install.sh; verifica con
+      Tutta la catena funziona: kernel, device tree, ALSA, ANX7625,
+      DisplayPort, hub, schermo e casse. Il controllo del mixer si richiude a
+      ogni avvio: lo riapre  amelie-audio-rotta.service , mentre
+      amelie-audio-guard.service  controlla che la scheda audio esista. Li
+      abilita scripts/install.sh; verifica con
           systemctl is-enabled amelie-audio-guard amelie-audio-rotta
-      e blocca i pacchetti che possono far sparire la scheda:
-          sudo apt-mark hold alsa-ucm-conf linux-image-\$(uname -r)
 
   ${Y}Si sente ma pianissimo${N}
       E' un caso noto, con un rimedio in userspace:
           echo 'api.alsa.soft-mixer = true' | \\
             sudo tee /etc/wireplumber/wireplumber.conf.d/50-alsa-soft-mixer.conf
           systemctl --user restart wireplumber
-      Il jack dello schermo e' un'uscita cuffie, non un line-out: parti con il
-      volume dello schermo e il potenziometro del PAM8403 bassi, e sali.
+      Il jack dello schermo e' un'uscita cuffie: alza il controllo del volume
+      sul cavo delle casse, e il volume dallo schermo di Amelie.
 
   ${R}Silenzio${N}
-      Il piano B costa 5 euro, dieci minuti e zero rischio: un adattatore
-      audio USB (USB Audio Class) in una delle porte USB-A dell'hub, e da li'
-      al PAM8403. Salta HDMI, hub e schermo in un colpo solo.
-      Prima di passarci, due controlli: che il punto 5 dica "connected", e
+      Controlla il jack delle casse nello schermo, la loro spina USB nell'hub
+      e il loro controllo del volume. Poi che il punto 5 dica "connected", e
       che PipeWire non stia tenendo attivo un profilo diverso —
           wpctl status
           wpctl set-profile <id-scheda> <indice-profilo-HDMI>

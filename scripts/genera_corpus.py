@@ -112,8 +112,9 @@ def genera(db: Path, lingue: list[str] | None = None, ambiti: list[str] | None =
                     " ON CONFLICT(ambito, ambito_id, lingua) DO UPDATE SET"
                     " testo=excluded.testo, modello=excluded.modello,"
                     " generato_il=excluded.generato_il"
-                    # Una voce riscritta dal modello e' un miglioramento
-                    # umanamente rivisto: non la si sovrascrive col template.
+                    # Si riscrivono solo le righe composte qui: una riga con
+                    # un'altra provenienza nella colonna `modello` e' stata
+                    # scritta e rivista a parte, e non la si sovrascrive.
                     " WHERE racconto.modello = 'template'",
                     (ambito, ident, lingua, testo, "template", quando))
                 scritti += 1

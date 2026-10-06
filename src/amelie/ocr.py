@@ -42,7 +42,7 @@ Due trappole, da ricordare perché non danno errore:
   `box_thresh` o `unclip_ratio` a `motore(...)` fa ricostruire il motore a ogni
   fotogramma: 585 ms diventano 1240, e non c'è nessun avviso.
 - **La larghezza dei ritagli non ha un tetto suo.** Una riga lunga diventa un
-  ingresso lungo, e una sola riga di didascalia costava quanto tutta
+  ingresso lungo, e una sola riga di didascalia costerebbe quanto tutta
   l'etichetta. Qui si normalizza a mano prima di leggere.
 
 Il classificatore di orientamento è disattivato: la camera è montata di lato e
@@ -270,9 +270,9 @@ class Lettura:
 
         E' la lettura che conta come lettura. Un calendario dietro al piatto
         da' cinque righe di numeri a ogni scatto: righe, ma niente da
-        riconoscere. Contarle come una lettura riuscita azzererebbe i
-        tentativi, e davanti a un piatto vuoto il dispositivo scandirebbe ogni
-        sei secondi per sempre, con il carico a 3.
+        riconoscere. Senza parole la scansione vale come una lettura a vuoto -
+        si conta il tentativo e si chiede di girare l'etichetta - invece di
+        mandare dei numeri a cercare un vino.
         """
         return _parole_utili(self) > 0
 
@@ -544,12 +544,10 @@ class Lettore:
             return migliore
         if len(migliore.righe) >= self.imp.righe_che_bastano:
             # Tante righe non sono un'etichetta girata male: sono una PARETE.
-            # Misurato sul dispositivo con la bottiglia tolta e un calendario
-            # dietro: trentotto righe di numeri e **39 secondi** per leggerle,
-            # perche' ogni regione trovata passa poi dal modello che la
-            # riconosce. Girare il fotogramma altre tre volte vorrebbe dire
-            # due minuti e mezzo, e il verso non c'entra niente - qualunque
-            # verso, quella parete resta piena di scritte.
+            # Con la bottiglia tolta e un calendario dietro, il rilevatore
+            # trova trentotto righe di numeri. Girare il fotogramma vorrebbe
+            # dire rileggere la parete altre tre volte, e il verso non c'entra
+            # niente - qualunque verso, quella parete resta piena di scritte.
             return migliore
         if _parole_utili(migliore) >= self.imp.parole_che_sono_una_lettura:
             # Due parole sono una lettura, anche se non e' completa: il verso
@@ -571,20 +569,17 @@ class Lettore:
             # l'OCR legge `20 21 19 22 24`, nessuna di queste conta come parola
             # utile, e senza questo controllo il ripiego gira tre volte per
             # **5,7 secondi** su una scena senza etichette. Un verso sbagliato
-            # non dà cifre, dà
-            # spazzatura fatta di lettere — `D'ABRUZZC`, `3IMER · DRZZZO` —
-            # ed è su quella che vale la pena riprovare.
+            # non dà cifre, dà spazzatura fatta di lettere — `D'ABRUZZC`,
+            # `3IMER · DRZZZO` — ed è su quella che vale la pena riprovare.
             return migliore
         if migliore.vuota:
             # NIENTE, nemmeno un frammento: davanti alla camera non c'è
             # scritto niente, e girare il fotogramma non ci scriverà nulla.
             # Il verso sbagliato non dà il vuoto, dà spazzatura - misurato:
             # `D'ABRUZZC` a 90 gradi, `3IMER · DRZZZO · CEAVOLO` a 180. Il
-            # vuoto è il piatto vuoto, ed è il caso più frequente di tutti:
-            # senza questa riga ogni scansione a vuoto costa quattro
-            # passaggi di OCR invece di uno, e sul dispositivo sono ventiquattro
-            # secondi contro sei - abbastanza da far scadere la scansione e
-            # dichiarare un guasto al posto di un piatto vuoto.
+            # vuoto è il piatto vuoto, o un oggetto senza scritte: senza
+            # questa riga ogni scansione a vuoto costa quattro passaggi di OCR
+            # invece di uno.
             return migliore
         for codice in (cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180,
                        cv2.ROTATE_90_COUNTERCLOCKWISE):

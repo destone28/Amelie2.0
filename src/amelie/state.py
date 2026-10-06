@@ -33,7 +33,7 @@ from typing import Callable
 class Stato(enum.Enum):
     """Dove si trova l'interazione."""
 
-    ATTESA = "attesa"                  # nessuna bottiglia, anello in respiro lento
+    ATTESA = "attesa"                  # nessuna bottiglia, anello ambra
     ASSESTAMENTO = "assestamento"      # bottiglia appena posata, si aspetta che smetta di oscillare
     SCANSIONE = "scansione"            # luce, raffica, OCR
     RICONOSCIMENTO = "riconoscimento"  # interrogazione del database
@@ -76,16 +76,18 @@ class Effetto(enum.Enum):
     sull'MCU, la camera e l'OCR su Linux, la voce su Piper.
     """
 
-    ANELLO_RESPIRO = "anello_respiro"      # attesa: pulsazione lenta e calda
-    ANELLO_ACCESO = "anello_acceso"        # bottiglia riconosciuta: luce ferma
-    ANELLO_LAVORO = "anello_lavoro"        # elaborazione: rotazione lenta
-    ANELLO_ATTENZIONE = "anello_attenzione"  # serve qualcosa dall'utente
+    # Il colore di ciascuno lo decide l'orchestratore (`COLORE_ANELLO` in
+    # app.py), e la luce resta ferma: il respiro lo fa solo il firmware
+    # all'accensione, finche' Linux non prende il comando.
+    ANELLO_RESPIRO = "anello_respiro"      # attesa: ambra tenue
+    ANELLO_ACCESO = "anello_acceso"        # bottiglia posata, racconto: verde
+    ANELLO_LAVORO = "anello_lavoro"        # lettura e ricerca: ambra
+    ANELLO_ATTENZIONE = "anello_attenzione"  # si chiede qualcosa, o un guasto: rosso
     ANELLO_SPENTO = "anello_spento"
     # La luce dello scatto è l'anello stesso, che sale a bianco per tutta la
     # raffica — misurati 2 s quando la posa è già quella giusta, fino a 8
     # quando la luce della sala è cambiata e va ricercata. Non un lampo, e per
-    # questo non si chiama «flash»: un nome che promette un flash manderebbe a
-    # cercare un modulo che non c'è.
+    # questo non si chiama «flash»: è l'anello di sempre, alzato a bianco.
     ILLUMINA_E_SCATTA = "illumina_e_scatta"
     INTERROGA_DATABASE = "interroga_database"
     AVVIA_RACCONTO = "avvia_racconto"
@@ -115,11 +117,10 @@ DURATE_S: dict[Stato, float | None] = {
     # gira. Succede davvero, togliendo e rimettendo la bottiglia mentre parla.
     # Cinquanta secondi, ed e' un cane da guardia, non un limite di qualita':
     # deve scattare quando il lavoro NON torna, mai sul lavoro piu' lento che
-    # puo' tornare davvero, e quello e' lungo: misurato sul dispositivo, un
-    # fotogramma pieno di scritte - un calendario dietro al piatto vuoto - da'
-    # trentotto righe e **39 secondi** di OCR, perche' ogni regione trovata
-    # passa poi dal modello che la riconosce. Piu' lo scatto, che con la luce
-    # cambiata arriva a otto. Il tetto sta sopra la somma delle due.
+    # puo' tornare davvero. Il piu' lento e' uno scatto con la luce della sala
+    # cambiata, che arriva a otto secondi, seguito da una lettura che trova
+    # poco, riprova il fotogramma negli altri tre versi e lo rilegge piu'
+    # largo. Il tetto sta largo sopra la somma.
     Stato.SCANSIONE: 50.0,
     Stato.RICONOSCIMENTO: 15.0,
     Stato.RACCONTO: None,

@@ -679,9 +679,7 @@ class TestIlModoDiRaccontare:
 
     Tre modi, e la differenza fra loro non è di stile: è la FONTE. L'archivio
     compone dai dati del registro; la generativa fa scrivere al modello quegli
-    stessi dati; la carta legge un file scritto a mano. Accanto al selettore
-    c'e' un interruttore a due posizioni, `imposta_generati`, come scorciatoia
-    fra archivio e generativa.
+    stessi dati; la carta legge un file scritto a mano.
     """
 
     @pytest.fixture
@@ -689,7 +687,6 @@ class TestIlModoDiRaccontare:
         from amelie import app as modulo
 
         monkeypatch.setattr(modulo, "PERCORSO_VOLUME", tmp_path / "volume")
-        monkeypatch.setattr(modulo, "PERCORSO_GENERATI", tmp_path / "generati")
         monkeypatch.setattr(modulo, "PERCORSO_MODO", tmp_path / "modo")
         a = modulo.Amelie(modulo.Configurazione(
             simula_mcu=True, senza_camera=True, senza_voce=True,
@@ -725,7 +722,7 @@ class TestIlModoDiRaccontare:
             a.narratore.genera = lambda _p: "x"      # un modello finto, ma c'e'
             assert a.imposta_modo("generativa")["ok"] is True
             assert a.genera_racconti is True
-            assert a.imposta_generati(False)["ok"] is True
+            assert a.imposta_modo("archivio")["ok"] is True
             assert a.modo == "archivio"
         finally:
             a.matcher.chiudi(); a.narratore.chiudi()
@@ -759,7 +756,6 @@ class TestIlModoDiRaccontare:
         rovinato.mkdir()                       # una cartella al posto del file
         monkeypatch.setattr(modulo, "PERCORSO_VOLUME", tmp_path / "volume")
         monkeypatch.setattr(modulo, "PERCORSO_MODO", rovinato)
-        monkeypatch.setattr(modulo, "PERCORSO_GENERATI", tmp_path / "generati")
         a = modulo.Amelie(modulo.Configurazione(
             simula_mcu=True, senza_camera=True, senza_voce=True,
             senza_modello=True))

@@ -21,6 +21,7 @@ vetro.
 from __future__ import annotations
 
 import csv
+import io
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -135,33 +136,38 @@ class Carta:
         self._carica()
 
     def _carica(self) -> None:
-        with open(self.percorso, encoding="utf-8", newline="") as f:
-            lettore = csv.DictReader(f)
-            # Le lingue che questo file parla, dalle colonne che ha: oltre
-            # all'italiano, ogni `descrizione_xx` ne aggiunge una. Un file con
-            # la sola `descrizione` parla italiano e basta, e il dispositivo lo
-            # sa PRIMA di provare a leggerlo in inglese.
-            intestazioni = lettore.fieldnames or []
-            self.lingue = {"it"} | {
-                c.split("_", 1)[1] for c in intestazioni
-                if c.startswith("descrizione_") and len(c.split("_", 1)[1]) == 2
-            }
-            for r in lettore:
-                titolo = (r.get("titolo") or "").strip()
-                testo = (r.get("descrizione") or "").strip()
-                if not titolo or not testo:
-                    continue
-                altre = {}
-                for lingua in self.lingue - {"it"}:
-                    t = (r.get(f"descrizione_{lingua}") or "").strip()
-                    if t:
-                        altre[lingua] = ((r.get(f"titolo_{lingua}") or "").strip(), t)
-                self.voci.append(Voce(titolo=titolo, descrizione=testo, altre=altre))
-                self._token.append(parole_utili(normalizza(titolo)))
-                self._tutte.append(token(titolo))
-                for p in self._tutte[-1]:
-                    self._dove.setdefault(p, set()).add(len(self._voci_indice))
-                self._voci_indice.append(titolo)
+        contenuto = _leggi_testo(self.percorso)
+        intestazione = contenuto.split("\n", 1)[0]
+        # Il separatore e' quello che compare di piu' nell'intestazione: un
+        # foglio di calcolo con le impostazioni italiane salva il CSV con il
+        # punto e virgola, e letto con la virgola darebbe zero voci.
+        separatore = max((",", ";", "\t"), key=intestazione.count)
+        lettore = csv.DictReader(io.StringIO(contenuto, newline=""), delimiter=separatore)
+        # Le lingue che questo file parla, dalle colonne che ha: oltre
+        # all'italiano, ogni `descrizione_xx` ne aggiunge una. Un file con
+        # la sola `descrizione` parla italiano e basta, e il dispositivo lo
+        # sa PRIMA di provare a leggerlo in inglese.
+        intestazioni = lettore.fieldnames or []
+        self.lingue = {"it"} | {
+            c.split("_", 1)[1] for c in intestazioni
+            if c.startswith("descrizione_") and len(c.split("_", 1)[1]) == 2
+        }
+        for r in lettore:
+            titolo = (r.get("titolo") or "").strip()
+            testo = (r.get("descrizione") or "").strip()
+            if not titolo or not testo:
+                continue
+            altre = {}
+            for lingua in self.lingue - {"it"}:
+                t = (r.get(f"descrizione_{lingua}") or "").strip()
+                if t:
+                    altre[lingua] = ((r.get(f"titolo_{lingua}") or "").strip(), t)
+            self.voci.append(Voce(titolo=titolo, descrizione=testo, altre=altre))
+            self._token.append(parole_utili(normalizza(titolo)))
+            self._tutte.append(token(titolo))
+            for p in self._tutte[-1]:
+                self._dove.setdefault(p, set()).add(len(self._voci_indice))
+            self._voci_indice.append(titolo)
         log.info("carta dei vini: %d voci da %s, in %s", len(self.voci),
                  self.percorso.name, ", ".join(sorted(self.lingue)))
         if not self.voci:
@@ -244,7 +250,8 @@ class Carta:
             # «Brunello» si porta dietro «Montalcino», una per una. «TOSCANA»,
             # che in carta sta in una voce sola, si porterebbe dietro «Maremma»
             # e «Vermentino»: due parole mai lette per una che sta
-            # sull'etichetta di mezza regione. La carta sa quali vini ha, non quali esistono.
+            # sull'etichetta di mezza regione. La carta sa quali vini ha, non
+            # quali esistono.
             mute_implicate = [p for p in parole if p not in TACITE
                               and p not in PAROLE_DI_LEGAME and p not in lette_qui]
             identificanti = [p for p in lette_qui if p not in TACITE
@@ -384,6 +391,19 @@ def _si_e_letta(parola: str, lette: Sequence[str]) -> bool:
     from .matcher import RISCONTRO_PAROLA
 
     return any(fuzz.ratio(parola, l) >= RISCONTRO_PAROLA for l in lette)
+
+
+def _leggi_testo(percorso: Path) -> str:
+    """Il testo del file della carta. UTF-8, con o senza il BOM che alcuni
+    fogli di calcolo mettono in testa; se non e' UTF-8, Windows-1252, la
+    codifica con cui Excel salva i CSV su Windows."""
+    dati = percorso.read_bytes()
+    try:
+        return dati.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        log.warning("carta dei vini %s non in UTF-8: la leggo come Windows-1252",
+                    percorso.name)
+        return dati.decode("cp1252", errors="replace")
 
 
 class CartaVuota(RuntimeError):

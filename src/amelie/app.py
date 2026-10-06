@@ -12,6 +12,10 @@ rallenta tutti. La pipeline è quindi rigorosamente sequenziale, e questo risolv
 gratis anche la contesa sul bus USB — lo stream della camera si chiude prima che
 la voce cominci.
 
+L'eccezione è una sola, ed è voluta: una bottiglia cambiata a racconto in corso
+si legge mentre la voce parla ancora della precedente, per non far pesare
+l'attesa (vedi `Amelie._anticipa`).
+
 ## Il tempo
 
 Il momento in cui l'ospite appoggia la bottiglia è l'unica cosa che il
@@ -32,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import json
 import logging
 import os
@@ -112,10 +117,6 @@ TETTO_RACCONTO_S = 900.0
 # ristorante non deve ritararlo ogni sera. Sta in `var`, che e' l'unica cartella
 # del progetto che l'unita' systemd lascia scrivibile.
 PERCORSO_VOLUME = RADICE / "var" / "volume"
-# L'interruttore a due posizioni delle «descrizioni generate»: acceso vale il
-# modo «generativa», spento l'archivio. Si legge solo se in `PERCORSO_MODO`
-# non c'e' un modo valido - vedi `Amelie._modo_salvato`.
-PERCORSO_GENERATI = RADICE / "var" / "racconti_generati"
 # Come il dispositivo racconta. Tre modi, e la differenza fra loro non e' di
 # stile: e' DA DOVE VIENE quello che dice. Il modo si ricorda come il volume,
 # perche' e' una scelta di chi apre il locale, non un parametro di collaudo.
@@ -140,8 +141,9 @@ SERVIZIO_MODELLO = "amelie-llm.service"
 PERCORSO_BATTERIA = RADICE / "var" / "batteria.json"
 # Il piatto vuoto, com'e' quando non c'e' niente sopra. E' una proprieta'
 # dell'installazione, non del processo: senza ricordarlo, un dispositivo acceso
-# con la bottiglia gia' posata imparerebbe quella come sfondo e resterebbe
-# fermo a guardarla. Vedi `PresenzaOttica.ricorda`.
+# con la bottiglia gia' posata imparerebbe quella come sfondo, e finche' non la
+# si toglie il riquadro della sua etichetta non si troverebbe. Vedi
+# `PresenzaOttica.ricorda`.
 PERCORSO_SFONDO = RADICE / "var" / "sfondo.npy"
 # Il giornale di bordo: una riga per scansione e il fotogramma che l'ha
 # prodotta. Vedi `amelie.giornale`.
@@ -176,9 +178,6 @@ SFONDO_DA_RISCRIVERE = 0.20
 STESSA_A_OCCHIO = 25
 # Quanto vale una lettura fatta in anticipo, se nessuno la usa subito.
 ANTICIPO_VALIDO_S = 30.0
-# Di quanto sale e scende a ogni tocco. Dieci passi da un capo all'altro: meno
-# non si sente, di piu' non si regola.
-PASSO_VOLUME = 10
 # Quanto si aspetta prima di far sentire il colpetto di ritorno. Chi tara il
 # volume preme piu' volte di fila, e un colpetto per pressione sarebbe un
 # tambureggiamento: si suona quando la mano si e' fermata.
@@ -323,8 +322,9 @@ class Amelie:
         self._scadenza: float | None = None
         self._fatti: Fatti = Fatti()
         self._candidati: list[str] = []
-        # Quante volte di fila l'OCR non ha letto nulla. Senza un tetto, un
-        # oggetto illeggibile lasciato sul piatto fa lampeggiare l'anello e
+        # I tentativi andati a vuoto con questa bottiglia: letture senza
+        # parole, letture senza riscontro, rilanci dall'attesa. Senza un tetto,
+        # un oggetto illeggibile lasciato sul piatto fa lampeggiare l'anello e
         # girare l'OCR per tutta la sera, su una board senza ventola.
         self._tentativi = 0
         self._ferma_voce = threading.Event()
@@ -333,10 +333,10 @@ class Amelie:
         # padroni, quindi un lucchetto.
         self._lettore: Riproduttore | None = None
         self._lucchetto_lettore = threading.Lock()
-        # Gli annunci si fanno UNO ALLA VOLTA e per INTERO. Chi tocca mentre
-        # uno sta parlando non lo interrompe: lascia detto quale lingua vuole
-        # sentire dopo, e i tocchi che si accumulano nel frattempo si riducono
-        # a quell'unica richiesta.
+        # Gli annunci si fanno UNO ALLA VOLTA, da un thread solo. Chi tocca
+        # mentre uno sta parlando lo interrompe e lascia detto quale lingua
+        # vuole sentire, e i tocchi che si accumulano nel frattempo si riducono
+        # a quell'unica richiesta. Vedi `_chiedi_annuncio`.
         self._lucchetto_annuncio = threading.Lock()
         # I guasti recenti, e quando si e' ripristinato l'ultima volta.
         self._guasti: list[float] = []
@@ -353,8 +353,8 @@ class Amelie:
         # secondi di ritardo proprio davanti al primo ospite.
         self._pronta = False
         # Una bottiglia finta, per il banco e per i test: vedi l'endpoint
-        # /prova. Quando c'e' prende il posto di quello che vede la camera, e
-        # passa comunque per l'isteresi vera.
+        # /prova. Quando c'e' prende il posto di quello che dice il sensore, e
+        # il resto del battito la tratta come una bottiglia vera.
         self._bottiglia_finta: bool | None = None
         # Quando tocca guardare di nuovo il piatto.
         self._prossima_sbirciata = 0.0
@@ -401,7 +401,7 @@ class Amelie:
             return None
         try:
             return Carta(percorso)
-        except (OSError, CartaVuota, KeyError) as e:
+        except (OSError, CartaVuota, KeyError, ValueError, csv.Error) as e:
             log.error("carta dei vini non caricata (%s): uso l'archivio", e)
             return None
 
@@ -441,10 +441,10 @@ class Amelie:
             # persone: chi ha scelto l'inglese dovrebbe ricercarsi la
             # bandierina a ogni bottiglia. La lingua torna a casa quando la
             # bottiglia viene TOLTA, che e' il momento in cui il tavolo cambia
-            # davvero; se la si toglie ad attesa gia' raggiunta, ci pensa
-            # `_un_battito`.
-            if (t.cambia_stato and t.a is Stato.ATTESA
-                    and t.evento is not Evento.ANNULLA and not self._presente):
+            # davvero: qui se e' gia' stata tolta (anche durante il racconto,
+            # e poi si e' annullato), in `_un_battito` se la si toglie ad
+            # attesa gia' raggiunta.
+            if t.cambia_stato and t.a is Stato.ATTESA and not self._presente:
                 self._torna_alla_lingua_di_casa()
             # Questa bottiglia e' finita, comunque sia finita: perche' il
             # racconto e' arrivato in fondo, o perche' l'ospite ha annullato.
@@ -460,9 +460,8 @@ class Amelie:
                 self._cambiata_durante_il_racconto = False
             # Una scansione rimasta senza esito qui ha finito comunque, e va a
             # giornale con il modo in cui e' finita. Succede quando l'ospite
-            # annulla, o toglie la bottiglia a meta':
-            # senza questa riga, proprio i casi piu' interessanti sarebbero gli
-            # unici a non lasciare traccia.
+            # annulla, o toglie la bottiglia a meta': senza questa riga, proprio
+            # i casi piu' interessanti sarebbero gli unici a non lasciare traccia.
             if self._scansione and t.a in (Stato.ATTESA, Stato.CONCLUSO):
                 self._annota(f"chiuso da {t.evento.value}")
             self._mostra(t.a)
@@ -691,15 +690,15 @@ class Amelie:
         """Il piatto vuoto dell'ultima volta, se c'è ed è ancora della forma giusta.
 
         Non solleva mai: un file illeggibile, o scritto quando la fascia era
-        grande diversamente, deve costare una scansione in più all'avvio, non
-        un dispositivo che non si accende.
+        grande diversamente, deve costare uno sfondo da reimparare, non un
+        dispositivo che non si accende.
         """
         try:
             import numpy as np
 
             sfondo = np.load(PERCORSO_SFONDO)
         except Exception as e:                              # noqa: BLE001
-            log.info("nessuno sfondo ricordato (%s): guardo una volta per capire", e)
+            log.info("nessuno sfondo ricordato (%s): si impara dal piatto vuoto", e)
             return None
         atteso = (self.camera.imp.sbirciata[1], self.camera.imp.sbirciata[0])
         if sfondo.shape != atteso:
@@ -786,12 +785,7 @@ class Amelie:
         except OSError:
             salvato = ""
         if salvato not in MODI:
-            # Nessun modo valido: vale l'interruttore a due posizioni, se c'e'.
-            try:
-                acceso = PERCORSO_GENERATI.read_text(encoding="utf-8").strip() == "1"
-            except OSError:
-                acceso = False
-            salvato = "generativa" if acceso else "archivio"
+            salvato = "archivio"
         if salvato == "carta" and self.carta is None:
             log.warning("modo «carta» salvato ma la carta non c'e': uso l'archivio")
             return "archivio"
@@ -859,11 +853,6 @@ class Amelie:
                 log.warning("modello linguistico, %s fallito: %s", verbo, e)
 
         threading.Thread(target=esegui, name="modello", daemon=True).start()
-
-    def imposta_generati(self, acceso: bool) -> dict[str, Any]:
-        """L'interruttore a due posizioni della rotta `/generati`: acceso vale
-        il modo «generativa», spento l'archivio."""
-        return self.imposta_modo("generativa" if acceso else "archivio")
 
     # --------------------------------------------------------------- mirino
 
@@ -944,16 +933,12 @@ class Amelie:
             self.presenza.ricorda(sfondo)
         else:
             self.presenza.reimposta()
-        # E si guarda, come all'accensione. Uscire dal mirino e' la stessa
-        # situazione: la camera stava facendo altro, il mondo davanti puo'
-        # essere cambiato, e lo sfondo appena ricaricato dice com'era il piatto
-        # quando il dispositivo CREDEVA fosse vuoto. Senza questa riga
-        # basterebbe entrare e uscire dal mirino con una bottiglia sul piatto
-        # per ritrovarsi a crederlo vuoto - e chi tara l'inquadratura la
-        # bottiglia ce l'ha davanti per definizione.
-        #
-        # E' anche cio' che chi ha appena spostato la camera vuole: la prova
-        # che l'aggiustamento ha funzionato, senza doverla chiedere.
+        # E si torna alla schermata dello stato in cui si e', che il mirino
+        # copriva. Se sul piatto c'e' una bottiglia - e chi tara l'inquadratura
+        # ce l'ha davanti per definizione - non serve chiedere niente: il
+        # sensore la vede, e il battito la rilegge da solo (vedi
+        # `_un_battito`). E' cio' che chi ha appena spostato la camera vuole:
+        # la prova che l'aggiustamento ha funzionato, senza doverla chiedere.
         self._mostra(self.macchina.stato)
 
     def _stato_mirino(self) -> dict[str, Any]:
@@ -970,9 +955,10 @@ class Amelie:
     def _annota(self, esito: str) -> None:
         """Mette a giornale la scansione appena conclusa, com'è andata.
 
-        Si chiama dove la scansione FINISCE, e finisce in due posti soli: senza
-        niente da leggere, oppure con un racconto pronto. Quello che si sa si
-        è accumulato per strada in `_scansione`.
+        Si chiama dove la scansione FINISCE - senza niente da leggere, senza
+        riscontro, con un racconto pronto, con una correzione salvata, o chiusa
+        a metà - e l'esito dice quale. Quello che si sa si è accumulato per
+        strada in `_scansione`.
         """
         voce = dict(self._scansione)
         self._scansione = {}
@@ -1009,12 +995,12 @@ class Amelie:
         return True
 
     def imposta_volume(self, valore: int) -> int:
-        """Il tocco sui due pulsanti del volume. Restituisce quello effettivo."""
+        """Il livello scelto col cursore del volume. Restituisce quello effettivo."""
         nuovo = max(0, min(100, int(valore)))
         if nuovo == self.volume:
-            # Toccare oltre il fondo o oltre il massimo non cambia niente, ma il
-            # colpetto si fa lo stesso: senza, il pulsante estremo sembrerebbe
-            # rotto invece che arrivato in fondo.
+            # Ridare il livello che c'e' gia' - il cursore in fondo, toccato di
+            # nuovo - non cambia niente, ma il colpetto si fa lo stesso: senza,
+            # il tocco sembrerebbe perso invece che arrivato in fondo.
             self._programma_colpetto()
             return self.volume
         self.volume = nuovo
@@ -1027,7 +1013,6 @@ class Amelie:
 
     def _manda_volume(self) -> None:
         self._pubblica({"tipo": "volume", "valore": self.volume,
-                        "passo": PASSO_VOLUME,
                         # Senza voce del tutto il comando non si mostra: un
                         # livello che non muove niente e' peggio di nessun
                         # livello.
@@ -1302,7 +1287,8 @@ class Amelie:
           dichiara guasto a ogni bottiglia);
         - la camera torna come all'accensione: stream spento, posa di
           partenza, device ricercato. E' il pezzo che conta di piu': una posa
-          salita a 5000 basta a tenere il dispositivo in guasto per ore;
+          che ferma la camera basta a tenere il dispositivo in guasto per ore
+          (vedi `ImpostazioniCamera.posa_massima`);
         - l'uscita audio si chiude e si riapre;
         - col modo generativo, il modello si riavvia;
         - i contatori dei tentativi si azzerano, e si torna all'invito: una
@@ -1672,7 +1658,7 @@ class Amelie:
         # sta andando.
         #
         # E si rimette SUBITO dopo la raffica, non alla fine del metodo: dopo
-        # c'è l'OCR, e mezzo secondo di bianco pieno sotto una bottiglia è un
+        # c'è l'OCR, e mezzo secondo di bianco pieno sull'etichetta è un
         # lampeggiante, non una luce.
         #
         # Tutto questo vale però solo per la raffica. Quando la camera è già in
@@ -1763,9 +1749,9 @@ class Amelie:
             self.macchina.invia(Evento.LETTURA_RIUSCITA)
             return
         # Righe senza parole - cifre, frammenti - non sono una lettura: si
-        # conta il tentativo, come se non si fosse letto niente. Contando le
-        # righe, un calendario sul piatto azzererebbe il contatore e verrebbe
-        # riletto ogni sei secondi per sempre.
+        # conta il tentativo, come se non si fosse letto niente, e si chiede di
+        # girare l'etichetta. I numeri di un calendario non vanno a cercare un
+        # vino nell'archivio.
         self._tentativi += 1
         self._annota("niente da leggere")
         self.macchina.invia(Evento.LETTURA_FALLITA)
@@ -1777,9 +1763,9 @@ class Amelie:
             # E si impara: tre volte con la luce accesa senza trovare una
             # parola vuol dire che quel che si vede non e' un'etichetta. Se lo
             # sfondo era sbagliato - ricaricato da un'altra installazione,
-            # imparato con una bottiglia davanti - questo e' cio' che lo
-            # rimette a posto, invece di lasciare il dispositivo a credere per
-            # sempre di avere qualcosa davanti.
+            # imparato con una bottiglia davanti - questo lo rimette a posto:
+            # con uno sfondo sbagliato la sagoma della bottiglia non si trova,
+            # e all'OCR arriva il ritaglio fisso con dentro mezza stanza.
             if self.camera is not None:
                 fascia = self.camera.sbircia()
                 if fascia is not None:
@@ -2232,8 +2218,8 @@ class Amelie:
         tacere il dispositivo, e' una cosa che non si chiede a un ospite.
 
         Quasi tutto lo spegne la macchina, e va lasciato fare a lei: uscendo da
-        RACCONTO scatta FERMA_RACCONTO, entrando in ATTESA tornano l'anello in
-        respiro e la schermata d'invito; la lingua resta quella scelta (vedi
+        RACCONTO scatta FERMA_RACCONTO, entrando in ATTESA tornano l'ambra
+        dell'anello e la schermata d'invito; la lingua resta quella scelta (vedi
         `_su_transizione`). Scrivere l'annullamento fuori dalla macchina
         significa dimenticarsene meta': la voce tace e l'anello resta verde
         sopra la schermata d'invito.
@@ -2985,12 +2971,7 @@ def crea_app(amelie: Amelie):
 
     @app.post("/volume/{valore}")
     async def volume(valore: int):
-        return JSONResponse({"ok": True, "valore": amelie.imposta_volume(valore),
-                             "passo": PASSO_VOLUME})
-
-    @app.post("/generati/{acceso}")
-    async def generati(acceso: int):
-        return JSONResponse(amelie.imposta_generati(bool(acceso)))
+        return JSONResponse({"ok": True, "valore": amelie.imposta_volume(valore)})
 
     @app.post("/modo/{nome}")
     async def modo(nome: str):
@@ -3064,9 +3045,9 @@ def crea_app(amelie: Amelie):
         voce, schermo, comandi — su una macchina che la camera non ce l'ha, o
         davanti a una camera che in quel momento non guarda il piatto.
 
-        Non manda l'evento a mano: dichiara che cosa c'è sul piatto e lascia
-        che sia il battito normale a passarlo per l'isteresi. Così si prova il
-        percorso vero, filtro compreso, e non una scorciatoia che gli somiglia.
+        Non manda l'evento a mano: dichiara che cosa c'è sul piatto, al posto
+        del sensore, e lascia che sia il battito normale a raccoglierlo. Così si
+        prova il percorso vero, e non una scorciatoia che gli somiglia.
 
         Tre parole, perché «non c'è una bottiglia» e «guarda tu» sono due cose
         diverse: fingere una distanza non basterebbe, perché una distanza finta
@@ -3111,13 +3092,14 @@ def crea_app(amelie: Amelie):
             # questa pagina si guarda quando qualcosa non risponde.
             **amelie.ponte.diagnosi(),
             "camera": amelie.camera is not None,
-            # Il piatto, come lo vede la camera. Sono i tre numeri con cui si
-            # verifica il riconoscimento della bottiglia SENZA smontare niente:
-            # si guarda `differenza` a piatto vuoto (deve stare sotto l'uno per
-            # cento), poi ci si appoggia una bottiglia e si riguarda (deve
-            # saltare oltre la soglia). Senza questi, l'unico modo di sapere
-            # perche' il dispositivo non parte e' leggere il giornale di bordo
-            # da un'altra macchina.
+            # Il piatto: se il sensore vede una bottiglia, e come lo vede la
+            # camera. Sono i tre numeri con cui si verifica il riconoscimento
+            # della bottiglia SENZA smontare niente: a piatto vuoto `differenza`
+            # deve stare sotto l'uno per cento; appoggiata una bottiglia,
+            # `bottiglia` deve diventare vera e `differenza` saltare oltre la
+            # soglia. Senza questi, l'unico modo di sapere perche' il
+            # dispositivo non parte e' leggere il giornale di bordo da un'altra
+            # macchina.
             "bottiglia": amelie._presente,
             "differenza": round(amelie.presenza.differenza * 100, 1),
             "soglia": round(amelie.presenza.soglia_arrivo * 100, 1),

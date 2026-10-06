@@ -70,9 +70,7 @@ BUFFER_ALSA_US = 200_000
 # su una frase da un secondo se ne mangia i due terzi e resta un rumorino.
 #
 # Il rimedio NON e' imbottire di silenzio: e' non chiudere mai il flusso. Vedi
-# `Uscita`. Questi margini restano solo per chi suona un file da fuori.
-MARGINE_APERTURA_S = 0.6
-MARGINE_CHIUSURA_S = 0.5
+# `Uscita`.
 
 
 def silenzio(secondi: float, frequenza: int = 22050) -> bytes:
@@ -555,9 +553,6 @@ class ImpostazioniVoce:
     # `plughw` mette in mezzo la conversione di ALSA, che su questa board
     # costa una frazione di punto percentuale di CPU.
     device_alsa: str = "plughw:0,3"
-    # Due thread su quattro: gli altri due servono al modello linguistico, che
-    # su questa board e' sempre il collo di bottiglia.
-    thread: int = 2
     frequenza: int = 22050
     usa_cache: bool = True
 
@@ -736,9 +731,6 @@ class Voce:
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
-
-    # Alias di `apri_uscita`.
-    _aplay = apri_uscita
 
     def parla(self, frasi: Iterable[str], *, su_frase=None) -> None:
         """Pronuncia un flusso di frasi e aspetta che siano uscite davvero.

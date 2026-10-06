@@ -59,6 +59,28 @@ class TestCaricare:
         with pytest.raises(CartaVuota):
             Carta(f)
 
+    def test_il_bom_di_un_foglio_di_calcolo_non_conta(self, tmp_path):
+        f = tmp_path / "v.csv"
+        f.write_text('titolo,descrizione\n"Barolo DOCG","Nebbiolo."\n',
+                     encoding="utf-8-sig")
+        assert [v.titolo for v in Carta(f).voci] == ["Barolo DOCG"]
+
+    def test_il_punto_e_virgola_si_riconosce(self, tmp_path):
+        f = tmp_path / "v.csv"
+        f.write_text('titolo;descrizione\n"Barolo DOCG";"Nebbiolo, Langhe."\n',
+                     encoding="utf-8")
+        voci = Carta(f).voci
+        assert [(v.titolo, v.descrizione) for v in voci] == [
+            ("Barolo DOCG", "Nebbiolo, Langhe.")]
+
+    def test_un_file_in_windows_1252_si_legge_lo_stesso(self, tmp_path):
+        f = tmp_path / "v.csv"
+        f.write_bytes('titolo;descrizione\n"Rosé del Salento";"Più fresco."\n'
+                      .encode("cp1252"))
+        voci = Carta(f).voci
+        assert [(v.titolo, v.descrizione) for v in voci] == [
+            ("Rosé del Salento", "Più fresco.")]
+
 
 class TestNonSiPrometteCioCheNonSiELetto:
     def test_un_titolo_che_promette_troppo_non_si_dice(self, carta):
