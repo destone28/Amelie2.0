@@ -91,16 +91,18 @@ fronte del dispositivo, il lato dello schermo, è il lato delle due casse.
    fondo: si aziona da sotto il dispositivo. Il FermoSwitch lo chiude con due
    viti M2 × 8.
 6. **I cavi.**
-   - il cavo con l'interruttore: dalla porta **Output 3** del power bank alla
-     porta **USB-C PD** dell'hub (le due spine a 90° servono a questo);
+   - il cavo con l'interruttore: la spina USB-A nella porta **Output 3** del
+     power bank, la spina USB-C a 90° nella porta **USB-C PD** dell'hub;
    - il cavo integrato dell'hub: esce dal lato posteriore, gira, corre
      appoggiato sopra l'hub e scende alla USB-C della UNO Q;
    - le casse: la loro spina USB in una porta USB-A dell'hub; il jack audio si
-     collega allo schermo alla fase C;
+     collega allo schermo alla fase B. Porta al massimo il controllo del volume
+     che sta sul loro cavo: a scocca chiusa non lo si raggiunge più, e il volume
+     si regola dallo schermo;
    - un cavo Qwiic nel connettore della UNO Q, lungo la parete anteriore: andrà
      al primo dei due Modulino;
-   - la prolunga di ricarica: la spina maschio nella porta USB-C In-Out del
-     power bank.
+   - la prolunga di ricarica: la spina maschio a 90° nella porta **USB-C
+     In-Out** del power bank; l'estremità femmina si fissa alla fase C.
 7. **Il VassoioLuce.** Si appoggia sulle sue quattro zampe, a ponte sopra il
    power bank.
 
@@ -120,8 +122,9 @@ La torre si monta capovolta o su un fianco: si lavora dalla pancia aperta.
    Poi il pannello entra nella torre e si avvita con due viti 4 × 16.
 3. **Lo schermo.** Va nella tasca della rampa, vetro in fuori e connettori in
    basso, avvitato per le quattro alette con quattro viti M2 × 6. Collega ora
-   il cavo HDMI, il cavo micro-USB del touch e il jack audio delle casse: dopo
-   non ci si arriva più.
+   il cavo HDMI, il cavo da USB-A a micro-USB del touch (quello della
+   confezione del power bank) e il jack audio delle casse: dopo non ci si arriva
+   più.
 4. **Il Frontale.** Chiude la rampa attorno allo schermo, e si avvita
    dall'interno della torre con quattro viti 4 × 16.
 
@@ -134,8 +137,8 @@ l'alto.
    viti M2 × 5, il sensore verso la finestra del disco. Collega il cavo Qwiic.
    Il disco entra nel suo foro dal piano superiore e si blocca con un sesto di
    giro: tre alette gli vanno sotto la mensola. Si toglie allo stesso modo.
-2. **La presa di ricarica.** La presa femmina della prolunga scatta nella sua
-   tasca sulla parete posteriore della Base.
+2. **La presa di ricarica.** L'estremità femmina della prolunga entra nella sua
+   sede sulla parete posteriore della Base, con l'apertura verso l'esterno.
 3. **La torre.** Si appoggia nella sua sede sul piano della Base; i cavi di
    schermo, camera e Pixels scendono attraverso l'apertura. Si avvita con
    quattro viti 4 × 16 **dall'interno della Base, verso l'alto**.

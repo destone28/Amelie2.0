@@ -91,16 +91,18 @@ front of the device, the side of the screen, is the side of the two speakers.
    operated from underneath the device. The FermoSwitch closes it with two
    M2 × 8 screws.
 6. **The cables.**
-   - the switch cable: from the power bank's **Output 3** port to the hub's
-     **USB-C PD** port (that is what the two 90° plugs are for);
+   - the switch cable: its USB-A plug into the power bank's **Output 3** port,
+     its 90° USB-C plug into the hub's **USB-C PD** port;
    - the hub's built-in cable: it leaves from the back side, turns, runs resting
      on top of the hub and comes down to the UNO Q's USB-C;
    - the speakers: their USB plug into a USB-A port of the hub; the audio jack
-     is connected to the screen in phase C;
+     is connected to the screen in phase B. Turn the volume control on their
+     cable all the way up: once the enclosure is closed you can no longer reach
+     it, and the volume is set from the screen;
    - a Qwiic cable in the UNO Q's connector, along the front wall: it will go
      to the first of the two Modulino boards;
-   - the charging extension: the male plug into the power bank's USB-C In-Out
-     port.
+   - the charging extension: its 90° male plug into the power bank's **USB-C
+     In-Out** port; the female end is fixed in phase C.
 7. **The VassoioLuce.** It stands on its four legs, bridging over the power
    bank.
 
@@ -115,14 +117,15 @@ Assemble the tower upside down or on its side: you work through the open belly.
    - the camera, **rotated 90°**, on its frame, with four M2 × 5 screws; the
      lens holder fits into the notch in the panel;
    - the Modulino Pixels on its four pads, with two M2 × 6 screws and the two
-     centering pins in the other two holes, LEDs towards the window;
+     centring pins in the other two holes, LEDs towards the window;
    - a Qwiic cable in the Pixels, and the camera's USB cable.
 
    Then the panel goes into the tower and is fixed with two 4 × 16 screws.
 3. **The screen.** It goes into the pocket of the ramp, glass facing out and
    connectors at the bottom, fixed through its four tabs with four M2 × 6
-   screws. Connect the HDMI cable, the micro-USB cable of the touch and the
-   speakers' audio jack now: you won't reach them later.
+   screws. Connect the HDMI cable, the USB-A to micro-USB cable of the touch
+   (the one in the power bank's box) and the speakers' audio jack now: you won't
+   reach them later.
 4. **The Frontale.** It closes the ramp around the screen and is fixed from
    inside the tower with four 4 × 16 screws.
 
@@ -135,8 +138,8 @@ up.
    M2 × 5 screws, the sensor towards the disc's window. Connect the Qwiic
    cable. The disc goes into its hole from the top and locks with a sixth of a
    turn: three tabs slide under the ledge. It comes out the same way.
-2. **The charging socket.** The female socket of the extension clips into its
-   pocket in the back wall of the Base.
+2. **The charging socket.** The female end of the extension goes into its seat
+   in the back wall of the Base, with the opening facing outwards.
 3. **The tower.** It sits in its seat on the top of the Base; the cables of the
    screen, camera and Pixels go down through the opening. Fix it with four
    4 × 16 screws **from inside the Base, upwards**.
