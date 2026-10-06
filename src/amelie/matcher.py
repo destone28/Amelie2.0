@@ -2291,7 +2291,7 @@ class Matcher:
         f = Fatti(
             livello=Livello.DENOMINAZIONE,
             denominazione=r["nome"], tipo_denominazione=r["tipo"],
-            # La regione sta in tabella per 375 denominazioni su 532, ed e' il
+            # La regione sta in tabella per 376 denominazioni su 532, ed e' il
             # fatto che manca proprio dove il modello inventa: «Catarratto, un
             # grande abruzzese del Piemonte».
             regione=r["regione"],

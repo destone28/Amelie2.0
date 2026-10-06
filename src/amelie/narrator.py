@@ -1037,7 +1037,7 @@ def _corpo(f: Fatti, lex: Lessico, lingua: str, seme: int = 0) -> list[str]:
     #    E dove si produce, ma solo quando c'e' poco altro da dire. Su 1.932
     #    denominazioni e tipologie, 227 non hanno ne' vitigni ne' citazioni
     #    ne' abbinamenti: senza la regione il racconto sarebbe una frase sola,
-    #    il nome e basta. La regione sta in archivio per 375 denominazioni su
+    #    il nome e basta. La regione sta in archivio per 376 denominazioni su
     #    532.
     if len(frasi) < 2 and f.regione and not (
             f.denominazione and f.regione in f.denominazione):
