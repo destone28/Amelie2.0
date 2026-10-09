@@ -32,6 +32,15 @@ if [ ! -s "$PROFILO/Preferences" ] || ! grep -q '"translate"' "$PROFILO/Preferen
         > "$PROFILO/Preferences"
 fi
 
+# Il blocco del profilo resta ogni volta che Chromium non si chiude da se' -
+# cioe' quasi sempre: il dispositivo si spegne togliendo la corrente - e porta
+# il nome della board. Al riavvio Chromium lo riconosce come suo e lo toglie;
+# ma se il nome e' cambiato (`arduino-app-cli system set-name`) lo crede di un
+# altro computer, e resta fermo su un avviso al posto di Amelie. Un altro
+# Chromium sullo stesso profilo qui non c'e' mai: systemd ne avvia uno per
+# volta, e prima di riavviarlo chiude tutti i processi dell'unita'.
+rm -f /home/arduino/.config/amelie-kiosk/Singleton{Lock,Cookie,Socket}
+
 # NON si aspetta il server. Si parte dalla SCHERMATA D'AVVIO, che e' un file e
 # quindi esiste gia': compare in un paio di secondi, col marchio, e resta finche'
 # il dispositivo non e' pronto davvero - poi e' lei a portarsi sull'applicazione.

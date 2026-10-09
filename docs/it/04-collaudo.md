@@ -33,8 +33,8 @@ Lo script legge e basta: non cambia niente. Stampa otto sezioni:
    llama.cpp, database, carta dei vini, firmware;
 3. **Servizi**: che i servizi siano abilitati e attivi, e la sessione grafica
    di Amelie;
-4. **Applicazione**: che risponda, il microcontrollore, i due Modulino, la
-   camera, la voce;
+4. **Applicazione**: che risponda e che lo schermo la mostri, il
+   microcontrollore, i due Modulino, la camera, la voce;
 5. **Schermo**: l'uscita video, la modalità 1280x720, il touch;
 6. **Camera**: la camera USB;
 7. **Audio**: la scheda audio, la strada del suono verso l'HDMI e la cache
@@ -55,6 +55,7 @@ Le voci più frequenti, e che cosa fare:
 |---|---|
 | «l'applicazione non risponde su 127.0.0.1:8080: …» | se hai appena acceso, aspetta un minuto e rilancia lo script; se resta, guarda il giornale dell'applicazione: `journalctl -u amelie -n 50` |
 | «applicazione non ancora pronta (riprova fra qualche secondo)» | sta caricando le voci: rilancia lo script fra qualche secondo |
+| «nessuno schermo collegato all'applicazione: …» | lo schermo non mostra Amelie: guarda che cosa c'è. Per un avviso di Chromium o una pagina ferma, `sudo systemctl restart amelie-kiosk`; per la scrivania, vedi [Lo schermo](#lo-schermo) |
 | «… non abilitato (…): rilancia scripts/install.sh», «manca …: rilancia scripts/install.sh» | rilancia `bash scripts/install.sh` |
 | «il router risponde ma lo sketch di Amelie non gira sul microcontrollore: …», «sul microcontrollore gira un firmware di un'altra versione …» | ricarica sketch e loader: `bash scripts/firmware.sh --sempre`. Vedi [Il microcontrollore](#il-microcontrollore) |
 | «il microcontrollore non risponde: arduino-router fermo …» | `sudo systemctl restart arduino-router`, poi rilancia lo script |
@@ -78,6 +79,7 @@ calice su fondo scuro, a tutto schermo e senza puntatore.
 | immagine piccola in un angolo, e lo script segnala un'altra modalità, per esempio 1920x1080 | lo schermo non è a 1280x720 | `sudo systemctl restart amelie-display`; se non basta, `sudo reboot` |
 | compare la scrivania | la sessione di Amelie non è impostata (lo script lo segnala come ATTENZIONE) | rilancia `bash scripts/install.sh`, poi `sudo reboot` |
 | la pagina non cambia dopo un aggiornamento | il chiosco carica la pagina una volta sola, all'avvio | `sudo systemctl restart amelie-kiosk` |
+| un avviso di Chromium al posto di Amelie | il chiosco si è fermato prima di aprire la pagina | `sudo systemctl restart amelie-kiosk` |
 
 Uno schermo che si spegne porta via anche l'audio: il ponte video della board
 configura l'audio solo se vede lo schermo acceso. Per questo `amelie-display`

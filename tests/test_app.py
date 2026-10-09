@@ -1075,6 +1075,27 @@ class TestFirmwareEPythonDAccordo:
         assert corpo["camera"] is False
         assert corpo["fotogramma_s"] is None
 
+    def test_lo_stato_tecnico_conta_gli_schermi(self):
+        """Il servizio del chiosco puo' risultare attivo con Chromium fermo su
+        un avviso: che lo schermo mostri Amelie lo dice solo la pagina, quando
+        si collega agli eventi."""
+        from amelie.app import crea_app
+
+        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                  senza_voce=True, senza_modello=True))
+        try:
+            rotta = next(r for r in crea_app(a).routes
+                         if getattr(r, "path", None) == "/stato")
+            import asyncio
+            import json
+            prima = json.loads(asyncio.run(rotta.endpoint()).body)["schermi"]
+            a._ascoltatori.add(asyncio.Queue())
+            dopo = json.loads(asyncio.run(rotta.endpoint()).body)["schermi"]
+        finally:
+            a.matcher.chiudi()
+            a.narratore.chiudi()
+        assert (prima, dopo) == (0, 1)
+
     def test_la_versione_del_protocollo_e_la_stessa_nei_due_linguaggi(self):
         """È il numero che impedisce di leggere a rovescio i bit di un MCU non
         aggiornato: se i due lati non concordano, non protegge da niente."""

@@ -103,6 +103,16 @@ else
     campo() { printf '%s' "$STATO" | python3 -c "import json,sys; d=json.load(sys.stdin); v=d.get('$1'); print(json.dumps(v) if isinstance(v,(dict,list)) else v)"; }
     info "stato: $(campo stato), modo: $(campo modo), volume: $(campo volume)"
     [ "$(campo pronta)" = True ] && ok "applicazione pronta" || warn "applicazione non ancora pronta (riprova fra qualche secondo)"
+    # Il servizio del chiosco risulta attivo anche con Chromium fermo su un
+    # avviso, o con la scrivania davanti: che lo schermo mostri Amelie lo dice
+    # solo la pagina, che si collega agli eventi dell'applicazione.
+    if [ "$(campo pronta)" = True ]; then
+        if [ "$(campo schermi)" -ge 1 ] 2>/dev/null; then
+            ok "lo schermo mostra l'applicazione"
+        else
+            warn "nessuno schermo collegato all'applicazione: guarda che cosa mostra, poi sudo systemctl restart amelie-kiosk"
+        fi
+    fi
     # Il protocollo che il codice si aspetta, letto dal codice: scritto qui a
     # mano resterebbe indietro alla prima versione nuova del firmware.
     ATTESO=$(PYTHONPATH=src venv/bin/python -c \

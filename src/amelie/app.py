@@ -3123,6 +3123,11 @@ def crea_app(amelie: Amelie):
             "voci_in_carta": (len(amelie.carta.voci) if amelie.carta else 0),
             "racconti_generati": amelie.genera_racconti,
             "pronta": amelie._pronta,
+            # Le pagine aperte sull'applicazione, cioe' collegate agli eventi:
+            # sul dispositivo una, il chiosco. Zero vuol dire che lo schermo
+            # mostra altro - la scrivania, un avviso di Chromium - anche se il
+            # servizio del chiosco risulta attivo.
+            "schermi": len(amelie._ascoltatori),
             "ultimo_livello": amelie._fatti.livello.value,
             "sicurezza": amelie._fatti.sicurezza,
             "transizioni": [f"{t.da.value}->{t.a.value}"

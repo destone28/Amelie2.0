@@ -34,8 +34,8 @@ their Italian names:
    their checksums, llama.cpp, database, wine list, firmware;
 3. **Servizi** (services): that the services are enabled and active, and
    Amelie's graphical session;
-4. **Applicazione** (application): that it responds, the microcontroller, the
-   two Modulino boards, the camera, the voice;
+4. **Applicazione** (application): that it responds and that the screen shows
+   it, the microcontroller, the two Modulino boards, the camera, the voice;
 5. **Schermo** (screen): the video output, the 1280x720 mode, the touch;
 6. **Camera**: the USB camera;
 7. **Audio**: the sound card, the sound path to HDMI and the cache of the
@@ -56,6 +56,7 @@ The most common items, and what to do:
 |---|---|
 | "l'applicazione non risponde su 127.0.0.1:8080: …" (the application does not respond) | if you have just switched on, wait a minute and run the script again; if it stays, look at the application's journal: `journalctl -u amelie -n 50` |
 | "applicazione non ancora pronta (riprova fra qualche secondo)" (application not ready yet, try again in a few seconds) | it is loading the voices: run the script again in a few seconds |
+| "nessuno schermo collegato all'applicazione: …" (no screen connected to the application) | the screen is not showing Amelie: look at what is there. For a Chromium notice or a page that does not move, `sudo systemctl restart amelie-kiosk`; for the desktop, see [The screen](#the-screen) |
 | "… non abilitato (…): rilancia scripts/install.sh", "manca …: rilancia scripts/install.sh" (not enabled, or missing: run scripts/install.sh again) | run `bash scripts/install.sh` again |
 | "il router risponde ma lo sketch di Amelie non gira sul microcontrollore: …" (the router answers but the Amelie sketch is not running on the microcontroller), "sul microcontrollore gira un firmware di un'altra versione …" (the microcontroller runs a firmware of another version) | upload the sketch and the loader again: `bash scripts/firmware.sh --sempre`. See [The microcontroller](#the-microcontroller) |
 | "il microcontrollore non risponde: arduino-router fermo …" (the microcontroller does not respond: arduino-router stopped) | `sudo systemctl restart arduino-router`, then run the script again |
@@ -80,6 +81,7 @@ a dark background, full screen and with no pointer.
 | small image in a corner, and the script reports another mode, for example 1920x1080 | the screen is not at 1280x720 | `sudo systemctl restart amelie-display`; if that is not enough, `sudo reboot` |
 | the desktop appears | Amelie's session is not set (the script reports it as ATTENZIONE) | run `bash scripts/install.sh` again, then `sudo reboot` |
 | the page does not change after an update | the kiosk loads the page only once, at start-up | `sudo systemctl restart amelie-kiosk` |
+| a Chromium notice instead of Amelie | the kiosk stopped before opening the page | `sudo systemctl restart amelie-kiosk` |
 
 A screen that turns off takes the audio with it: the board's video bridge sets
 up the audio only if it sees the screen on. That is why `amelie-display` turns
