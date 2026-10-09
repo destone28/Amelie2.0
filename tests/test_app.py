@@ -1762,3 +1762,37 @@ class TestIlDubbioNonSiChiede:
         finally:
             a.matcher.chiudi()
             a.narratore.chiudi()
+
+
+class TestLAnnuncioDellaLinguaEPronto:
+    def test_si_pre_sintetizzano_le_frasi_che_si_dicono(self):
+        """L'annuncio si dice una frase per volta, e la cache e' per frase.
+
+        Pre-sintetizzare l'annuncio intero non serviva a niente: il primo tocco
+        sulla bandierina sintetizzava al momento «Lingua italiana.», e uno
+        spegnimento subito dopo poteva lasciarla in cache vuota.
+        """
+        from amelie.narrator import spezza_in_frasi
+
+        a = Amelie(Configurazione(simula_mcu=True, senza_camera=True,
+                                  senza_voce=True, senza_modello=True))
+        sintetizzate = []
+
+        class VoceFinta:
+            def uscita(self): pass
+            def scalda(self, lingue=()): pass
+            def per_lingua(self, codice): return True
+            def sintetizza(self, frase):
+                sintetizzate.append(frase)
+                return b"\x00\x00"
+
+        a.voce = VoceFinta()
+        try:
+            a._scalda_voci()
+            for lingua in a.lex.lingue:
+                annuncio = a.lex.frase("voce", "conferma_lingua", lingua=lingua)
+                for frase in spezza_in_frasi(annuncio):
+                    assert frase in sintetizzate, (lingua, frase, sintetizzate)
+        finally:
+            a.matcher.chiudi()
+            a.narratore.chiudi()

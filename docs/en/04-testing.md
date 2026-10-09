@@ -38,7 +38,8 @@ their Italian names:
    two Modulino boards, the camera, the voice;
 5. **Schermo** (screen): the video output, the 1280x720 mode, the touch;
 6. **Camera**: the USB camera;
-7. **Audio**: the sound card and the sound path to HDMI;
+7. **Audio**: the sound card, the sound path to HDMI and the cache of the
+   sentences already spoken;
 8. **Router verso il microcontrollore** (router to the microcontroller): the
    `arduino-router` service, which connects Linux to the microcontroller, and
    that App Lab starts no app at power-on.
@@ -56,12 +57,16 @@ The most common items, and what to do:
 | "l'applicazione non risponde su 127.0.0.1:8080: …" (the application does not respond) | if you have just switched on, wait a minute and run the script again; if it stays, look at the application's journal: `journalctl -u amelie -n 50` |
 | "applicazione non ancora pronta (riprova fra qualche secondo)" (application not ready yet, try again in a few seconds) | it is loading the voices: run the script again in a few seconds |
 | "… non abilitato (…): rilancia scripts/install.sh", "manca …: rilancia scripts/install.sh" (not enabled, or missing: run scripts/install.sh again) | run `bash scripts/install.sh` again |
-| "il microcontrollore non risponde: …" (the microcontroller does not respond) | the router is stopped or the firmware is not uploaded. If section 8 says "arduino-router fermo" (arduino-router stopped), `sudo systemctl restart arduino-router`; otherwise upload the firmware again, `rm -f var/firmware/.caricato && bash scripts/install.sh`, then switch off and on with the power switch |
+| "il router risponde ma lo sketch di Amelie non gira sul microcontrollore: …" (the router answers but the Amelie sketch is not running on the microcontroller), "sul microcontrollore gira un firmware di un'altra versione …" (the microcontroller runs a firmware of another version) | upload the sketch and the loader again: `bash scripts/firmware.sh --sempre`. See [The microcontroller](#the-microcontroller) |
+| "il microcontrollore non risponde: arduino-router fermo …" (the microcontroller does not respond: arduino-router stopped) | `sudo systemctl restart arduino-router`, then run the script again |
+| "nessuna traccia di un firmware caricato e verificato: …" (no trace of an uploaded and verified firmware) | `bash scripts/firmware.sh` |
 | "voce non caricata: il racconto si leggera' soltanto" (voice not loaded: the story will only be read) | the voices are missing: run `bash scripts/install.sh` again |
 | "la camera non ha mai dato un fotogramma all'applicazione: …", "la camera non da' fotogrammi da … s: …" (the camera has never delivered a frame to the application; the camera has delivered no frames for … s) | the application receives no images from the camera: check the camera's USB cable and its socket on the hub, then `sudo systemctl restart amelie` |
 | "nessuna camera USB: controlla il cavo della camera" (no USB camera: check the camera cable) | the camera's USB cable does not reach the hub |
+| "… frasi rovinate nella cache della voce: …" (… damaged sentences in the voice cache) | a power cut has left some sentences already spoken empty: the service removes them at every start, `sudo systemctl restart amelie`. See [Audio](#audio) |
 
-For the screen, touch, audio and Modulino boards, see the sections below.
+For the screen, touch, audio, the microcontroller and the Modulino boards, see
+the sections below.
 
 ## The screen
 
@@ -104,6 +109,7 @@ audio test.
 | silence, the script says "strada del suono verso l'HDMI chiusa" (sound path to HDMI closed) | the mixer control was left closed | `sudo systemctl restart amelie-audio-rotta` |
 | silence, everything OK in the script | the speakers | check the jack between screen and speakers, the USB cable that powers the speakers and the volume control on their cable, which must be kept at maximum (it can only be reached with the enclosure open) |
 | weak sound | the volume | turn it up from the speaker in the top left; if it is already at maximum, check the volume control on the speakers' cable |
+| you only hear "From now on I will describe the wines in English.", without "English language."; or a sentence is missing from a story | that sentence is saved empty in the voice cache: it happens when the device is switched off a few seconds after the sentence was heard for the first time | switch off and on, or `sudo systemctl restart amelie`: at every start the service removes the empty sentences and makes them again the first time they are needed. The script checks this in section 7 |
 
 To test the audio without the application there are two scripts, to be run
 with the screen on and **with the service stopped**: `scripts/01_audio.sh`
@@ -130,6 +136,58 @@ audio processor and, if that is not enough, the board: only once, and only in
 the first ten minutes after power-on. It writes what it did to
 `/var/lib/amelie/audio-guard.log`; the last lines can be read with
 `tail /var/lib/amelie/audio-guard.log`.
+
+## The microcontroller
+
+The light and the distance sensor are driven by the UNO Q's microcontroller,
+running Amelie's sketch. If the sketch is not running, the light stays off and
+the device sees no bottle at all, even with the Modulino boards connected: the
+Modulino Distance LED is on, because the module is powered, but nobody reads
+it.
+
+You recognise it like this:
+
+- the script, in section 4, says "il router risponde ma lo sketch di Amelie non
+  gira sul microcontrollore" (the router answers but the Amelie sketch is not
+  running on the microcontroller);
+- in the settings, "Technical state" shows `mcu: false` and `protocollo: null`;
+- the application's journal keeps repeating "il router risponde ma lo sketch di
+  Amelie non c'e'" (the router answers but the Amelie sketch is not there):
+  `journalctl -u amelie -n 20`.
+
+The most common cause is the pairing between the sketch and the loader. The
+loader is the program that, when the microcontroller starts, runs the sketch
+from a fixed address in memory; the loader and that address change with the
+version of Arduino's core. When App Lab updates itself it brings the loader of
+its own version to the microcontroller, and a sketch compiled with a different
+core no longer starts: the upload succeeds, and the microcontroller stays
+silent. The fix is to upload the sketch and the loader together, with the same
+core, as the `arduino` user and without a password:
+
+```bash
+cd ~/amelie
+bash scripts/firmware.sh --sempre
+```
+
+The script compiles the sketch if needed, uploads it together with the loader,
+waits for the microcontroller to answer and says which Modulino boards it
+sees: "firmware caricato, il microcontrollore risponde: Pixels visto, Distance
+visto" (firmware uploaded, the microcontroller answers: Pixels seen, Distance
+seen). The application notices by itself within twenty seconds, with no
+restart. At the moment the microcontroller restarts, the router writes a few
+"decoding packet: invalid packet, expected array" lines in its journal: this
+is normal.
+
+| `firmware.sh` message | What to do |
+|---|---|
+| "arduino-router e' fermo: …" (arduino-router is stopped) | `sudo systemctl restart arduino-router`, then run it again |
+| "caricamento non riuscito: …" (upload failed) | run it again; if it happens again, switch off and on with the power switch and run it again |
+| "firmware caricato, ma il microcontrollore non risponde" (firmware uploaded, but the microcontroller does not answer) | switch off and on with the power switch and run it again; if it persists, look at the router: `journalctl -u arduino-router -n 30` |
+| "… Pixels NON visto", "… Distance NON visto" (Pixels / Distance not seen) | see [The Modulino boards](#the-modulino-boards) |
+
+After every App Lab or system update it is worth running
+`bash scripts/firmware.sh`, without `--sempre`: if the microcontroller still
+answers it touches nothing. `scripts/install.sh` does it too, in step 9.
 
 ## The Modulino boards
 

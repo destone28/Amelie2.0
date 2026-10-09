@@ -1202,10 +1202,15 @@ class Amelie:
             frase = self.lex.frase("voce", "conferma_lingua", lingua=lingua)
             if not frase or not self.voce.per_lingua(lingua):
                 continue
-            try:
-                self.voce.sintetizza(frase)
-            except Exception as e:                          # noqa: BLE001
-                log.warning("frase fissa non pre-sintetizzata (%s): %s", lingua, e)
+            # Una frase per volta, come le dice `_annuncia_lingua`: la cache e'
+            # per frase, e l'annuncio intero come chiave non servirebbe a
+            # niente - il primo tocco sintetizzerebbe al momento.
+            for pezzo in spezza_in_frasi(frase):
+                try:
+                    self.voce.sintetizza(pezzo)
+                except Exception as e:                      # noqa: BLE001
+                    log.warning("frase fissa non pre-sintetizzata (%s): %s",
+                                lingua, e)
         self.voce.per_lingua(self.lingua)      # si torna alla lingua a schermo
         # Da adesso il dispositivo e' pronto davvero: le voci sono in memoria e
         # la prima frase esce subito. La schermata d'avvio aspetta questo, non
@@ -1290,6 +1295,7 @@ class Amelie:
           che ferma la camera basta a tenere il dispositivo in guasto per ore
           (vedi `ImpostazioniCamera.posa_massima`);
         - l'uscita audio si chiude e si riapre;
+        - la connessione col router si chiude, e la prossima chiamata la riapre;
         - col modo generativo, il modello si riavvia;
         - i contatori dei tentativi si azzerano, e si torna all'invito: una
           bottiglia gia' sul piatto si rilegge.
@@ -1326,6 +1332,10 @@ class Amelie:
                 self.voce.uscita()
             except Exception as e:                          # noqa: BLE001
                 log.warning("uscita audio non riaperta: %s", e)
+        try:
+            self.ponte.chiudi()
+        except Exception as e:                              # noqa: BLE001
+            log.warning("connessione col router non chiusa: %s", e)
         if self.modo == "generativa":
             self._accendi_il_modello(True, riavvia=True)
         self._tentativi = 0

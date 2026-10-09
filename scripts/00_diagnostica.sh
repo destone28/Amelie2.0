@@ -75,8 +75,8 @@ else
 fi
 [ -s vini.csv ] && ok "carta dei vini: $(($(wc -l < vini.csv) - 1)) righe" \
     || warn "manca vini.csv: il modo «Carta dei vini» non comparira'"
-[ -s var/firmware/.caricato ] && ok "firmware del microcontrollore caricato da install.sh" \
-    || warn "nessuna traccia del caricamento del firmware: rilancia scripts/install.sh"
+[ -s var/firmware/.caricato ] && ok "firmware del microcontrollore caricato e verificato" \
+    || warn "nessuna traccia di un firmware caricato e verificato: bash scripts/firmware.sh"
 
 # ---------------------------------------------------------------- 3. servizi
 sez "3. Servizi"
@@ -103,15 +103,19 @@ else
     campo() { printf '%s' "$STATO" | python3 -c "import json,sys; d=json.load(sys.stdin); v=d.get('$1'); print(json.dumps(v) if isinstance(v,(dict,list)) else v)"; }
     info "stato: $(campo stato), modo: $(campo modo), volume: $(campo volume)"
     [ "$(campo pronta)" = True ] && ok "applicazione pronta" || warn "applicazione non ancora pronta (riprova fra qualche secondo)"
-    if [ "$(campo mcu)" = True ]; then
-        ok "microcontrollore raggiungibile (protocollo $(campo protocollo))"
+    if [ "$(campo mcu)" = True ] && [ "$(campo protocollo)" = 2 ]; then
+        ok "microcontrollore raggiungibile (protocollo 2)"
         MODULI=$(campo moduli)
         grep -q '"anello": true' <<<"$MODULI" && ok "Modulino Pixels visto" \
             || bad "Modulino Pixels non visto: cavo Qwiic, poi spegni e riaccendi"
         grep -q '"distanza": true' <<<"$MODULI" && ok "Modulino Distance visto" \
             || bad "Modulino Distance non visto: senza, nessuna bottiglia viene notata"
+    elif [ "$(campo mcu)" = True ]; then
+        bad "sul microcontrollore gira un firmware di un'altra versione (protocollo $(campo protocollo)): bash scripts/firmware.sh --sempre"
+    elif systemctl is-active -q arduino-router; then
+        bad "il router risponde ma lo sketch di Amelie non gira sul microcontrollore: bash scripts/firmware.sh --sempre"
     else
-        bad "il microcontrollore non risponde: firmware non caricato o router fermo (systemctl status arduino-router)"
+        bad "il microcontrollore non risponde: arduino-router fermo (sudo systemctl restart arduino-router)"
     fi
     # `camera` e' vero anche col cavo staccato: se la camera funziona lo dice
     # `fotogramma_s`, i secondi dall'ultimo fotogramma. A riposo il guardiano ne
@@ -177,6 +181,19 @@ else
     bad "strada del suono verso l'HDMI chiusa: sudo systemctl restart amelie-audio-rotta"
 fi
 [ -r /var/lib/amelie/audio-guard.log ] && info "guardia audio: $(tail -1 /var/lib/amelie/audio-guard.log)"
+# Le frasi gia' dette restano in una cache. Uno spegnimento subito dopo averne
+# scritta una puo' lasciare un file vuoto, e quella frase non si sentirebbe
+# piu': il servizio li toglie a ogni avvio, qui si contano.
+CACHE_VOCE="$HOME/.cache/amelie/voce"
+if [ -d "$CACHE_VOCE" ]; then
+    ROVINATE=$(find "$CACHE_VOCE" -maxdepth 1 \( -name '*.raw' -size 0 -o -name '*.parziale' \) | wc -l)
+    FRASI=$(find "$CACHE_VOCE" -maxdepth 1 -name '*.raw' | wc -l)
+    if [ "$ROVINATE" -eq 0 ]; then
+        ok "cache della voce sana ($FRASI frasi)"
+    else
+        warn "$ROVINATE frasi rovinate nella cache della voce: il servizio le toglie riavviandolo (sudo systemctl restart amelie)"
+    fi
+fi
 info "l'audio si collauda ascoltando: tocca la bandiera gia' attiva sullo schermo"
 
 # ---------------------------------------------------------------- 8. ponte

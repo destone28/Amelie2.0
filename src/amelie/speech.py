@@ -34,6 +34,7 @@ import bisect
 import hashlib
 import logging
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -75,6 +76,30 @@ BUFFER_ALSA_US = 200_000
 
 def silenzio(secondi: float, frequenza: int = 22050) -> bytes:
     return b"\x00\x00" * int(frequenza * secondi)
+
+
+def scrivi_durevole(percorso: Path, dati: bytes) -> None:
+    """Scrive un file in modo che sopravviva alla spina staccata.
+
+    Il dispositivo si spegne togliendo corrente. Su ext4 un file NUOVO scritto e
+    rinominato resta in memoria per alcuni secondi, e se la corrente salta in
+    quel momento al riavvio c'e' il nome ma non il contenuto: un file lungo
+    zero. Da qui i due `fsync`: uno per il contenuto, uno per la cartella, che
+    e' cio' che rende durevole il nome nuovo. Il file temporaneo fa si' che un
+    file troncato a meta' non prenda mai il nome buono.
+    """
+    percorso.parent.mkdir(parents=True, exist_ok=True)
+    tmp = percorso.with_suffix(".parziale")
+    with open(tmp, "wb") as f:
+        f.write(dati)
+        f.flush()
+        os.fsync(f.fileno())
+    tmp.replace(percorso)
+    cartella = os.open(percorso.parent, os.O_RDONLY)
+    try:
+        os.fsync(cartella)
+    finally:
+        os.close(cartella)
 
 
 # ------------------------------------------------------------------- volume
@@ -590,6 +615,7 @@ class Voce:
         self.guadagno = guadagno_di(self._volume)
         self.cache = CARTELLA_CACHE
         self.cache.mkdir(parents=True, exist_ok=True)
+        self.ripara_cache()
 
     # -------------------------------------------------------------- motore
 
@@ -689,6 +715,60 @@ class Voce:
         h = hashlib.sha256(f"{self.imp.modello}|{frase}".encode()).hexdigest()[:20]
         return self.cache / f"{h}.raw"
 
+    @staticmethod
+    def _sano(dati: bytes) -> bool:
+        """Un file di cache e' una frase solo se ha campioni interi da 16 bit.
+
+        Uno vuoto, o di lunghezza dispari, e' cio' che resta di uno spegnimento
+        arrivato fra la scrittura e il disco.
+        """
+        return len(dati) > 0 and len(dati) % 2 == 0
+
+    def _dalla_cache(self, percorso: Path) -> bytes | None:
+        """Il suono di una frase gia' detta, se il file e' sano.
+
+        Un file rovinato non si legge come buono: `parla` salta le frasi vuote
+        senza dire niente, e quella frase sparirebbe per sempre da ogni
+        racconto. Si tratta come se mancasse, e la si rifa'.
+        """
+        try:
+            dati = percorso.read_bytes()
+        except FileNotFoundError:
+            return None
+        except OSError as e:
+            log.warning("frase in cache illeggibile (%s): la rifaccio", e)
+            return None
+        if not self._sano(dati):
+            log.warning("frase in cache rovinata (%d byte): la rifaccio", len(dati))
+            return None
+        return dati
+
+    def ripara_cache(self) -> int:
+        """Toglie dalla cache i file che non sono frasi. Si fa all'avvio.
+
+        `_dalla_cache` li rifarebbe comunque al primo uso; toglierli qui li fa
+        comparire nel giornale e lascia la cartella pulita. Restituisce quanti
+        ne ha tolti.
+        """
+        tolti = 0
+        try:
+            candidati = list(self.cache.glob("*.parziale"))
+            candidati += [p for p in self.cache.glob("*.raw")
+                          if not p.stat().st_size or p.stat().st_size % 2]
+        except OSError as e:
+            log.warning("cache della voce non controllata: %s", e)
+            return 0
+        for p in candidati:
+            try:
+                p.unlink()
+                tolti += 1
+            except OSError as e:
+                log.warning("file rovinato non tolto dalla cache: %s", e)
+        if tolti:
+            log.warning("cache della voce: tolti %d file rovinati da uno "
+                        "spegnimento, le frasi si rifanno al primo uso", tolti)
+        return tolti
+
     # ------------------------------------------------------------ sintesi
 
     def sintetizza(self, frase: str) -> bytes:
@@ -701,18 +781,18 @@ class Voce:
         if not frase:
             return b""
         percorso = self._chiave(frase)
-        if self.imp.usa_cache and percorso.exists():
-            return percorso.read_bytes()
+        if self.imp.usa_cache and (pcm := self._dalla_cache(percorso)):
+            return pcm
 
         voce = self._carica()
         pezzi = [c.audio_int16_bytes for c in voce.synthesize(frase)]
         pcm = b"".join(pezzi)
         if self.imp.usa_cache and pcm:
-            # Scrittura atomica: un file di cache troncato da un'interruzione
-            # verrebbe riletto come audio valido e produrrebbe un crepitio.
-            tmp = percorso.with_suffix(".parziale")
-            tmp.write_bytes(pcm)
-            tmp.replace(percorso)
+            try:
+                scrivi_durevole(percorso, pcm)
+            except OSError as e:
+                # Una cache che non si scrive costa solo la prossima sintesi.
+                log.warning("frase non salvata in cache: %s", e)
         return pcm
 
     def apri_uscita(self) -> subprocess.Popen:

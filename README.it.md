@@ -223,7 +223,9 @@ titolo,descrizione,titolo_en,descrizione_en
 
 - **Lo schermo resta nero**: controlla il cavo HDMI e il cavo micro-USB dello schermo. Lo schermo è pilotato a 1280 × 720, una modalità che riduce al suo pannello da 800 × 480; `systemctl status amelie-display` dice quale modalità è stata impostata.
 - **Niente suono**: vedi i controlli della prima accensione. Il suono ha bisogno dello schermo acceso, e Amelie lo tiene sempre sveglio.
-- **Le bottiglie non vengono mai notate**: il sensore di distanza non viene visto. Controlla la catena Qwiic, spegni e riaccendi.
+- **Le bottiglie non vengono mai notate e la luce resta spenta**: sul microcontrollore non gira lo sketch di Amelie, di solito dopo un aggiornamento di App Lab. Sulla board lancia `bash ~/amelie/scripts/firmware.sh --sempre`, che ricarica sketch e loader insieme.
+- **La luce c'è, ma le bottiglie non vengono notate**: il sensore di distanza non viene visto. Controlla la catena Qwiic, spegni e riaccendi.
+- **All'annuncio della lingua manca «Lingua italiana», o a un racconto manca una frase**: uno spegnimento subito dopo una frase nuova l'ha lasciata vuota nella cache della voce. Spegni e riaccendi: all'avvio il servizio toglie le frasi vuote e le rifà.
 - **Le etichette si leggono male**: accendi Debug camera e controlla che l'etichetta sia al centro del riquadro e nitida.
 - **Qualunque altra cosa**: prova «Ripristina il funzionamento» nelle impostazioni. Il registro dell'applicazione si legge con `journalctl -u amelie`.
 

@@ -125,7 +125,8 @@ skipping what is already done.
 | "servono almeno 4 GB liberi in /home/arduino (ce ne sono …)" (at least 4 GB free are needed; there are …) | free some space in the home folder; `df -h ~` tells you how much there is |
 | "serve la password di arduino per sudo" (the arduino password is needed for sudo) | the password was mistyped three times: run the script again and type it carefully |
 | "la voce … non corrisponde alla somma attesa", "modello non scaricato da …", "il modello non corrisponde alla somma attesa" (a voice or the model does not match the expected sum, or the model was not downloaded) | a download was interrupted or a different file arrived: run the script again. With `AMELIE_URL_MODELLO`, check the address |
-| "remoteocd o la configurazione OpenOCD non trovati", "caricamento del firmware non riuscito" (upload tool not found, firmware upload failed) | the firmware was not uploaded to the microcontroller: run the script again; if it happens again, remove and restore power to the board and run it again |
+| "remoteocd non trovato …", "loader o configurazione OpenOCD del core non trovati …", "caricamento non riuscito: …" (upload tool, loader or OpenOCD configuration not found; upload failed) | the firmware was not uploaded to the microcontroller: run the script again; if it happens again, remove and restore power to the board and run it again |
+| "arduino-router e' fermo: …" (arduino-router is stopped) | the service that connects Linux to the microcontroller is stopped: `sudo systemctl restart arduino-router`, then run the script again |
 
 If the command that stops is a system one (`apt-get`, `pip`, `cmake`, `git`,
 `curl`), the message is its own, and the cause is almost always the network:
@@ -209,15 +210,23 @@ newer, for example after a `git pull` that changes them; otherwise it prints
 "gia' aggiornato" (already up to date). The sources and their licences are in
 [Attributions and licences](08-attributions.md).
 
-**9. Microcontroller firmware** (*Firmware del microcontrollore*). With
-`arduino-cli` it installs the `arduino:zephyr` core (Arduino's support for the
-UNO Q's microcontroller) and the `Arduino_RouterBridge` library at the tested
-versions, compiles the `firmware/amelie_mcu` sketch and uploads it to the
-STM32U585 from the board itself, without a password. It uploads it again only
-if the sketch or those versions have changed; otherwise it prints "gia'
-caricato" (already uploaded). Then it tells App Lab not to start any app at
-power-on: an App Lab app would replace Amelie's firmware. The firmware is
-described in
+**9. Microcontroller firmware** (*Firmware del microcontrollore*). It runs
+`scripts/firmware.sh`. With `arduino-cli` it installs the `arduino:zephyr` core
+(Arduino's support for the UNO Q's microcontroller) and the
+`Arduino_RouterBridge` library at the tested versions, compiles the
+`firmware/amelie_mcu` sketch and uploads it to the STM32U585 from the board
+itself, without a password, **together with the core's loader**: the sketch
+only starts if the loader on the microcontroller is the same version as the
+core it was compiled with. It tells App Lab not to start any app at power-on:
+an App Lab app would replace Amelie's firmware. Then it waits for the
+microcontroller to answer and prints which Modulino boards it sees, for example
+"firmware caricato, il microcontrollore risponde: Pixels visto, Distance visto"
+(firmware uploaded, the microcontroller answers: Pixels seen, Distance seen).
+If the sketch and the versions have not changed and the microcontroller
+already answers, it uploads nothing and says so. If the microcontroller does
+not answer after the upload, the installation carries on and reminds you at
+the end: see [The microcontroller](04-testing.md#the-microcontroller). The
+firmware is described in
 [`firmware/amelie_mcu/README.en.md`](../../firmware/amelie_mcu/README.en.md).
 
 **10. Services** (*Servizi*). It copies the service scripts to
@@ -312,10 +321,25 @@ bash scripts/install.sh
 `git pull` downloads the changes from the repository. The installer redoes
 only what has changed: the database if the sources or the code have changed,
 the firmware if the sketch or the versions of the core and the library have
-changed. If the application is running, step 10 restarts it and reloads the
-page on the screen. Changes to the other services, to the graphical session
-and to the console take effect from the next reboot: when in doubt,
-`sudo reboot`. The settings and the corrections in `var/` are kept.
+changed, or if the microcontroller does not answer. If the application is
+running, step 10 restarts it and reloads the page on the screen. Changes to
+the other services, to the graphical session and to the console take effect
+from the next reboot: when in doubt, `sudo reboot`. The settings and the
+corrections in `var/` are kept.
+
+After an App Lab or system update (`arduino-app-cli system update`), run the
+firmware script as well:
+
+```bash
+cd ~/amelie
+bash scripts/firmware.sh
+```
+
+When App Lab updates itself it can bring the loader of its own version to the
+microcontroller, and Amelie's sketch only starts with a loader of the same
+version as the core it was compiled with. If the microcontroller still
+answers, the script says so and touches nothing; otherwise it uploads the
+sketch and the loader together.
 
 ### From a PC, without going through git
 

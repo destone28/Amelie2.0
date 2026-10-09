@@ -159,3 +159,13 @@ class TestIlLavoroDiPrima:
         fine.set()
         amelie._lavoro.join(2)
         assert amelie.macchina.stato is Stato.ATTESA
+
+
+class TestIlRipristinoRiapreIlRouter:
+    def test_la_connessione_col_router_si_chiude(self, amelie):
+        """La connessione col router e' una sola e resta aperta: il ripristino
+        la chiude, e la prossima chiamata ne apre una pulita."""
+        chiusure = []
+        amelie.ponte.chiudi = lambda: chiusure.append(1)
+        assert amelie.ripristina("prova")["ok"]
+        assert chiusure == [1]

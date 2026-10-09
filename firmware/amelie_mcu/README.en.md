@@ -73,14 +73,17 @@ explained at <https://arduino.github.io/arduino-cli/latest/installation/>. The
 sketch includes only one external library, **Arduino_RouterBridge**; `Wire`,
 the I²C bus library, and the Zephyr headers are part of the core.
 
-The fixed versions, the same ones that `scripts/install.sh` installs, are the
-`arduino:zephyr` 0.52.0 core and `Arduino_RouterBridge` 0.4.3:
+The fixed versions, the same ones that `scripts/firmware.sh` installs, are the
+`arduino:zephyr` 1.0.0 core and `Arduino_RouterBridge` 0.4.3:
 
 ```bash
 arduino-cli core update-index
-arduino-cli core install arduino:zephyr@0.52.0
+arduino-cli core install arduino:zephyr@1.0.0
 arduino-cli lib install Arduino_RouterBridge@0.4.3
 ```
+
+The core is the same one that App Lab uses: see "The sketch and the loader go
+together" below.
 
 `arduino-cli` installs by itself the libraries that Arduino_RouterBridge
 depends on: Arduino_RPClite and, in turn, MsgPack with ArxContainer,
@@ -96,33 +99,73 @@ sensor driver can retry a transfer forever.
 
 ## Uploading it to the microcontroller
 
-### From the board, with `install.sh`
+### From the board, with `firmware.sh`
 
-`scripts/install.sh`, in step 9, installs the core and the library at the
-fixed versions, compiles the sketch on the board and uploads it to the
-microcontroller with `remoteocd`. `remoteocd` is the core's tool that uploads
-the firmware through OpenOCD (Open On-Chip Debugger), a free program that
-writes a microcontroller's memory through its debug port. Run on the board
-with no address and no serial number, `remoteocd` works locally, with the
-board's own OpenOCD, and **does not ask for a password**.
+`scripts/firmware.sh` installs the core and the library at the fixed versions,
+compiles the sketch on the board and uploads it to the microcontroller with
+`remoteocd`, **together with the core's loader**. `remoteocd` is the core's
+tool that uploads the firmware through OpenOCD (Open On-Chip Debugger), a free
+program that writes a microcontroller's memory through its debug port. Run on
+the board with no address and no serial number, `remoteocd` works locally, with
+the board's own OpenOCD, and **does not ask for a password**.
+`scripts/install.sh` runs it in step 9.
 
-The script uploads the firmware again only when the sketch or the core and
-library versions change: it keeps a fingerprint of them in
-`var/firmware/.caricato`. It then tells App Lab, Arduino's environment for
-creating and running apps on the UNO Q, not to start any app at power-up: an
-App Lab app would replace this firmware on the microcontroller.
+After the upload the script waits for the microcontroller to answer with the
+protocol that the application expects, and only then declares it uploaded: it
+keeps a fingerprint of it in `var/firmware/.caricato`, together with the core
+and library versions. Each time it runs it asks the microcontroller whether it
+answers, and uploads again even when the fingerprint says everything is in
+place but the microcontroller is silent. Before uploading it tells App Lab,
+Arduino's environment for creating and running apps on the UNO Q, not to start
+any app at power-up: an App Lab app would replace this firmware on the
+microcontroller.
 
 To upload the firmware again by hand from the board, for example to restart the
-search for the modules, the script's own commands are enough, as the `arduino`
-user:
+search for the modules, as the `arduino` user:
+
+```bash
+cd ~/amelie
+bash scripts/firmware.sh --sempre
+```
+
+`--sempre` (always) uploads even if the microcontroller already answers. At the
+end the script says which Modulino boards it sees. The commands it runs, for
+anyone who wants to run them by hand:
 
 ```bash
 cd ~/amelie
 arduino-cli compile -b arduino:zephyr:unoq --output-dir var/firmware firmware/amelie_mcu
+CORE=~/.arduino15/packages/arduino/hardware/zephyr/1.0.0
 OCD=$(find ~/.arduino15/packages/arduino/tools/remoteocd -name remoteocd -type f | sort -V | tail -1)
-CFG=$(find ~/.arduino15/packages/arduino/hardware/zephyr/0.52.0/variants -name flash_sketch.cfg | head -1)
-"$OCD" upload -f "$CFG" var/firmware/amelie_mcu.ino.elf-zsk.bin
+"$OCD" upload -f "$CORE/variants/arduino_uno_q_stm32u585xx/flash_sketch.cfg" \
+    "$CORE/firmwares/zephyr-arduino_uno_q_stm32u585xx.elf" \
+    var/firmware/amelie_mcu.ino.elf-zsk.bin
 ```
+
+The first file after `-f …cfg` is the loader, the second the sketch: the core's
+OpenOCD script rewrites the loader only if it differs from the one already
+there, and always writes the sketch.
+
+### The sketch and the loader go together
+
+The UNO Q's microcontroller runs a Zephyr *loader* which, at power-up, starts
+the sketch from a fixed address in flash. The loader and that address change
+with the core version: in core 0.52.0 the sketch sits at `0x80F0000`, in core
+1.0.0 at `0x8100000`. When App Lab updates itself it brings the loader of its
+own version to the microcontroller; a sketch uploaded on its own, compiled with
+a different core, ends up where that loader does not look.
+
+The symptom is precise: the upload **succeeds**, the Modulino Distance LED is
+on, but the microcontroller does not answer. `/stato` says `mcu: false`, the
+application's journal keeps repeating "il router risponde ma lo sketch di
+Amelie non c'è" (the router answers but the Amelie sketch is not there), and
+the light does not come on. Without the distance sensor the device sees no
+bottle at all.
+
+The fix is to upload the sketch and the loader together, with the same core:
+`bash scripts/firmware.sh --sempre`. This is why the script always uploads the
+two files together and why, after every App Lab update, it is worth running it
+again.
 
 `arduino:zephyr:unoq` is the board's full name for `arduino-cli` (the FQBN,
 fully qualified board name).

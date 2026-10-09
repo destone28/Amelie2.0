@@ -37,7 +37,8 @@ Lo script legge e basta: non cambia niente. Stampa otto sezioni:
    camera, la voce;
 5. **Schermo**: l'uscita video, la modalità 1280x720, il touch;
 6. **Camera**: la camera USB;
-7. **Audio**: la scheda audio e la strada del suono verso l'HDMI;
+7. **Audio**: la scheda audio, la strada del suono verso l'HDMI e la cache
+   delle frasi già dette;
 8. **Router verso il microcontrollore**: il servizio `arduino-router`, che
    collega Linux al microcontrollore, e che App Lab non avvii app
    all'accensione.
@@ -55,12 +56,15 @@ Le voci più frequenti, e che cosa fare:
 | «l'applicazione non risponde su 127.0.0.1:8080: …» | se hai appena acceso, aspetta un minuto e rilancia lo script; se resta, guarda il giornale dell'applicazione: `journalctl -u amelie -n 50` |
 | «applicazione non ancora pronta (riprova fra qualche secondo)» | sta caricando le voci: rilancia lo script fra qualche secondo |
 | «… non abilitato (…): rilancia scripts/install.sh», «manca …: rilancia scripts/install.sh» | rilancia `bash scripts/install.sh` |
-| «il microcontrollore non risponde: …» | il router è fermo o il firmware non è caricato. Se la sezione 8 dice «arduino-router fermo», `sudo systemctl restart arduino-router`; altrimenti ricarica il firmware, `rm -f var/firmware/.caricato && bash scripts/install.sh`, poi spegni e riaccendi con l'interruttore |
+| «il router risponde ma lo sketch di Amelie non gira sul microcontrollore: …», «sul microcontrollore gira un firmware di un'altra versione …» | ricarica sketch e loader: `bash scripts/firmware.sh --sempre`. Vedi [Il microcontrollore](#il-microcontrollore) |
+| «il microcontrollore non risponde: arduino-router fermo …» | `sudo systemctl restart arduino-router`, poi rilancia lo script |
+| «nessuna traccia di un firmware caricato e verificato: …» | `bash scripts/firmware.sh` |
 | «voce non caricata: il racconto si leggera' soltanto» | mancano le voci: rilancia `bash scripts/install.sh` |
 | «la camera non ha mai dato un fotogramma all'applicazione: …», «la camera non da' fotogrammi da … s: …» | l'applicazione non riceve immagini dalla camera: controlla il cavo USB della camera e la sua presa sull'hub, poi `sudo systemctl restart amelie` |
 | «nessuna camera USB: controlla il cavo della camera» | il cavo USB della camera non arriva all'hub |
+| «… frasi rovinate nella cache della voce: …» | uno spegnimento ha lasciato vuote delle frasi già dette: il servizio le toglie a ogni avvio, `sudo systemctl restart amelie`. Vedi [L'audio](#laudio) |
 
-Per schermo, touch, audio e Modulino, le sezioni qui sotto.
+Per schermo, touch, audio, microcontrollore e Modulino, le sezioni qui sotto.
 
 ## Lo schermo
 
@@ -102,6 +106,7 @@ più rapida.
 | silenzio, lo script dice «strada del suono verso l'HDMI chiusa» | il controllo del mixer è rimasto chiuso | `sudo systemctl restart amelie-audio-rotta` |
 | silenzio, tutto OK nello script | le casse | controlla il jack fra schermo e casse, il cavo USB che alimenta le casse e il controllo del volume sul loro cavo, che va tenuto al massimo (si raggiunge solo a scocca aperta) |
 | suono debole | il volume | alzalo dall'altoparlante in alto a sinistra; se è già al massimo, controlla il controllo del volume sul cavo delle casse |
+| si sente solo «Da adesso racconto i vini in italiano.», senza «Lingua italiana.»; oppure a un racconto manca una frase | quella frase è salvata vuota nella cache della voce: succede se si spegne pochi secondi dopo averla sentita per la prima volta | spegni e riaccendi, oppure `sudo systemctl restart amelie`: a ogni avvio il servizio toglie le frasi vuote e le rifà al primo uso. Lo script lo controlla alla sezione 7 |
 
 Per provare l'audio senza l'applicazione ci sono due script, da lanciare con
 lo schermo acceso e **a servizio fermo**: `scripts/01_audio.sh` controlla tutta
@@ -128,6 +133,53 @@ il processore audio e, se non basta, la board: una volta sola, e solo nei primi
 dieci minuti dall'accensione. Che cosa ha fatto lo scrive in
 `/var/lib/amelie/audio-guard.log`; le ultime righe si leggono con
 `tail /var/lib/amelie/audio-guard.log`.
+
+## Il microcontrollore
+
+La luce e il sensore di distanza li comanda il microcontrollore della UNO Q,
+con lo sketch di Amelie. Se lo sketch non gira, la luce resta spenta e il
+dispositivo non vede nessuna bottiglia, anche con i Modulino collegati: il LED
+del Modulino Distance è acceso, perché il modulo è alimentato, ma nessuno lo
+interroga.
+
+Si riconosce così:
+
+- lo script, alla sezione 4, dice «il router risponde ma lo sketch di Amelie
+  non gira sul microcontrollore»;
+- nelle impostazioni, «Stato tecnico» mostra `mcu: false` e `protocollo: null`;
+- il giornale dell'applicazione ripete «il router risponde ma lo sketch di
+  Amelie non c'e'»: `journalctl -u amelie -n 20`.
+
+La causa più frequente è la coppia fra sketch e loader. Il loader è il
+programma che, all'accensione del microcontrollore, avvia lo sketch da un
+indirizzo fisso della memoria; loader e indirizzo cambiano con la versione del
+core di Arduino. App Lab, aggiornandosi, porta sul microcontrollore il loader
+della sua versione, e uno sketch compilato con un core diverso non parte più:
+il caricamento riesce, il microcontrollore tace. Il rimedio è ricaricare sketch
+e loader insieme, con lo stesso core, come utente `arduino` e senza password:
+
+```bash
+cd ~/amelie
+bash scripts/firmware.sh --sempre
+```
+
+Lo script compila lo sketch se serve, lo carica insieme al loader, aspetta che
+il microcontrollore risponda e dice quali Modulino vede: «firmware caricato, il
+microcontrollore risponde: Pixels visto, Distance visto». L'applicazione se ne
+accorge da sola entro venti secondi, senza riavvii. Nell'istante in cui il
+microcontrollore riparte, il router scrive nel suo giornale alcune righe
+«decoding packet: invalid packet, expected array»: è normale.
+
+| Messaggio di `firmware.sh` | Che cosa fare |
+|---|---|
+| «arduino-router e' fermo: …» | `sudo systemctl restart arduino-router`, poi rilancia |
+| «caricamento non riuscito: …» | rilancia; se si ripete, spegni e riaccendi con l'interruttore e rilancia |
+| «firmware caricato, ma il microcontrollore non risponde» | spegni e riaccendi con l'interruttore e rilancia; se resta, guarda il router: `journalctl -u arduino-router -n 30` |
+| «… Pixels NON visto», «… Distance NON visto» | vedi [I Modulino](#i-modulino) |
+
+Dopo ogni aggiornamento di App Lab o di sistema conviene lanciare
+`bash scripts/firmware.sh`, senza `--sempre`: se il microcontrollore risponde
+ancora non tocca niente. Lo fa anche `scripts/install.sh`, al passo 9.
 
 ## I Modulino
 

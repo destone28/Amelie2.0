@@ -23,9 +23,7 @@ CASA=/home/arduino/amelie
 # Le versioni collaudate. Ognuna e' fissata: una board installata fra un anno
 # deve essere uguale a quella di oggi.
 LLAMA_COMMIT=74a7c897f049c17e7080423aa2111776eff6ebbf
-CORE_MCU="arduino:zephyr@0.52.0"
-LIBRERIE_MCU="Arduino_RouterBridge@0.4.3"
-FQBN=arduino:zephyr:unoq
+# Quelle del microcontrollore stanno in scripts/firmware.sh.
 VOCI_REV=ea046e8458f6acd997706d6e6066a022b42f6fb1
 URL_VOCI="https://huggingface.co/rhasspy/piper-voices/resolve/$VOCI_REV"
 VOCI="it/it_IT/serena/medium/it_IT-serena-medium en/en_US/ljspeech/medium/en_US-ljspeech-medium"
@@ -171,31 +169,13 @@ fi
 
 # ---------------------------------------------------------------------------
 passo 9 "Firmware del microcontrollore"
-# Lo sketch gira sullo STM32U585 e parla con Linux attraverso il router. Si
-# compila e si carica da qui: `remoteocd` senza indirizzo ne' numero di serie
-# lavora in locale, con l'OpenOCD della board, e non chiede password.
-arduino-cli core update-index >/dev/null
-arduino-cli core install "$CORE_MCU" >/dev/null
-# shellcheck disable=SC2086
-arduino-cli lib install $LIBRERIE_MCU >/dev/null
-FIRMA=$( (cat firmware/amelie_mcu/*.ino; echo "$CORE_MCU $LIBRERIE_MCU") | sha256sum | cut -c1-16)
-USCITA="$RADICE/var/firmware"
-if [ "$(cat "$USCITA/.caricato" 2>/dev/null)" = "$FIRMA" ]; then
-    echo "    gia' caricato"
-else
-    arduino-cli compile -b "$FQBN" --output-dir "$USCITA" firmware/amelie_mcu >/dev/null
-    PACCHETTI="$HOME/.arduino15/packages/arduino"
-    OCD=$(find "$PACCHETTI/tools/remoteocd" -name remoteocd -type f | sort -V | tail -1)
-    CFG=$(find "$PACCHETTI/hardware/zephyr/${CORE_MCU##*@}/variants" -name flash_sketch.cfg | head -1)
-    [ -n "$OCD" ] && [ -n "$CFG" ] || muori "remoteocd o la configurazione OpenOCD non trovati"
-    "$OCD" upload -f "$CFG" "$USCITA/amelie_mcu.ino.elf-zsk.bin" >/dev/null \
-        || muori "caricamento del firmware non riuscito"
-    echo "$FIRMA" > "$USCITA/.caricato"
-    echo "    firmware caricato"
-fi
-# App Lab puo' avviare una sua app all'accensione, che sostituirebbe questo
-# firmware sul microcontrollore: nessuna app predefinita.
-arduino-app-cli properties set default none >/dev/null 2>&1 || true
+# Lo sketch gira sullo STM32U585 e parla con Linux attraverso il router. Lo
+# compila e lo carica scripts/firmware.sh, insieme al loader del core, e lo
+# dichiara caricato solo se il microcontrollore poi risponde: vedi la sua
+# intestazione. Se non risponde l'installazione prosegue, perche' il resto del
+# dispositivo serve anche a capire il guasto, e lo ricorda in fondo.
+MCU_OK=1
+bash "$RADICE/scripts/firmware.sh" || MCU_OK=0
 
 # ---------------------------------------------------------------------------
 passo 10 "Servizi"
@@ -284,3 +264,10 @@ echo "  Collaudo:                bash scripts/00_diagnostica.sh"
 echo
 echo "  Per mettere il dispositivo in sicurezza prima di lasciarlo in sala"
 echo "  vedi docs/it/02-installazione.md, «Mettere in sicurezza»."
+if [ "$MCU_OK" = 0 ]; then
+    echo
+    avviso "Il microcontrollore non risponde: luce e sensore di distanza non"
+    avviso "funzioneranno, e senza sensore il dispositivo non vede le bottiglie."
+    avviso "Dopo il riavvio: bash scripts/firmware.sh --sempre"
+    avviso "Guida: docs/it/04-collaudo.md, «Il microcontrollore»."
+fi

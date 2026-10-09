@@ -122,7 +122,8 @@ motivo. Rilanciarlo è sempre sicuro: riparte saltando ciò che è già fatto.
 | «servono almeno 4 GB liberi in /home/arduino (ce ne sono …)» | libera spazio nella cartella di casa; `df -h ~` dice quanto ce n'è |
 | «serve la password di arduino per sudo» | la password è stata sbagliata tre volte: rilancia e scrivila con attenzione |
 | «la voce … non corrisponde alla somma attesa», «modello non scaricato da …», «il modello non corrisponde alla somma attesa» | un download si è interrotto o è arrivato un file diverso: rilancia. Con `AMELIE_URL_MODELLO`, controlla l'indirizzo |
-| «remoteocd o la configurazione OpenOCD non trovati», «caricamento del firmware non riuscito» | il firmware non si è caricato sul microcontrollore: rilancia; se si ripete, togli e ridai corrente alla board e rilancia |
+| «remoteocd non trovato …», «loader o configurazione OpenOCD del core non trovati …», «caricamento non riuscito: …» | il firmware non si è caricato sul microcontrollore: rilancia; se si ripete, togli e ridai corrente alla board e rilancia |
+| «arduino-router e' fermo: …» | il servizio che collega Linux al microcontrollore è fermo: `sudo systemctl restart arduino-router`, poi rilancia |
 
 Se a fermarsi è un comando di sistema (`apt-get`, `pip`, `cmake`, `git`,
 `curl`), il messaggio è il suo, e quasi sempre la causa è la rete: rilancia.
@@ -204,15 +205,21 @@ o quando le sorgenti in `data/` o il codice sono più recenti, per esempio dopo
 un `git pull` che li cambia; altrimenti scrive «gia' aggiornato». Le fonti e le
 licenze sono in [Attribuzioni e licenze](08-attribuzioni.md).
 
-**9. Firmware del microcontrollore.** Con `arduino-cli` installa il core
-`arduino:zephyr` (il supporto Arduino per il microcontrollore della UNO Q) e la
-libreria `Arduino_RouterBridge` alle versioni collaudate, compila lo sketch
-`firmware/amelie_mcu` e lo carica sullo STM32U585 dalla board stessa, senza
-password. Lo ricarica solo se sono cambiati lo sketch o quelle versioni;
-altrimenti scrive «gia' caricato». Poi dice ad App Lab di non avviare nessuna
-app all'accensione: una sua app sostituirebbe il firmware di Amelie. Il
-firmware è descritto in
-[`firmware/amelie_mcu/README.md`](../../firmware/amelie_mcu/README.md).
+**9. Firmware del microcontrollore.** Lancia `scripts/firmware.sh`. Con
+`arduino-cli` installa il core `arduino:zephyr` (il supporto Arduino per il
+microcontrollore della UNO Q) e la libreria `Arduino_RouterBridge` alle
+versioni collaudate, compila lo sketch `firmware/amelie_mcu` e lo carica sullo
+STM32U585 dalla board stessa, senza password, **insieme al loader del core**: lo
+sketch parte solo se il loader sul microcontrollore è della stessa versione del
+core con cui è stato compilato. Dice ad App Lab di non avviare nessuna app
+all'accensione: una sua app sostituirebbe il firmware di Amelie. Poi aspetta
+che il microcontrollore risponda e scrive quali Modulino vede, per esempio
+«firmware caricato, il microcontrollore risponde: Pixels visto, Distance
+visto». Se sketch e versioni non sono cambiati e il microcontrollore risponde
+già, non ricarica niente e lo dice. Se dopo il caricamento il microcontrollore
+non risponde, l'installazione prosegue e lo ricorda in fondo: vedi
+[Il microcontrollore](04-collaudo.md#il-microcontrollore). Il firmware è
+descritto in [`firmware/amelie_mcu/README.md`](../../firmware/amelie_mcu/README.md).
 
 **10. Servizi.** Copia gli script dei servizi in `/usr/local/bin/` e le unità
 in `/etc/systemd/system/`, installa il permesso con cui l'applicazione accende e
@@ -304,11 +311,24 @@ bash scripts/install.sh
 
 `git pull` scarica le modifiche dal repository. L'installatore rifà solo ciò
 che è cambiato: il database se sono cambiate le sorgenti o il codice, il
-firmware se sono cambiati lo sketch o le versioni del core e della libreria. Se
-l'applicazione è in funzione, al passo 10 la riavvia e ricarica la pagina sullo
-schermo. Le modifiche agli altri servizi, alla sessione grafica e alla console
-valgono dal riavvio successivo: nel dubbio, `sudo reboot`. Le impostazioni e le
-correzioni in `var/` restano.
+firmware se sono cambiati lo sketch o le versioni del core e della libreria, o
+se il microcontrollore non risponde. Se l'applicazione è in funzione, al passo
+10 la riavvia e ricarica la pagina sullo schermo. Le modifiche agli altri
+servizi, alla sessione grafica e alla console valgono dal riavvio successivo:
+nel dubbio, `sudo reboot`. Le impostazioni e le correzioni in `var/` restano.
+
+Dopo un aggiornamento di App Lab o di sistema (`arduino-app-cli system
+update`), rilancia anche il firmware:
+
+```bash
+cd ~/amelie
+bash scripts/firmware.sh
+```
+
+App Lab, aggiornandosi, può portare sul microcontrollore il loader della sua
+versione, e lo sketch di Amelie parte solo con un loader della stessa versione
+del core con cui è stato compilato. Se il microcontrollore risponde ancora, lo
+script lo dice e non tocca niente; altrimenti ricarica sketch e loader insieme.
 
 ### Dal PC, senza passare da git
 

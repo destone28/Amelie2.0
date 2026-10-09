@@ -15,6 +15,17 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def cache_della_voce_in_disparte(tmp_path, monkeypatch):
+    """Lo stesso per la cache della voce: sulla board e' quella vera, e una
+    `Voce` costruita da un test la ripulirebbe o ci scriverebbe."""
+    try:
+        from amelie import speech
+    except ImportError:          # pragma: no cover - dipende dall'ambiente
+        return
+    monkeypatch.setattr(speech, "CARTELLA_CACHE", tmp_path / "voce")
+
+
+@pytest.fixture(autouse=True)
 def giornale_in_disparte(tmp_path, monkeypatch):
     try:
         from amelie import app

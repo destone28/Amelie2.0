@@ -76,14 +76,17 @@ computer si installa come spiegato in
 una sola libreria esterna, **Arduino_RouterBridge**; `Wire`, la libreria del
 bus I²C, e le intestazioni di Zephyr fanno parte del core.
 
-Le versioni fissate, le stesse che installa `scripts/install.sh`, sono il core
-`arduino:zephyr` 0.52.0 e `Arduino_RouterBridge` 0.4.3:
+Le versioni fissate, le stesse che installa `scripts/firmware.sh`, sono il core
+`arduino:zephyr` 1.0.0 e `Arduino_RouterBridge` 0.4.3:
 
 ```bash
 arduino-cli core update-index
-arduino-cli core install arduino:zephyr@0.52.0
+arduino-cli core install arduino:zephyr@1.0.0
 arduino-cli lib install Arduino_RouterBridge@0.4.3
 ```
+
+Il core è lo stesso che usa App Lab: vedi più sotto «Sketch e loader vanno in
+coppia».
 
 `arduino-cli` installa da sé le librerie da cui Arduino_RouterBridge dipende:
 Arduino_RPClite e, a cascata, MsgPack con ArxContainer, ArxTypeTraits e
@@ -98,33 +101,70 @@ risponde; il driver del sensore può ritentare un trasferimento all'infinito.
 
 ## Caricarlo sul microcontrollore
 
-### Dalla board, con `install.sh`
+### Dalla board, con `firmware.sh`
 
-`scripts/install.sh`, al passo 9, installa core e libreria alle versioni
-fissate, compila lo sketch sulla board e lo carica sul microcontrollore con
-`remoteocd`. `remoteocd` è lo strumento del core che carica il firmware
+`scripts/firmware.sh` installa core e libreria alle versioni fissate, compila lo
+sketch sulla board e lo carica sul microcontrollore con `remoteocd`, **insieme al
+loader del core**. `remoteocd` è lo strumento del core che carica il firmware
 attraverso OpenOCD (*Open On-Chip Debugger*), un programma libero che scrive la
 memoria di un microcontrollore dalla sua porta di debug. Lanciato sulla board
 senza indirizzo né numero di serie, `remoteocd` lavora in locale, con l'OpenOCD
-della board, e **non chiede password**.
+della board, e **non chiede password**. `scripts/install.sh` lo lancia al
+passo 9.
 
-Lo script ricarica il firmware solo quando cambiano lo sketch o le versioni di
-core e libreria: ne tiene un'impronta in `var/firmware/.caricato`. Poi dice ad
-App Lab, l'ambiente di Arduino per creare e avviare app sulla UNO Q, di non
-avviare nessuna app all'accensione: un'app di App Lab sostituirebbe questo
-firmware sul microcontrollore.
+Dopo il caricamento lo script aspetta che il microcontrollore risponda con il
+protocollo che l'applicazione si aspetta, e solo allora lo dichiara caricato:
+ne tiene un'impronta in `var/firmware/.caricato`, insieme alle versioni di core
+e libreria. A ogni lancio chiede al microcontrollore se risponde, e ricarica
+anche quando l'impronta dice che è tutto a posto ma il microcontrollore tace.
+Prima di caricare dice ad App Lab, l'ambiente di Arduino per creare e avviare
+app sulla UNO Q, di non avviare nessuna app all'accensione: un'app di App Lab
+sostituirebbe questo firmware sul microcontrollore.
 
 Per ricaricare il firmware a mano dalla board, per esempio per far ripartire la
-ricerca dei moduli, bastano gli stessi comandi dello script, come utente
-`arduino`:
+ricerca dei moduli, come utente `arduino`:
+
+```bash
+cd ~/amelie
+bash scripts/firmware.sh --sempre
+```
+
+`--sempre` ricarica anche se il microcontrollore risponde già. In fondo lo
+script dice quali Modulino vede. I comandi che esegue, per chi vuole farli a
+mano:
 
 ```bash
 cd ~/amelie
 arduino-cli compile -b arduino:zephyr:unoq --output-dir var/firmware firmware/amelie_mcu
+CORE=~/.arduino15/packages/arduino/hardware/zephyr/1.0.0
 OCD=$(find ~/.arduino15/packages/arduino/tools/remoteocd -name remoteocd -type f | sort -V | tail -1)
-CFG=$(find ~/.arduino15/packages/arduino/hardware/zephyr/0.52.0/variants -name flash_sketch.cfg | head -1)
-"$OCD" upload -f "$CFG" var/firmware/amelie_mcu.ino.elf-zsk.bin
+"$OCD" upload -f "$CORE/variants/arduino_uno_q_stm32u585xx/flash_sketch.cfg" \
+    "$CORE/firmwares/zephyr-arduino_uno_q_stm32u585xx.elf" \
+    var/firmware/amelie_mcu.ino.elf-zsk.bin
 ```
+
+Il primo file dopo `-f …cfg` è il loader, il secondo lo sketch: lo script
+OpenOCD del core riscrive il loader solo se è diverso da quello che c'è, e
+scrive sempre lo sketch.
+
+### Sketch e loader vanno in coppia
+
+Sul microcontrollore della UNO Q gira un *loader* Zephyr che, all'accensione,
+avvia lo sketch da un indirizzo fisso della flash. Il loader e quell'indirizzo
+cambiano con la versione del core: nel core 0.52.0 lo sketch sta a
+`0x80F0000`, nel core 1.0.0 a `0x8100000`. Quando App Lab si aggiorna porta
+sul microcontrollore il loader della sua versione; uno sketch caricato da solo,
+compilato con un core diverso, finisce dove quel loader non guarda.
+
+Il sintomo è preciso: il caricamento **riesce**, il LED del Modulino Distance è
+acceso, ma il microcontrollore non risponde. `/stato` dice `mcu: false`, il
+giornale dell'applicazione ripete «il router risponde ma lo sketch di Amelie
+non c'è», e la luce non si accende. Senza sensore di distanza il dispositivo
+non vede nessuna bottiglia.
+
+Il rimedio è ricaricare sketch e loader insieme, con lo stesso core:
+`bash scripts/firmware.sh --sempre`. Per questo lo script carica sempre i due
+file insieme e, dopo ogni aggiornamento di App Lab, conviene rilanciarlo.
 
 `arduino:zephyr:unoq` è il nome completo della scheda per `arduino-cli` (il
 FQBN, *fully qualified board name*).

@@ -92,11 +92,19 @@ SPENTO = Colore(0, 0, 0, 0)
 
 
 class Ponte:
-    """Client MessagePack-RPC del router.
+    """Client MessagePack-RPC del router, su una connessione sola.
 
-    Ogni chiamata apre e chiude la connessione: il traffico è di poche decine
-    di byte a bottiglia e una connessione persistente aggiungerebbe solo stati
-    da gestire quando l'MCU si riavvia.
+    La connessione si apre alla prima chiamata e resta aperta. Il router scrive
+    due righe nel giornale di sistema per ogni connessione, e il sensore si
+    interroga a ogni battito: con una connessione per chiamata sono decine di
+    righe al secondo, e il giornale - che sulla board tiene 50 MB - si riempie
+    in un giorno e cancella tutto il resto.
+
+    Le chiamate passano una per volta, perche' le risposte arrivano sullo
+    stesso canale. Se il router si riavvia la connessione cade: la chiamata se
+    ne accorge, si riconnette e riprova una volta. Si puo' riprovare perche'
+    ogni metodo dello sketch si puo' ripetere senza danni: legge, oppure
+    imposta un valore.
     """
 
     def __init__(self, percorso: str = SOCKET, timeout: float = 5.0) -> None:
@@ -104,6 +112,8 @@ class Ponte:
         self.timeout = timeout
         self._msgid = 0
         self._lock = threading.Lock()
+        self._sock: socket.socket | None = None
+        self._unpacker: Any = None
 
     @property
     def disponibile(self) -> bool:
@@ -139,32 +149,85 @@ class Ponte:
         with self._lock:
             self._msgid = (self._msgid + 1) % 0xFFFF
             msgid = self._msgid
+            richiesta = msgpack.packb([0, msgid, metodo, list(parametri)],
+                                      use_bin_type=True)
+            for tentativo in (1, 2):
+                try:
+                    if self._sock is None:
+                        self._connetti(msgpack)
+                    try:
+                        self._sock.sendall(richiesta)
+                    except (BrokenPipeError, ConnectionResetError) as e:
+                        raise _ConnessioneCaduta(str(e)) from e
+                    return self._risposta(metodo, msgid)
+                except _ConnessioneCaduta as e:
+                    # Il router si e' riavviato, o ha chiuso: si riapre e si
+                    # riprova una volta sola.
+                    self._chiudi()
+                    if tentativo == 2:
+                        raise PonteNonDisponibile(f"{metodo}: {e}") from e
+                except (socket.timeout, TimeoutError) as e:
+                    # Nessuna risposta in tempo: non si riprova - si
+                    # aspetterebbe di nuovo altrettanto - ma si riparte da una
+                    # connessione pulita, senza la risposta in ritardo.
+                    self._chiudi()
+                    raise PonteNonDisponibile(f"{metodo}: nessuna risposta") from e
+                except OSError as e:
+                    self._chiudi()
+                    raise PonteNonDisponibile(f"{metodo}: {e}") from e
+        raise PonteNonDisponibile(f"{metodo}: nessuna risposta")  # pragma: no cover
 
-        richiesta = msgpack.packb([0, msgid, metodo, list(parametri)], use_bin_type=True)
+    def chiudi(self) -> None:
+        """Chiude la connessione col router. La prossima chiamata la riapre."""
+        with self._lock:
+            self._chiudi()
+
+    def _connetti(self, msgpack: Any) -> None:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(self.timeout)
         try:
             s.connect(self.percorso)
-            s.sendall(richiesta)
-            unpacker = msgpack.Unpacker(raw=False)
-            scadenza = time.monotonic() + self.timeout
-            while time.monotonic() < scadenza:
-                dati = s.recv(4096)
-                if not dati:
-                    break
-                unpacker.feed(dati)
-                for msg in unpacker:
-                    if not isinstance(msg, list) or len(msg) < 4:
-                        continue
-                    if msg[0] == 1 and msg[1] == msgid:
-                        if msg[2] is not None:
-                            raise ErroreMCU(f"{metodo}: {msg[2]}")
-                        return msg[3]
-            raise PonteNonDisponibile(f"{metodo}: nessuna risposta")
-        except OSError as e:
-            raise PonteNonDisponibile(f"{metodo}: {e}") from e
-        finally:
+        except OSError:
             s.close()
+            raise
+        self._sock = s
+        self._unpacker = msgpack.Unpacker(raw=False)
+
+    def _chiudi(self) -> None:
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+        self._sock = None
+        self._unpacker = None
+
+    def _risposta(self, metodo: str, msgid: int) -> Any:
+        """Legge finche' arriva la risposta a `msgid`.
+
+        Le risposte con un altro numero sono di chiamate andate in tempo
+        scaduto, arrivate tardi: si scartano.
+        """
+        scadenza = time.monotonic() + self.timeout
+        while True:
+            for msg in self._unpacker:
+                if not isinstance(msg, list) or len(msg) < 4:
+                    continue
+                if msg[0] == 1 and msg[1] == msgid:
+                    if msg[2] is not None:
+                        raise ErroreMCU(f"{metodo}: {msg[2]}")
+                    return msg[3]
+            resto = scadenza - time.monotonic()
+            if resto <= 0:
+                raise TimeoutError("nessuna risposta")
+            self._sock.settimeout(resto)
+            try:
+                dati = self._sock.recv(4096)
+            except (ConnectionResetError, BrokenPipeError) as e:
+                raise _ConnessioneCaduta(str(e)) from e
+            if not dati:
+                raise _ConnessioneCaduta("il router ha chiuso la connessione")
+            self._unpacker.feed(dati)
 
     # ------------------------------------------------------------- comandi
 
@@ -249,8 +312,8 @@ class Ponte:
 
         La pagina di stato le vuole tutte e due, e chiederle separatamente
         significherebbe interrogare l'MCU tre volte invece di due: ogni chiamata
-        apre e chiude un socket, e la pagina di stato si guarda proprio quando
-        qualcosa non risponde.
+        aspetta il suo turno sulla connessione, e la pagina di stato si guarda
+        proprio quando qualcosa non risponde.
         """
         v = self.versione()
         return {"protocollo": v, "moduli": self._moduli_secondo(v)}
@@ -331,6 +394,9 @@ class PonteSimulato(Ponte):
     def disponibile(self) -> bool:
         return True
 
+    def chiudi(self) -> None:
+        pass
+
     def chiama(self, metodo: str, *parametri: Any) -> Any:
         self.comandi.append((metodo, parametri))
         if metodo == "distanza":
@@ -408,6 +474,10 @@ class Presenza:
 
 class PonteNonDisponibile(RuntimeError):
     """Il router non risponde: l'MCU non è raggiungibile."""
+
+
+class _ConnessioneCaduta(Exception):
+    """La connessione col router si è chiusa: si riapre e si riprova."""
 
 
 class ErroreMCU(RuntimeError):

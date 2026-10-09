@@ -223,7 +223,9 @@ titolo,descrizione,titolo_en,descrizione_en
 
 - **The screen stays black**: check the HDMI cable and the display's micro-USB cable. The display is driven at 1280 × 720, a mode it scales down to its 800 × 480 panel; `systemctl status amelie-display` says which mode was set.
 - **No sound**: see the checks in "First power-on". The sound needs the display to be awake, and Amelie keeps it on at all times.
-- **Bottles are never noticed**: the distance sensor is not seen. Check the Qwiic chain and switch the device off and on.
+- **Bottles are never noticed and the light stays off**: Amelie's sketch is not running on the microcontroller, usually after an App Lab update. On the board run `bash ~/amelie/scripts/firmware.sh --sempre`, which uploads the sketch and the loader together.
+- **The light is on, but bottles are not noticed**: the distance sensor is not seen. Check the Qwiic chain and switch the device off and on.
+- **The language announcement lacks "English language", or a sentence is missing from a story**: switching off right after a new sentence left it empty in the voice cache. Switch off and on: at start-up the service removes the empty sentences and makes them again.
 - **Labels are read badly**: switch on Debug camera and check that the label is in the middle of the frame and sharp.
 - **Anything else**: try "Restore operation" in the settings. The application log is shown by `journalctl -u amelie`.
 
