@@ -9,6 +9,14 @@ screen is the plate, the translucent disc the bottle stands on. The camera and
 the light sit in the tower that holds the screen, facing the plate; the
 distance sensor sits under the disc.
 
+![Amelie seen from the front](../images/foto/amelie.jpg)
+
+*At the front, the screen tilted towards the table; behind it, the plate.*
+
+![The plate, with the camera and the light in the tower](../images/foto/piatto-camera-luce.jpg)
+
+*The plate seen from behind: the camera and the light window, in the tower, face the disc the bottle stands on.*
+
 This guide describes what the people at the table see and can do, what the
 person who runs the device finds in the settings, and where to look when
 something goes wrong. Phrases in double quotes are the exact wording on the

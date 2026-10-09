@@ -11,7 +11,9 @@ open. That is why the bottom (the Piastra, on the bench) and the tower are
 assembled first, then the shell is closed, and the Piastra is screwed to the
 base last.
 
-![Amelie assembled](../images/insieme.png)
+![Two assembled units of Amelie](../images/foto/due-esemplari.jpg)
+
+*Two units built from the same printing files, with some parts in different colours.*
 
 ## The parts to print
 
@@ -86,10 +88,18 @@ front of the device, the side of the screen, is the side of the two speakers.
 4. **The UNO Q.** It goes between the two speakers, on the four pins, with the
    USB-C socket towards the back and the Qwiic connector towards the front. The
    FermoUno straddles the Qwiic side and is fixed with two 4 × 16 screws.
+
+   <img src="../images/foto/uno-q.jpg" alt="The UNO Q on the Piastra" width="480">
+
+   *The UNO Q held by the FermoUno: the Qwiic cable at the top, the USB-C cable at the bottom.*
 5. **The switch.** The body of the switch on the power cable lies flat in its
    seat in the rear bay, with the lever in the window of the bottom: it is
    operated from underneath the device. The FermoSwitch closes it with two
    M2 × 8 screws.
+
+   ![The switch lever in the window in the bottom](../images/foto/interruttore.jpg)
+
+   *The finished device seen from underneath: the switch lever in its window, next to a foot.*
 6. **The cables.**
    - the switch cable: its USB-A plug into the power bank's **Output 3** port,
      its 90° USB-C plug into the hub's **USB-C PD** port;
@@ -106,6 +116,10 @@ front of the device, the side of the screen, is the side of the two speakers.
 7. **The VassoioLuce.** It stands on its four legs, bridging over the power
    bank.
 
+<img src="../images/foto/piastra.jpg" alt="The assembled Piastra seen from above" width="480">
+
+*The assembled Piastra, seen from above: the two speakers and the UNO Q towards the front, the power bank in the middle, the hub next to it and the cables.*
+
 ## Phase B: the tower
 
 Assemble the tower upside down or on its side: you work through the open belly.
@@ -121,6 +135,10 @@ Assemble the tower upside down or on its side: you work through the open belly.
    - a Qwiic cable in the Pixels, and the camera's USB cable.
 
    Then the panel goes into the tower and is fixed with two 4 × 16 screws.
+
+   <img src="../images/foto/torre-interno.jpg" alt="Inside the tower" width="480">
+
+   *Inside the tower, lying on its side: the camera and the Modulino Pixels on the PannelloOttico, each with its cable; behind them, the back of the screen.*
 3. **The screen.** It goes into the pocket of the ramp, glass facing out and
    connectors at the bottom, fixed through its four tabs with four M2 × 6
    screws. Connect the HDMI cable, the USB-A to micro-USB cable of the touch
@@ -138,6 +156,10 @@ up.
    M2 × 5 screws, the sensor towards the disc's window. Connect the Qwiic
    cable. The disc goes into its hole from the top and locks with a sixth of a
    turn: three tabs slide under the ledge. It comes out the same way.
+
+   <img src="../images/foto/disco-sensore.jpg" alt="The CerchioLuce seen from below, with the Modulino Distance" width="480">
+
+   *The CerchioLuce seen from below, in its hole: the Modulino Distance in the middle, with its Qwiic cable, and the three tabs under the ledge.*
 2. **The charging socket.** The female end of the extension goes into its seat
    in the back wall of the Base, with the opening facing outwards.
 3. **The tower.** It sits in its seat on the top of the Base; the cables of the
@@ -152,8 +174,12 @@ up.
      the hub;
    - Qwiic: the UNO Q, the Modulino Distance and the Modulino Pixels in a
      chain; the order doesn't matter.
+
+   <img src="../images/foto/prima-di-chiudere.jpg" alt="Before closing: the open Base above the Piastra" width="480">
+
+   *Before closing: the Base upside down, with the disc, the sensor and the back of the screen, above the Piastra with all the connections made.*
 2. **Test before closing.** Switch on with the switch underneath and check the
-   home screen, the voice (tap the active flag), and that placing a bottle on
+   waiting screen, the voice (tap the active flag), and that placing a bottle on
    the disc makes the screen say "Let me have a look…". The Modulino boards are
    looked for at power-on: if one is missing, switch off, check the cable and
    switch on again.
@@ -161,11 +187,19 @@ up.
    bays, and fix it with six 4 × 16 screws from the bottom.
 4. **The feet.** The four adhesive feet in their seats under the Piastra.
 
+![The bottom of two units](../images/foto/fondo.jpg)
+
+*The bottom of two units: the four feet, the speaker grilles and the switch window.*
+
 ## Charging
 
 The device charges from the USB-C socket at the back with an ordinary USB-C
 charger, also while it is on. After charging, tap **Battery recharged** in the
 settings, so the estimate starts from full again ([Using Amelie](05-usage.md)).
+
+![The charging socket in the back wall](../images/foto/piatto-camera-luce.jpg)
+
+*The plate side: the camera and the light window face the disc, and the charging socket is low in the back wall.*
 
 ## Next step
 

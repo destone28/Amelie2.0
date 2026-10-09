@@ -2,7 +2,7 @@
 
 Put a bottle of wine down and Amelie tells you its story. A camera reads the label, the Arduino UNO Q recognises the wine and a voice describes it: where it comes from, the grapes, how it looks and tastes, what to pair it with. Everything happens on the device, in Italian or English, without an internet connection.
 
-![Amelie 2.0](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/insieme.png)
+![Amelie 2.0, showing the waiting screen](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/foto/amelie.jpg)
 
 Amelie is a table-top device for a wine bar, a restaurant or a wine cellar at home. It runs on a battery for a whole evening, has a single power switch and charges through a USB-C socket on the back. This article explains how to build one from scratch: the parts to buy, the 3D-printed enclosure, the wiring, the software setup on a factory-new UNO Q, and how to use it.
 
@@ -11,6 +11,10 @@ Amelie is a table-top device for a wine bar, a restaurant or a wine cellar at ho
 ## What Amelie does
 
 A guest places a bottle on the round plate behind the screen, with the label turned towards the screen: the camera looks at the label from the back of the tower that holds the screen. A distance sensor under the plate notices the bottle, and the camera takes pictures of the label, lit by the white and yellow light next to it, which is always on. The camera adjusts its exposure by itself while the device waits, so the bottle finds the right light already set. The UNO Q reads the text on the label, looks it up in a database of Italian wines and tells the story out loud, while the text scrolls on the 5" touchscreen with the sentence being spoken highlighted.
+
+![The plate side: the disc, the light window and the camera](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/foto/piatto-camera-luce.jpg)
+
+*The plate side: the disc the bottle stands on and, in the tower, the light window and the camera. Bottom right, the charging socket.*
 
 Amelie always says how sure it is. When it recognises the exact wine, it starts with "This is the…"; when it can only recognise the appellation, the wine type or the grape variety, it says so and describes that. It never names something it has not read on the label. Every sentence of the description comes from facts in the database and from the official production specification of the appellation: nothing is invented.
 
@@ -95,6 +99,10 @@ Print CerchioLuce and PlaccaLuce in translucent PETG and everything else in PLA.
 
 ![All the printed parts](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/parti.png)
 
+![Two units built from the same files](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/foto/due-esemplari.jpg)
+
+*Two units built from the same printing files, with some parts in different colours.*
+
 ## Wiring
 
 Everything plugs in; nothing is soldered.
@@ -175,7 +183,15 @@ The enclosure closes in a fixed order, because the screws that hold the tower to
 
 ![Exploded view of Amelie 2.0](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/esploso.png)
 
+<img src="https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/foto/piastra.jpg" alt="The assembled Piastra" width="480">
+
+*The assembled Piastra, seen from above: the two speakers and the UNO Q towards the front, the power bank in the middle, the hub next to it and the cables.*
+
 ## First power-on
+
+![The switch in the window in the bottom](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/foto/interruttore.jpg)
+
+*The switch is operated from underneath, through the window in the bottom.*
 
 Switch Amelie on. The screen shows the Amelie logo while the voices load, then the home screen: a wine glass, "Every bottle has a story." and three steps, **Choose** a bottle, **Place** the bottle on Amelie, **Listen** to its story.
 

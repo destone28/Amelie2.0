@@ -9,6 +9,14 @@ c'è il piatto, il disco traslucido su cui si posa la bottiglia. La camera e la
 luce stanno nella torre che regge lo schermo, rivolte verso il piatto; il
 sensore di distanza sta sotto il disco.
 
+![Amelie vista dal davanti](../images/foto/amelie.jpg)
+
+*Davanti, lo schermo inclinato verso il tavolo; dietro, il piatto.*
+
+![Il piatto, con la camera e la luce nella torre](../images/foto/piatto-camera-luce.jpg)
+
+*Il piatto visto da dietro: la camera e la finestra della luce, nella torre, guardano il disco su cui si posa la bottiglia.*
+
 Questa guida descrive che cosa vede e che cosa può fare chi siede al tavolo,
 che cosa trova chi gestisce il dispositivo nelle impostazioni, e dove guardare
 quando qualcosa non va. Le frasi fra caporali sono le scritte esatte dello

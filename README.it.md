@@ -2,7 +2,7 @@
 
 Appoggi una bottiglia di vino e Amelie ne racconta la storia. Una camera legge l'etichetta, l'Arduino UNO Q riconosce il vino e una voce lo descrive: da dove viene, le uve, come si presenta e che sapore ha, con che cosa abbinarlo. Tutto avviene sul dispositivo, in italiano o in inglese, senza connessione a internet.
 
-![Amelie 2.0](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/insieme.png)
+![Amelie 2.0, con la schermata d'attesa](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/foto/amelie.jpg)
 
 Amelie è un dispositivo da tavolo per un'enoteca, un ristorante o una cantina di casa. Funziona a batteria per tutta una serata, ha un solo interruttore e si ricarica da una presa USB-C sul retro. Questa guida spiega come costruirne uno da zero: i componenti da comprare, la scocca stampata in 3D, i collegamenti, l'installazione del software su una UNO Q appena uscita dalla fabbrica e l'uso.
 
@@ -11,6 +11,10 @@ Amelie è un dispositivo da tavolo per un'enoteca, un ristorante o una cantina d
 ## Che cosa fa Amelie
 
 Un ospite posa una bottiglia sul piatto rotondo dietro lo schermo, con l'etichetta rivolta verso lo schermo: la camera guarda l'etichetta dal retro della torre che regge lo schermo. Un sensore di distanza sotto il piatto si accorge della bottiglia, e la camera fotografa l'etichetta illuminata dalla luce accanto a lei, bianca e gialla, sempre accesa. La camera regola da sola l'esposizione mentre il dispositivo aspetta, così la bottiglia trova la luce giusta già pronta. La UNO Q legge il testo dell'etichetta, lo cerca in un database di vini italiani e racconta la storia a voce, mentre il testo scorre sul touchscreen da 5" con la frase che la voce sta dicendo messa in evidenza.
+
+![Il lato del piatto: il disco, la finestra della luce e la camera](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/foto/piatto-camera-luce.jpg)
+
+*Il lato del piatto: il disco su cui si posa la bottiglia e, nella torre, la finestra della luce e la camera. In basso a destra, la presa di ricarica.*
 
 Amelie dice sempre quanto è sicura. Quando riconosce il vino esatto comincia con «Questo è il…»; quando riconosce solo la denominazione, la tipologia o il vitigno, lo dice e racconta quello. Non nomina mai qualcosa che non ha letto sull'etichetta. Ogni frase del racconto viene dai fatti del database e dal disciplinare di produzione della denominazione: niente è inventato.
 
@@ -95,6 +99,10 @@ CerchioLuce e PlaccaLuce si stampano in PETG traslucido, tutto il resto in PLA. 
 
 ![Gli 11 pezzi stampati](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/parti.png)
 
+![Due esemplari costruiti dagli stessi file](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/foto/due-esemplari.jpg)
+
+*Due esemplari costruiti dagli stessi file di stampa, con alcuni pezzi in colori diversi.*
+
 ## Collegamenti
 
 Tutto si innesta; non si salda niente.
@@ -175,7 +183,15 @@ La scocca si chiude in un ordine preciso, perché le viti che tengono la torre a
 
 ![Esploso di Amelie 2.0](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/esploso.png)
 
+<img src="https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/foto/piastra.jpg" alt="La Piastra montata" width="480">
+
+*La Piastra montata, vista dall'alto: le due casse e la UNO Q verso il fronte, il power bank al centro, l'hub accanto e i cavi.*
+
 ## La prima accensione
+
+![L'interruttore nella finestra del fondo](https://raw.githubusercontent.com/destone28/Amelie2.0/main/docs/images/foto/interruttore.jpg)
+
+*L'interruttore si aziona da sotto, dalla finestra nel fondo.*
 
 Accendi Amelie. Lo schermo mostra il marchio di Amelie mentre le voci si caricano, poi la schermata d'attesa: un calice, «Ogni bottiglia ha una storia.» e tre passi, **Scegli** una bottiglia, **Posa** la bottiglia su Amelie, **Ascolta** la sua storia.
 

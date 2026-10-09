@@ -10,7 +10,9 @@ avvitano **dall'interno della base**, e si raggiungono solo finché il fondo è
 aperto. Per questo si montano prima il fondo (la Piastra, sul banco) e la torre,
 poi si chiude la scocca, e la Piastra si avvita alla base per ultima.
 
-![Amelie montata](../images/insieme.png)
+![Due esemplari di Amelie montati](../images/foto/due-esemplari.jpg)
+
+*Due esemplari costruiti dagli stessi file di stampa, con alcuni pezzi in colori diversi.*
 
 ## I pezzi da stampare
 
@@ -86,10 +88,18 @@ fronte del dispositivo, il lato dello schermo, è il lato delle due casse.
 4. **La UNO Q.** Va fra le due casse, sui quattro perni, con la presa USB-C
    verso il retro e il connettore Qwiic verso il fronte. Il FermoUno scavalca
    il lato del Qwiic e si avvita con due viti 4 × 16.
+
+   <img src="../images/foto/uno-q.jpg" alt="La UNO Q sulla Piastra" width="480">
+
+   *La UNO Q tenuta dal FermoUno: in alto il cavo Qwiic, in basso il cavo USB-C.*
 5. **L'interruttore.** Il corpo dell'interruttore del cavo di alimentazione va
    disteso nella sua sede nel vano posteriore, con la levetta nella finestra del
    fondo: si aziona da sotto il dispositivo. Il FermoSwitch lo chiude con due
    viti M2 × 8.
+
+   ![La levetta dell'interruttore nella finestra del fondo](../images/foto/interruttore.jpg)
+
+   *Il dispositivo finito visto da sotto: la levetta dell'interruttore nella sua finestra, accanto a un piedino.*
 6. **I cavi.**
    - il cavo con l'interruttore: la spina USB-A nella porta **Output 3** del
      power bank, la spina USB-C a 90° nella porta **USB-C PD** dell'hub;
@@ -106,6 +116,10 @@ fronte del dispositivo, il lato dello schermo, è il lato delle due casse.
 7. **Il VassoioLuce.** Si appoggia sulle sue quattro zampe, a ponte sopra il
    power bank.
 
+<img src="../images/foto/piastra.jpg" alt="La Piastra montata vista dall'alto" width="480">
+
+*La Piastra montata, vista dall'alto: le due casse e la UNO Q verso il fronte, il power bank al centro, l'hub accanto e i cavi.*
+
 ## Fase B: la torre
 
 La torre si monta capovolta o su un fianco: si lavora dalla pancia aperta.
@@ -120,6 +134,10 @@ La torre si monta capovolta o su un fianco: si lavora dalla pancia aperta.
    - un cavo Qwiic nel Pixels, e il cavo USB della camera.
 
    Poi il pannello entra nella torre e si avvita con due viti 4 × 16.
+
+   <img src="../images/foto/torre-interno.jpg" alt="L'interno della torre" width="480">
+
+   *Dentro la torre, appoggiata su un fianco: la camera e il Modulino Pixels sul PannelloOttico, ciascuno col suo cavo; dietro, il retro dello schermo.*
 3. **Lo schermo.** Va nella tasca della rampa, vetro in fuori e connettori in
    basso, avvitato per le quattro alette con quattro viti M2 × 6. Collega ora
    il cavo HDMI, il cavo da USB-A a micro-USB del touch (quello della
@@ -137,6 +155,10 @@ l'alto.
    viti M2 × 5, il sensore verso la finestra del disco. Collega il cavo Qwiic.
    Il disco entra nel suo foro dal piano superiore e si blocca con un sesto di
    giro: tre alette gli vanno sotto la mensola. Si toglie allo stesso modo.
+
+   <img src="../images/foto/disco-sensore.jpg" alt="Il CerchioLuce visto da sotto, col Modulino Distance" width="480">
+
+   *Il CerchioLuce visto da sotto, nel suo foro: il Modulino Distance al centro, con il suo cavo Qwiic, e le tre alette sotto la mensola.*
 2. **La presa di ricarica.** L'estremità femmina della prolunga entra nella sua
    sede sulla parete posteriore della Base, con l'apertura verso l'esterno.
 3. **La torre.** Si appoggia nella sua sede sul piano della Base; i cavi di
@@ -151,6 +173,10 @@ l'alto.
      dell'hub;
    - Qwiic: la UNO Q, il Modulino Distance e il Modulino Pixels in catena;
      l'ordine non conta.
+
+   <img src="../images/foto/prima-di-chiudere.jpg" alt="Prima di chiudere: la Base aperta sopra la Piastra" width="480">
+
+   *Prima di chiudere: la Base capovolta, con il disco, il sensore e il retro dello schermo, sopra la Piastra con tutti i collegamenti fatti.*
 2. **Prova prima di chiudere.** Accendi con l'interruttore da sotto e controlla
    la schermata d'attesa, la voce toccando la bandiera attiva, e che posando una
    bottiglia sul disco lo schermo dica «Fammi guardare…». I Modulino si cercano
@@ -159,11 +185,19 @@ l'alto.
    avvita con sei viti 4 × 16 dal fondo.
 4. **I piedini.** I quattro piedini adesivi nelle loro sedi sotto la Piastra.
 
+![Il fondo di due esemplari](../images/foto/fondo.jpg)
+
+*Il fondo di due esemplari: i quattro piedini, le griglie delle casse e la finestra dell'interruttore.*
+
 ## Ricaricare
 
 Il dispositivo si ricarica dalla presa USB-C sul retro con un normale
 caricatore USB-C, anche acceso. Dopo la ricarica tocca **Batteria ricaricata**
 nelle impostazioni, così la stima riparte da piena ([Usare Amelie](05-uso.md)).
+
+![La presa di ricarica sulla parete posteriore](../images/foto/piatto-camera-luce.jpg)
+
+*Il lato del piatto: la camera e la finestra della luce guardano il disco, e la presa di ricarica è in basso sulla parete posteriore.*
 
 ## Il passo successivo
 
