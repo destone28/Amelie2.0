@@ -29,6 +29,9 @@ models/*.gguf
 models/*.onnx
 models/*.onnx.json
 
+# llama.cpp, scaricato e compilato da scripts/install.sh
+/llama.cpp/
+
 # Cache di runtime
 var/
 *.log
