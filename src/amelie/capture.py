@@ -17,13 +17,13 @@ Tre accorgimenti valgono più di qualunque scelta di libreria:
 
    È anche il motivo per cui basta una sola sorgente di luce: l'anello, cioè
    il Modulino Pixels nella torre che illumina l'etichetta attraverso la
-   finestra traslucida, e che sale a bianco per la durata della raffica. I LED
-   non sono il fattore dominante — le misure sono in
+   finestra traslucida, sempre con la stessa luce mentre il dispositivo aspetta
+   e legge. I LED non sono il fattore dominante — le misure sono in
    `ImpostazioniCamera.esposizione`.
 
-2. **Scartare i primi fotogrammi.** Il buffer UVC contiene immagini precedenti
-   all'accensione della luce. Il primo fotogramma letto dopo è quasi sempre
-   vecchio: è l'errore più comune nelle pipeline OpenCV.
+2. **Scartare i primi fotogrammi.** Il buffer UVC contiene immagini prese
+   prima che si cominciasse a guardare: il primo fotogramma letto è quasi
+   sempre una di quelle. È l'errore più comune nelle pipeline OpenCV.
 
 3. **Raffica e varianza del laplaciano.** Qualche fotogramma, e si tiene il più
    nitido: salva dai casi in cui la bottiglia oscilla ancora.
@@ -246,7 +246,11 @@ class ImpostazioniCamera:
     # ammutolire.
     rotazione: int = 90
 
-    # Attesa fra accensione della luce dello scatto e primo fotogramma utile.
+    # Quanto si aspetta, a stream appena acceso, prima di buttare i fotogrammi
+    # vecchi: il tempo perche' una luce accesa subito prima dello scatto - lo
+    # fanno gli script di prova, che la accendono solo per scattare - arrivi
+    # sui fotogrammi. Sul dispositivo la luce e' gia' accesa, e l'attesa si
+    # paga solo quando lo stream era spento.
     assestamento_luce_s: float = 0.15
 
     # La fascia del fotogramma dove sta la bottiglia, in frazioni di larghezza.
@@ -1387,8 +1391,9 @@ class Camera:
     def scatta(self, *, attesa_luce: float | None = None) -> Scatto:
         """Esegue una raffica e restituisce il fotogramma più nitido.
 
-        Il chiamante è responsabile di accendere la luce **prima** e riportarla
-        com'era **dopo**: questo modulo non parla con l'MCU.
+        La luce non la tocca: questo modulo non parla con l'MCU. Sul
+        dispositivo è quella dello stato, già accesa; uno script che la accende
+        solo per scattare lo fa prima di chiamarlo.
         """
         attesa = self.imp.assestamento_luce_s if attesa_luce is None else attesa_luce
         # Qui si aspetta, invece di rinunciare come fa la sbirciata: lo scatto
@@ -1403,9 +1408,10 @@ class Camera:
                 if cap.grab():
                     scartati += 1
             # PRIMA si buttano i fotogrammi vecchi, POI si misura la luce. Al
-            # contrario, la prima misura cadrebbe su un fotogramma catturato
-            # mentre l'anello era ancora spento, e la posa partirebbe da un
-            # buio che non c'è.
+            # contrario, la prima misura cadrebbe su un fotogramma rimasto nel
+            # buffer - preso prima che lo stream si fermasse, o prima che una
+            # luce di prova si accendesse - e la posa partirebbe da una luce
+            # che adesso non c'è.
             self._cerca_la_posa(cap)
 
             migliore: np.ndarray | None = None

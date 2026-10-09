@@ -58,9 +58,9 @@
  * ── DUE MODULI ───────────────────────────────────────────────────────────────
  *
  * L'anello e il sensore. L'anello è il Modulino Pixels nella torre: illumina
- * l'etichetta attraverso la finestra traslucida, e sale a bianco per la durata
- * della raffica. Il sensore è il Modulino Distance sotto il disco su cui sta la
- * bottiglia.
+ * l'etichetta attraverso la finestra traslucida, bianco e giallo al massimo
+ * finché il dispositivo lavora (vedi `set_luce`). Il sensore è il Modulino
+ * Distance sotto il disco su cui sta la bottiglia.
  *
  * ── DUE VINCOLI CHE FANNO FALLIRE IN SILENZIO ────────────────────────────────
  *

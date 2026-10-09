@@ -212,12 +212,12 @@ def scala_pose(args) -> None:
 
     migliore, migliori_righe = None, -1
     misurate: list[float] = []
-    # La stessa luce che il dispositivo accende per la raffica, accesa e spenta
-    # a ogni scatto: la scena dev'essere identica fra una riga e l'altra della
-    # tabella, ma non ha senso tenere otto LED a bianco pieno per i cinque
-    # secondi di OCR che stanno in mezzo.
+    # La luce del dispositivo, accesa per ogni scatto e spenta durante l'OCR:
+    # la scena dev'essere identica fra una riga e l'altra della tabella, ma
+    # non ha senso tenere otto LED al massimo per i cinque secondi di lettura
+    # che stanno in mezzo.
     luce = LuceDelloScatto()
-    print("  L'anello va a bianco a ogni scatto, come nella raffica vera.")
+    print("  La luce si accende per ogni scatto, la stessa del dispositivo.")
     print()
     print(f"  {'posa':>8}  {'ms':>6}  {'nitidezza':>10}  {'righe':>6}  primo testo")
     print("  " + "─" * 68)
