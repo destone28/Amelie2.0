@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from amelie.app import COLORE_ANELLO, VISTA, Amelie, Configurazione
+from amelie.app import LUCE_ANELLO, VISTA, Amelie, Configurazione
 from amelie.bridge import Colore
 from amelie.state import Effetto, Evento, Stato
 
@@ -33,17 +33,17 @@ class TestCopertura:
         for s in Stato:
             assert s in VISTA, f"{s} non sa cosa mostrare"
 
-    def test_ogni_effetto_anello_ha_un_colore(self):
+    def test_ogni_effetto_anello_ha_una_luce(self):
         for e in Effetto:
             if e.name.startswith("ANELLO_"):
-                assert e in COLORE_ANELLO, f"{e} non ha un colore"
+                assert e in LUCE_ANELLO, f"{e} non ha una luce"
 
 
 class TestCiclo:
     def test_la_bottiglia_accende_l_anello(self, amelie):
         amelie.macchina.invia(Evento.BOTTIGLIA_PRESENTE)
         metodi = [c[0] for c in amelie.ponte.comandi]
-        assert "set_anello" in metodi
+        assert "set_luce" in metodi
 
     def test_togliere_la_bottiglia_zittisce(self, amelie):
         """Il difetto peggiore possibile: parlare di un vino tolto dal tavolo.
@@ -113,19 +113,25 @@ class TestColore:
         with pytest.raises(ValueError):
             Colore(0, 0, 0, luminosita=200)
 
-    def test_l_anello_resta_a_bassa_luminosita(self):
-        """Otto LED accesi tutta la sera su un cavetto Qwiic da 28 AWG.
+    def test_la_luce_e_bianca_e_gialla_al_massimo(self):
+        """I LED pari bianchi, i dispari gialli, al massimo."""
+        from amelie.bridge import BIANCO, GIALLO, LUCE
+        assert LUCE.pari == BIANCO and LUCE.dispari == GIALLO
+        assert LUCE.pari.luminosita == 100
 
-        I colori di stato restano bassi perche' ci stanno per ore. L'unico che
-        va alto e' la luce dello scatto, che dura la frazione di secondo della
-        raffica: se un giorno finisse fra i colori di stato, il rail 3,3 V
-        cederebbe e con lui l'I2C — e il sintomo sarebbe un guasto dei moduli.
-        """
-        from amelie.bridge import AMBRA, BIANCO_SCATTO, ROSSO, VERDE
-        for c in (AMBRA, VERDE, ROSSO):
-            assert c.luminosita <= 40
-        assert BIANCO_SCATTO.luminosita > 40, \
-            "la luce dello scatto deve essere davvero piu' forte degli stati"
+    def test_i_due_colori_hanno_la_stessa_luminosita(self):
+        from amelie.bridge import Luce
+        with pytest.raises(ValueError):
+            Luce(Colore(255, 255, 255, 100), Colore(255, 200, 0, 40))
+
+    def test_un_colore_viaggia_in_un_intero(self):
+        assert Colore(0x12, 0x34, 0x56).esadecimale == 0x123456
+
+    def test_il_ponte_manda_i_due_colori(self):
+        from amelie.bridge import LUCE, PonteSimulato
+        p = PonteSimulato()
+        p.luce(LUCE)
+        assert p.comandi == [("set_luce", (0xFFFFFF, 0xFFC800, 100))]
 
 
 class TestIlCicloNonSiBlocca:
@@ -1180,7 +1186,7 @@ class TestOgniEffettoHaUnEsecutore:
                    (*EFFETTI_INGRESSO.values(), *EFFETTI_USCITA.values())
                    for e in effetti}
         senza_esecutore = {e.name for e in chiesti
-                           if f"Effetto.{e.name}" not in app and e not in COLORE_ANELLO}
+                           if f"Effetto.{e.name}" not in app and e not in LUCE_ANELLO}
         assert senza_esecutore == self.INERTI, (
             f"gli effetti senza esecutore sono cambiati: {sorted(senza_esecutore)}. "
             f"Se ne hai aggiunto uno, collegalo in `_esegui`; se ne hai "
@@ -1244,7 +1250,7 @@ class TestLuceDelloScatto:
 
     @staticmethod
     def _ultimo_colore(amelie):
-        anelli = [p for m, p in amelie.ponte.comandi if m == "set_anello"]
+        anelli = [p for m, p in amelie.ponte.comandi if m in ("set_luce", "set_anello")]
         return anelli[-1] if anelli else None
 
     def test_un_guasto_lascia_l_anello_rosso(self):
@@ -1256,57 +1262,41 @@ class TestLuceDelloScatto:
         colore dell'invito — che è esattamente la cosa che schermo e anello non
         devono mai fare.
         """
-        from amelie.bridge import ROSSO
+        from amelie.bridge import LUCE_ROSSA
 
         a = self._amelie(lambda _: self.CameraRotta())
         try:
             a._scatta_e_leggi()
             assert a.macchina.stato is Stato.GUASTO
-            assert self._ultimo_colore(a) == (ROSSO.r, ROSSO.g, ROSSO.b,
-                                              ROSSO.luminosita), \
+            rossa = (LUCE_ROSSA.pari.esadecimale, LUCE_ROSSA.dispari.esadecimale,
+                     LUCE_ROSSA.pari.luminosita)
+            assert self._ultimo_colore(a) == rossa, \
                 "dopo un guasto l'anello deve restare del colore del guasto"
         finally:
             a.matcher.chiudi()
             a.narratore.chiudi()
 
-    def test_il_bianco_non_resta_acceso_durante_l_ocr(self):
-        """Dopo la raffica c'è l'OCR, che dura quattro secondi.
+    def test_la_raffica_non_cambia_la_luce(self):
+        """La luce dello scatto e' quella di sempre, gia' accesa dallo stato.
 
-        Quattro secondi di bianco pieno sulla bottiglia non sono una luce,
-        sono un lampeggiante: l'ambra si rimette subito dopo lo scatto, non
-        alla fine del metodo.
+        Cambiarla proprio per la raffica renderebbe sbagliata la posa che la
+        camera ha trovato a riposo, e lo scatto pagherebbe una ricerca della
+        luce a bottiglia posata.
         """
-        from amelie.bridge import AMBRA, BIANCO_SCATTO
-
         a = self._amelie(self.CameraFinta)
         try:
-            # Il lettore finto solleva: si arriva fin qui e non oltre, che è
-            # esattamente il punto in cui l'anello dev'essere già tornato ambra.
+            a.ponte.comandi.clear()
             try:
                 a._scatta_e_leggi()
             except Exception:                               # noqa: BLE001
                 pass
-            colori = [p for m, p in a.ponte.comandi if m == "set_anello"]
-            bianco = (BIANCO_SCATTO.r, BIANCO_SCATTO.g, BIANCO_SCATTO.b,
-                      BIANCO_SCATTO.luminosita)
-            ambra = (AMBRA.r, AMBRA.g, AMBRA.b, AMBRA.luminosita)
-            assert a.camera.acceso_quando_ho_scattato == bianco, \
-                "la raffica dev'essere avvenuta con la luce accesa"
-            assert colori[-1] == ambra, \
-                "dopo lo scatto l'ambra deve tornare subito, prima dell'OCR"
+            assert self._ultimo_colore(a) is None, \
+                "la raffica non deve toccare l'anello"
         finally:
             a.matcher.chiudi()
             a.narratore.chiudi()
 
-    def test_senza_raffica_non_c_e_nessun_lampo(self):
-        """Quando la camera e' gia' in moto, l'anello non si tocca.
-
-        Il bianco serve a illuminare una raffica; se la raffica non c'e', un
-        bianco alzato e riabbassato un decimo dopo e' un lampo che non
-        illumina niente. E costa: cinque livelli su 255, misurati, contro i
-        quaranta che da' la posa.
-        """
-        from amelie.bridge import BIANCO_SCATTO
+    def test_lo_scatto_al_volo_non_cambia_la_luce(self):
         from amelie.capture import Scatto
 
         class CameraInMoto:
@@ -1326,18 +1316,66 @@ class TestLuceDelloScatto:
 
         a = self._amelie(CameraInMoto)
         try:
+            a.ponte.comandi.clear()
             try:
                 a._scatta_e_leggi()
             except Exception:                               # noqa: BLE001
                 pass
-            bianco = (BIANCO_SCATTO.r, BIANCO_SCATTO.g, BIANCO_SCATTO.b,
-                      BIANCO_SCATTO.luminosita)
-            colori = [p for m, p in a.ponte.comandi if m == "set_anello"]
-            assert bianco not in colori, \
-                "lo scatto al volo non deve accendere l'anello"
+            assert self._ultimo_colore(a) is None, \
+                "lo scatto al volo non deve toccare l'anello"
         finally:
             a.matcher.chiudi()
             a.narratore.chiudi()
+
+
+class TestLaLuceDellaBatteria:
+    """A riposo la luce dice anche come sta la batteria: rossa quando e'
+    scarica. L'icona sta nelle impostazioni, e chi lavora in sala vede solo
+    l'anello."""
+
+    @staticmethod
+    def _luce(a, effetto):
+        return a._luce_per(effetto)
+
+    def test_in_attesa_rossa_a_batteria_scarica(self, amelie):
+        from amelie.bridge import LUCE, LUCE_ROSSA
+        assert self._luce(amelie, Effetto.ANELLO_RESPIRO) == LUCE
+        amelie.batteria.consumato_wh = amelie.batteria.capacita * 0.9
+        assert amelie.batteria.scarica
+        assert self._luce(amelie, Effetto.ANELLO_RESPIRO) == LUCE_ROSSA
+
+    def test_mentre_legge_resta_bianca_e_gialla(self, amelie):
+        """Negli stati della lettura la luce illumina l'etichetta: rossa, la
+        lettura peggiorerebbe proprio quando serve."""
+        from amelie.bridge import LUCE
+        amelie.batteria.consumato_wh = amelie.batteria.capacita * 0.9
+        for effetto in (Effetto.ANELLO_ACCESO, Effetto.ANELLO_LAVORO):
+            assert self._luce(amelie, effetto) == LUCE
+
+    def test_il_cambio_si_vede_anche_senza_cambiare_stato(self, amelie):
+        """La batteria si scarica mentre il dispositivo e' fermo in attesa:
+        senza un ricontrollo, nessuno riaccenderebbe la luce del colore giusto."""
+        from amelie.bridge import LUCE_ROSSA
+        amelie.macchina.stato = Stato.ATTESA
+        amelie.ponte.comandi.clear()
+        amelie.batteria.consumato_wh = amelie.batteria.capacita * 0.9
+        amelie._ricontrolla_la_luce()
+        rossa = (LUCE_ROSSA.pari.esadecimale, LUCE_ROSSA.dispari.esadecimale,
+                 LUCE_ROSSA.pari.luminosita)
+        assert ("set_luce", rossa) in amelie.ponte.comandi
+        amelie.ponte.comandi.clear()
+        amelie._ricontrolla_la_luce()
+        assert not amelie.ponte.comandi, "senza cambiamenti non si riscrive niente"
+
+    def test_ricaricata_torna_bianca_e_gialla(self, amelie):
+        from amelie.bridge import LUCE
+        amelie.macchina.stato = Stato.ATTESA
+        amelie.batteria.consumato_wh = amelie.batteria.capacita * 0.9
+        amelie._ricontrolla_la_luce()
+        amelie.ponte.comandi.clear()
+        amelie.batteria_ricaricata()
+        normale = (LUCE.pari.esadecimale, LUCE.dispari.esadecimale, LUCE.pari.luminosita)
+        assert ("set_luce", normale) in amelie.ponte.comandi
 
 
 class TestModuliVisti:
@@ -1540,7 +1578,7 @@ class TestAnnullamento:
         amelie.macchina.stato = Stato.RACCONTO
         amelie.ponte.comandi.clear()
         amelie.annulla()
-        colori = [c for c in amelie.ponte.comandi if c[0] == "set_anello"]
+        colori = [c for c in amelie.ponte.comandi if c[0] == "set_luce"]
         assert colori, "l'anello non e' stato rimesso"
 
     def test_negli_stati_di_lavoro_non_fa_nulla(self, amelie):

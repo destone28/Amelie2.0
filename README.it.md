@@ -10,7 +10,7 @@ Amelie è un dispositivo da tavolo per un'enoteca, un ristorante o una cantina d
 
 ## Che cosa fa Amelie
 
-Un ospite posa una bottiglia sul piatto rotondo dietro lo schermo, con l'etichetta rivolta verso lo schermo: la camera guarda l'etichetta dal retro della torre che regge lo schermo. Un sensore di distanza sotto il piatto si accorge della bottiglia, la luce accanto alla camera cambia colore e la camera fotografa l'etichetta. La UNO Q legge il testo dell'etichetta, lo cerca in un database di vini italiani e racconta la storia a voce, mentre il testo scorre sul touchscreen da 5" con la frase che la voce sta dicendo messa in evidenza.
+Un ospite posa una bottiglia sul piatto rotondo dietro lo schermo, con l'etichetta rivolta verso lo schermo: la camera guarda l'etichetta dal retro della torre che regge lo schermo. Un sensore di distanza sotto il piatto si accorge della bottiglia, e la camera fotografa l'etichetta illuminata dalla luce accanto a lei, bianca e gialla, sempre accesa. La camera regola da sola l'esposizione mentre il dispositivo aspetta, così la bottiglia trova la luce giusta già pronta. La UNO Q legge il testo dell'etichetta, lo cerca in un database di vini italiani e racconta la storia a voce, mentre il testo scorre sul touchscreen da 5" con la frase che la voce sta dicendo messa in evidenza.
 
 Amelie dice sempre quanto è sicura. Quando riconosce il vino esatto comincia con «Questo è il…»; quando riconosce solo la denominazione, la tipologia o il vitigno, lo dice e racconta quello. Non nomina mai qualcosa che non ha letto sull'etichetta. Ogni frase del racconto viene dai fatti del database e dal disciplinare di produzione della denominazione: niente è inventato.
 
@@ -182,7 +182,7 @@ Accendi Amelie. Lo schermo mostra il marchio di Amelie mentre le voci si carican
 Controlla le tre cose che possono andare storte montando l'hardware:
 
 - **Suono**: tocca la bandiera già evidenziata, in alto a destra. Amelie annuncia la lingua a voce. Se non la senti, controlla il jack fra lo schermo e le casse, l'alimentazione USB delle casse e il loro controllo del volume.
-- **Moduli**: mentre Amelie aspetta, la luce è ambra. Posa una bottiglia: lo schermo deve dire «Fammi guardare…» e la luce deve cambiare colore. Se la luce resta spenta, o posando la bottiglia non succede niente, un Modulino non viene visto: controlla i cavi Qwiic, poi spegni e riaccendi.
+- **Moduli**: mentre Amelie aspetta, la luce è accesa, bianca e gialla; diventa rossa solo per un guasto, o in attesa quando la batteria è quasi scarica. Posa una bottiglia: lo schermo deve dire «Fammi guardare…». Se la luce resta spenta, o posando la bottiglia non succede niente, un Modulino non viene visto: controlla i cavi Qwiic, poi spegni e riaccendi.
 - **Camera**: tieni il dito sull'angolo in basso a destra dello schermo per tre secondi per aprire le impostazioni, e accendi **Debug camera**. Lo schermo mostra il riquadro che va all'OCR, con l'etichetta al centro, e il testo letto.
 
 Per un controllo completo, collegato in SSH:

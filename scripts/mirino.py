@@ -144,12 +144,12 @@ class MirinoDaBanco:
             self._accendi()
 
     def _accendi(self) -> None:
-        from amelie.bridge import BIANCO_SCATTO, Ponte
+        from amelie.bridge import LUCE, Ponte
 
         try:
             self._ponte = Ponte(timeout=2.0)
-            self._ponte.anello(BIANCO_SCATTO)
-            print("  anello a bianco, come durante la raffica")
+            self._ponte.luce(LUCE)
+            print("  anello bianco e giallo, la luce con cui il dispositivo legge")
         except Exception as e:                              # noqa: BLE001
             self._ponte = None
             print(f"  anello non acceso ({e.__class__.__name__}): "
@@ -169,9 +169,9 @@ class MirinoDaBanco:
         self.mirino.spegni()
         self.camera.chiudi()
         if self._ponte is not None:
-            from amelie.bridge import AMBRA
+            from amelie.bridge import LUCE
             try:
-                self._ponte.anello(AMBRA)
+                self._ponte.luce(LUCE)
             except Exception:                               # noqa: BLE001
                 pass
 

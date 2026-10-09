@@ -67,15 +67,14 @@ not at all.
 Whether there is a bottle is decided by the distance sensor, and by it alone:
 it notices in an instant (three readings in agreement, about 0.15 seconds).
 The camera is there to know where the label is. As soon as you set the bottle
-down the light turns green and the screen says "Let me have a look…"; then,
-with the light amber, "I'm reading the label…" while the camera takes the
-picture and the OCR reads, and "One moment…" while it looks for the wine.
+down the screen says "Let me have a look…"; then "I'm reading the label…"
+while the camera takes the picture and the OCR reads, and "One moment…" while
+it looks for the wine.
 Meanwhile an animation shows a bottle pouring into a glass.
 
 ### The story
 
-Then the story starts, on the screen and aloud, with the light green. The
-screen shows:
+Then the story starts, on the screen and aloud. The screen shows:
 
 - at the top the **title**: the name of the wine; or the *tipologia* (the wine
   type within an appellation), the appellation (*denominazione*) or the grape
@@ -186,8 +185,9 @@ label, and from that alone one cannot conclude that it is a different one.
 Two cases lead to the same screen: the OCR finds no words (digits and fragments
 do not count), or it finds words but no wine (in "Wine list" mode: no entry in
 the list). The screen shows the ↻ symbol and "Could you turn the label towards
-me?", the light turns red, and after four seconds the device tries again with a
-new photo: that is the moment to turn the bottle.
+me?", and after four seconds the device tries again with a new photo: that is
+the moment to turn the bottle. The light stays on: it is needed to read
+again.
 
 After three failed readings (`TENTATIVI_MAX` in `src/amelie/app.py`) the device
 stops:
@@ -207,22 +207,24 @@ attempt and the next, below the request to turn the label.
 
 ### The light
 
-The light sits in the tower and lights the label through a translucent window.
-Its colour says what the device is doing:
+The light sits in the tower and lights the label through a translucent window:
+eight LEDs, alternately white and yellow, at full brightness.
 
 | Moment | Light |
 |---|---|
-| power-on, until the service's first command (normally the first bottle) | amber, pulsing slowly |
-| waiting screen, reading, wine search | steady amber |
-| capture with the camera stopped | white, only for the duration of the capture |
-| bottle just placed, story, final screen (including "I couldn't recognise this bottle.") | green |
-| "Could you turn the label towards me?", "Something went wrong. I'll try again in a moment." | red |
-| Debug camera on | white |
+| power-on, until the device is ready | white and yellow, pulsing slowly |
+| waiting, reading, story, Debug camera | white and yellow, steady |
+| waiting with the battery almost flat (below 15 % of the estimate) | red |
+| "Something went wrong. I'll try again in a moment." | red |
 
 The pulsing at power-on comes from the microcontroller on its own, to show
-that the device is alive while the system starts. Normally the camera is
-already running when the bottle arrives, and the frame is taken from the
-stream without switching to white.
+that the device is alive while the system starts. Then the light stays the
+same while waiting and while reading: the camera sets its exposure at rest,
+with the light it will find at the moment of the capture, and the bottle finds
+the exposure already nearly right. With the battery almost flat the light only
+turns red while waiting: while reading it stays white and yellow, because it
+lights the label. The battery icon in the settings also shows how much is
+left.
 
 ## Languages
 
@@ -383,8 +385,9 @@ read, to fine-tune the framing:
 
 Turning it on **stops the cycle**: the camera can be used by only one process
 at a time, so there are no stories and no readings while it is on, and a story
-in progress is interrupted. The light goes white and the exposure is searched
-for once, so you frame with the light that will really be there. You leave the
+in progress is interrupted. The light stays the usual white and yellow, and the
+exposure is searched for once, so you frame with the light that will really be
+there. You leave the
 screen only with the "back to the story" button, in the bottom right, because
 the Debug camera covers the panel; on leaving, a bottle left on the plate is
 read immediately, and that is the proof that the framing works. It is not
@@ -439,7 +442,7 @@ The most useful fields:
 | Field | What it says |
 |---|---|
 | `stato` | the state of the device (see below) |
-| `mcu`, `protocollo`, `moduli` | whether the microcontroller responds with the Amelie firmware, which protocol version it speaks (the expected one is 2), and whether it sees the light (`anello`) and the distance sensor (`distanza`) |
+| `mcu`, `protocollo`, `moduli` | whether the microcontroller responds with the Amelie firmware, which protocol version it speaks (the expected one is 3), and whether it sees the light (`anello`) and the distance sensor (`distanza`) |
 | `camera`, `fotogramma_s`, `posa` | whether the service uses the camera; how many seconds have passed since the camera last delivered a frame (under a second at rest, `null` if it has never delivered one; during the story the camera is off and the number grows); the exposure in use |
 | `bottiglia` | whether the distance sensor sees a bottle |
 | `differenza`, `soglia` | how much the plate, as seen by the camera, differs from the empty plate, as a percentage, and the threshold beyond which the camera sees something on it |

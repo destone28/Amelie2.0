@@ -48,8 +48,8 @@ from typing import Any
 
 from .batteria import Batteria
 from .bridge import (
-    AMBRA, BIANCO_SCATTO, ROSSO, SPENTO, VERDE,
-    Colore, ErroreMCU, Ponte, PonteNonDisponibile, PonteSimulato,
+    LUCE, LUCE_ROSSA, LUCE_SPENTA,
+    ErroreMCU, Luce, Ponte, PonteNonDisponibile, PonteSimulato,
     Presenza as PresenzaDistanza,
 )
 from .capture import (
@@ -183,20 +183,23 @@ ANTICIPO_VALIDO_S = 30.0
 # tambureggiamento: si suona quando la mano si e' fermata.
 RIPOSO_VOLUME_S = 0.35
 
-# Il tono di ogni schermata, per tenere schermo e anello d'accordo: con lo
-# stesso oro per tutte, un guasto avrebbe l'aria di un invito.
+# Il tono di ogni schermata: con lo stesso oro per tutte, un guasto avrebbe
+# l'aria di un invito. Il rosso e' lo stesso dell'anello.
 TONO = {
     Stato.RIPOSIZIONA: "invito",     # ambra: si chiede una cosa
     Stato.GUASTO: "errore",          # rosso: qualcosa non ha funzionato
     Stato.CONCLUSO: "neutro",
 }
 
-COLORE_ANELLO = {
-    Effetto.ANELLO_RESPIRO: AMBRA,
-    Effetto.ANELLO_ACCESO: VERDE,
-    Effetto.ANELLO_LAVORO: AMBRA,
-    Effetto.ANELLO_ATTENZIONE: ROSSO,
-    Effetto.ANELLO_SPENTO: SPENTO,
+# La luce dell'anello per ogni effetto: bianca e gialla quando il dispositivo
+# lavora, rossa per un guasto. In attesa diventa rossa anche a batteria
+# scarica: vedi `_luce_per`.
+LUCE_ANELLO: dict[Effetto, Luce] = {
+    Effetto.ANELLO_RESPIRO: LUCE,
+    Effetto.ANELLO_ACCESO: LUCE,
+    Effetto.ANELLO_LAVORO: LUCE,
+    Effetto.ANELLO_ATTENZIONE: LUCE_ROSSA,
+    Effetto.ANELLO_SPENTO: LUCE_SPENTA,
 }
 
 
@@ -287,6 +290,9 @@ class Amelie:
         self.lettore = None if cfg.senza_camera else Lettore()
         self.giornale = Giornale(CARTELLA_GIORNALE)
         self.batteria = Batteria(PERCORSO_BATTERIA)
+        # Com'era la batteria l'ultima volta che si e' scelta la luce: vedi
+        # `_ricontrolla_la_luce`.
+        self._batteria_era_scarica = False
         self.carta = self._apri_carta(cfg.carta)
         # La voce della carta scelta per questa bottiglia, in attesa di essere
         # raccontata. Sostituisce i fatti per tutto il giro.
@@ -903,7 +909,7 @@ class Amelie:
         # qualunque stato. Non serve una scorciatoia che gli somigli.
         self.macchina.invia(Evento.BOTTIGLIA_ASSENTE)
         try:
-            self.ponte.anello(BIANCO_SCATTO)
+            self.ponte.luce(LUCE)
         except (PonteNonDisponibile, ErroreMCU):
             pass
         if self.mirino is None:
@@ -1178,6 +1184,11 @@ class Amelie:
             self._scalda_voci()
         finally:
             self._pronta = True
+            # Il respiro dell'accensione dice «mi sto avviando»: da pronti, la
+            # luce e' quella fissa dell'attesa, senza aspettare la prima
+            # bottiglia per prendere il comando.
+            if self.macchina.stato is Stato.ATTESA:
+                self._esegui(Effetto.ANELLO_RESPIRO)
 
     def _scalda_voci(self) -> None:
         """Carica le voci e pre-sintetizza le frasi che si dicono sempre.
@@ -1377,24 +1388,35 @@ class Amelie:
 
     # -------------------------------------------------------------- effetti
 
-    def _colore_dello_stato(self) -> Colore | None:
-        """Di che colore vuole l'anello lo stato in cui siamo ADESSO.
+    def _luce_per(self, effetto: Effetto) -> Luce:
+        """La luce di un effetto, adesso.
 
-        Serve a rimettere l'anello dopo la raffica. Cablare AMBRA qui vorrebbe
-        dire scrivere la stessa cosa in due posti: basterebbe cambiare
-        ANELLO_LAVORO in state.py perche' la pipeline continuasse a rimettere
-        l'ambra. E se nel frattempo la bottiglia e' stata tolta - succede, la
-        raffica dura mezzo secondo - lo stato non e' piu' quello di partenza.
+        L'attesa e' l'unico stato in cui la luce dice anche come sta la
+        batteria: e' quando il dispositivo e' fermo sul tavolo e chi lavora in
+        sala lo guarda passando. Negli stati della lettura resta bianca e
+        gialla anche a batteria scarica, perche' illumina l'etichetta.
         """
-        for effetto in EFFETTI_INGRESSO.get(self.macchina.stato, ()):
-            if effetto in COLORE_ANELLO:
-                return COLORE_ANELLO[effetto]
-        return None
+        if effetto is Effetto.ANELLO_RESPIRO and self.batteria.scarica:
+            return LUCE_ROSSA
+        return LUCE_ANELLO[effetto]
+
+    def _ricontrolla_la_luce(self) -> None:
+        """Rimette la luce dello stato se la batteria e' diventata scarica, o e'
+        stata ricaricata, mentre il dispositivo era fermo in attesa: senza un
+        cambio di stato nessuno la riaccenderebbe del colore giusto."""
+        scarica = self.batteria.scarica
+        if scarica == self._batteria_era_scarica:
+            return
+        self._batteria_era_scarica = scarica
+        if scarica:
+            log.warning("batteria quasi scarica: in attesa la luce e' rossa")
+        if self.macchina.stato is Stato.ATTESA:
+            self._esegui(Effetto.ANELLO_RESPIRO)
 
     def _esegui(self, e: Effetto) -> None:
         try:
-            if e in COLORE_ANELLO:
-                self.ponte.anello(COLORE_ANELLO[e])
+            if e in LUCE_ANELLO:
+                self.ponte.luce(self._luce_per(e))
             elif e is Effetto.ILLUMINA_E_SCATTA:
                 self._avvia(self._scatta_e_leggi)
             elif e is Effetto.INTERROGA_DATABASE:
@@ -1655,53 +1677,21 @@ class Amelie:
                                   anticipata.allargata, anticipata.durata_scatto,
                                   anticipata=True)
             return
-        # La luce dello scatto è l'anello stesso, che sale a bianco e poi torna
-        # al colore del lavoro: è la sola luce che il dispositivo controlla.
-        #
-        # L'ambra si rimette SOLO se lo scatto è riuscito, e in un `else` invece
-        # che in un `finally`. Col `finally` l'ordine sarebbe: errore -> la
-        # macchina a stati entra in GUASTO e accende il ROSSO -> il finally lo
-        # cancella rimettendo l'ambra. Resterebbe uno schermo che dichiara un
-        # guasto sopra un anello del colore dell'invito, che è esattamente la
-        # cosa che schermo e anello non devono mai fare. In ogni via d'errore il
-        # colore lo decide la macchina a stati, che è l'unica a sapere dove si
-        # sta andando.
-        #
-        # E si rimette SUBITO dopo la raffica, non alla fine del metodo: dopo
-        # c'è l'OCR, e mezzo secondo di bianco pieno sull'etichetta è un
-        # lampeggiante, non una luce.
-        #
-        # Tutto questo vale però solo per la raffica. Quando la camera è già in
-        # moto non c'è nessuna raffica da illuminare: il fotogramma buono è
-        # quello che sta arrivando comunque, ed è stato esposto con la luce che
-        # c'era. Alzare l'anello per poi riabbassarlo un decimo dopo sarebbe un
-        # lampo che non illumina niente — cinque livelli su 255, misurati,
-        # contro i quaranta che dà la posa.
+        # La luce dello scatto è quella di sempre, già accesa dallo stato: la
+        # raffica non la alza e non la rimette. Cambiarla proprio adesso
+        # renderebbe sbagliata la posa che la camera ha trovato a riposo, e lo
+        # scatto si pagherebbe con una ricerca della luce a bottiglia posata.
+        # In ogni via d'errore la luce la decide la macchina a stati, che è
+        # l'unica a sapere dove si sta andando.
         inizio_scatto = time.perf_counter()
         scatto = self.camera.al_volo(dopo=self._apparsa)
         if scatto is None:
-            try:
-                self.ponte.anello(BIANCO_SCATTO)
-            except (PonteNonDisponibile, ErroreMCU):
-                # Un anello che non si accende costa una foto piu' scura, non
-                # una scansione fallita: e' la stessa regola con cui `_esegui`
-                # protegge tutti gli effetti. Senza ErroreMCU, un firmware
-                # che non conosce `set_anello` trasformerebbe ogni scatto in un
-                # guasto.
-                pass
             try:
                 scatto = self.camera.scatta()
             except CameraNonDisponibile as e:
                 log.error("camera: %s", e)
                 self.macchina.invia(Evento.ERRORE)
                 return
-            else:
-                colore = self._colore_dello_stato()
-                if colore is not None:
-                    try:
-                        self.ponte.anello(colore)
-                    except (PonteNonDisponibile, ErroreMCU):
-                        pass
 
         durata_scatto = time.perf_counter() - inizio_scatto
         try:
@@ -2768,6 +2758,7 @@ class Amelie:
                 self.batteria.aggiorna(
                     voce_accesa=self.macchina.stato is Stato.RACCONTO)
                 self.batteria.salva()
+                self._ricontrolla_la_luce()
             except Exception:                               # noqa: BLE001
                 log.exception("stima della batteria")
             self._pubblica({"tipo": "salute", "tutto_bene": self._tutto_bene(),
@@ -2782,6 +2773,7 @@ class Amelie:
     def batteria_ricaricata(self) -> dict[str, Any]:
         """Qualcuno ha ricaricato il power bank e lo dice dalle impostazioni."""
         self.batteria.ricaricata()
+        self._ricontrolla_la_luce()
         log.info("batteria: dichiarata ricaricata")
         self._pubblica({"tipo": "salute", "tutto_bene": self._tutto_bene(),
                         "voce_muta": not self._voce_disponibile(),

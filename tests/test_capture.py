@@ -701,3 +701,137 @@ class TestLaCameraCheSiFerma:
         assert c.imp.esposizione == c.imp.posa_sicura and c.riquadro is None
         assert c._vuoti == 0 and c._cap is None
         assert c._percorso is None, "il device si ricerca: dopo un inceppamento USB cambia nome"
+
+
+class TestLaPosaSegueLaSala:
+    """La regolazione della luce in background: un passo ogni mezzo secondo, e
+    senza altalena anche quando la scena risponde diversamente dal banco."""
+
+    @staticmethod
+    def _insegui(k_scena, posa, luce_iniziale, passi=8):
+        """Insegue la luce cercata su una scena `luce = c * posa^k`, e
+        restituisce la luce vista a ogni passo."""
+        from amelie.capture import posa_verso
+
+        imp = ImpostazioniCamera()
+        c = luce_iniziale / posa ** k_scena
+        luci, precedente = [], None
+        for _ in range(passi):
+            luce = min(255.0, c * posa ** k_scena)
+            luci.append(luce)
+            if abs(luce - imp.luce_cercata) <= imp.luce_tollerata:
+                break
+            nuova = posa_verso(imp, posa, luce, precedente)
+            if nuova == posa:
+                break                       # al limite: piu' di cosi' non si va
+            precedente, posa = (posa, luce), nuova
+        return luci, posa
+
+    @staticmethod
+    def _cambi_di_verso(luci):
+        bersaglio = ImpostazioniCamera().luce_cercata
+        segni = [luce > bersaglio for luce in luci]
+        return sum(1 for a, b in zip(segni, segni[1:]) if a != b)
+
+    def test_una_scena_misurata_entra_nella_banda(self):
+        """Misurata sul dispositivo: posa 803, luce 78, e il 20% di posa in
+        piu' dava il 30% di luce in piu'. Con un esponente fisso si salterebbe
+        da 78 a 101 e ritorno, un ritocco al secondo."""
+        imp = ImpostazioniCamera()
+        luci, _ = self._insegui(1.2, 803, 78.0)
+        assert abs(luci[-1] - imp.luce_cercata) <= imp.luce_tollerata
+        assert len(luci) <= 3
+
+    @pytest.mark.parametrize("k", [0.4, 0.54, 0.8, 1.2, 1.6])
+    def test_nessuna_altalena(self, k):
+        """Al piu' un passaggio oltre il bersaglio, il primo, quando la scena
+        non e' ancora stata misurata: poi la risposta e' nota e si arriva - o ci
+        si ferma a un estremo, se la scena non ci arriva con nessuna posa."""
+        imp = ImpostazioniCamera()
+        for posa, luce in ((400, 30.0), (3000, 180.0)):
+            luci, finale = self._insegui(k, posa, luce)
+            arrivata = abs(luci[-1] - imp.luce_cercata) <= imp.luce_tollerata
+            al_limite = finale in (imp.posa_minima, imp.posa_massima)
+            assert arrivata or al_limite, (k, luci, finale)
+            assert self._cambi_di_verso(luci) <= 1, (k, luci)
+
+
+class TestIlGuardianoGuardaATempo:
+    """Ogni mezzo secondo, non ogni tanti fotogrammi: al buio, con le pose
+    lunghe, i fotogrammi rallentano proprio quando la luce va seguita."""
+
+    def _camera(self, monkeypatch, orologio, impostate):
+        import amelie.capture as modulo
+        from amelie.capture import Camera
+
+        monkeypatch.setattr(modulo.time, "monotonic", lambda: orologio[0])
+        monkeypatch.setattr(modulo, "imposta_posa", lambda _d, p: impostate.append(p))
+        c = Camera(ImpostazioniCamera())
+        c._percorso = "/dev/finto"
+        return c
+
+    def test_una_misura_ogni_mezzo_secondo(self, monkeypatch):
+        orologio, impostate = [100.0], []
+        c = self._camera(monkeypatch, orologio, impostate)
+        buio = np.full((120, 160, 3), 30, dtype=np.uint8)
+        c._ritocca_la_posa(buio)
+        assert len(impostate) == 1, "la prima misura si fa subito"
+        for _ in range(c.imp.fotogrammi_da_scartare):
+            c._ritocca_la_posa(buio)          # i fotogrammi della posa vecchia
+        orologio[0] += 0.2
+        c._ritocca_la_posa(buio)
+        assert len(impostate) == 1, "prima del mezzo secondo non si misura"
+        orologio[0] += 0.4
+        c._ritocca_la_posa(buio)
+        assert len(impostate) == 2, "passato il mezzo secondo si misura di nuovo"
+
+    def test_una_bottiglia_appena_arrivata_si_guarda_subito(self, monkeypatch):
+        orologio, impostate = [100.0], []
+        c = self._camera(monkeypatch, orologio, impostate)
+        buio = np.full((120, 160, 3), 30, dtype=np.uint8)
+        c._ritocca_la_posa(buio)
+        c._da_saltare = 0
+        c.guarda_subito()
+        c._ritocca_la_posa(buio)
+        assert len(impostate) == 2
+
+
+class TestLoScattoAlVoloSceglieLaLuce:
+    """Nitido non basta: la bottiglia appena arrivata puo' essere piu' chiara
+    della sala su cui il guardiano aveva regolato la posa."""
+
+    @staticmethod
+    def _fotogramma(media, seme):
+        rng = np.random.default_rng(seme)
+        rumore = rng.integers(-40, 41, (120, 160, 3))
+        return np.clip(media + rumore, 0, 255).astype(np.uint8)
+
+    def _camera(self, fotogrammi):
+        from amelie.capture import Camera
+
+        c = Camera(ImpostazioniCamera())
+        c._percorso = "/dev/finto"
+        coda = list(fotogrammi)
+        c.pronto = lambda dopo=0.0, attesa=0.5: coda.pop(0) if coda else None
+        return c
+
+    def test_si_preferisce_il_fotogramma_con_la_luce_giusta(self):
+        bruciato = self._fotogramma(200, 1)
+        giusto = self._fotogramma(90, 2)
+        c = self._camera([bruciato, giusto])
+        scatto = c.al_volo(attesa=1.0)
+        assert scatto is not None
+        assert abs(float(scatto.intero.mean()) - 90) < 10
+
+    def test_se_la_luce_giusta_non_arriva_si_tiene_il_migliore(self):
+        c = self._camera([self._fotogramma(200, 1), self._fotogramma(205, 2)])
+        assert c.al_volo(attesa=1.0) is not None
+
+    def test_alla_posa_minima_non_si_aspetta(self):
+        """Se la posa e' gia' al minimo, un fotogramma piu' scuro non arrivera'."""
+        from dataclasses import replace
+
+        c = self._camera([self._fotogramma(200, 1), self._fotogramma(90, 2)])
+        c.imp = replace(c.imp, esposizione=c.imp.posa_minima)
+        scatto = c.al_volo(attesa=1.0)
+        assert float(scatto.intero.mean()) > 150, "il primo nitido basta"

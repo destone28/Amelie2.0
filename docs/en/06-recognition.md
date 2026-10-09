@@ -115,16 +115,21 @@ a JPEG) at 1920 × 1080.
 
 The capture has two paths.
 
-- **With the stream running**, `Camera.al_volo` takes the first sufficiently sharp frame among
-  those that arrived **after** the moment the bottle appeared, otherwise the sharpest one seen
-  within one second: the settling is watched instead of waited out. Sharpness is the variance of the
-  Laplacian on the crop, a measure of local contrast that rises when the image is in focus; the
-  threshold is `SOGLIA_NITIDEZZA` (40).
-- **With the stream stopped**, `_scatta_e_leggi` switches the LED ring to white and calls
-  `Camera.scatta`, which waits 0.15 s for the light to settle (`assestamento_luce_s`), throws away
-  the old frames left in the USB buffer (`fotogrammi_da_scartare`, 3), searches for the exposure
-  and keeps the sharpest of a burst (`fotogrammi_raffica`, 3); then the ring goes back to the
-  colour of the state.
+- **With the stream running**, `Camera.al_volo` takes the first frame that is sharp enough **and
+  correctly lit** among those that arrived **after** the moment the bottle appeared, otherwise the
+  sharpest one seen within one second: the settling is watched instead of waited out. Sharpness
+  is the variance of the Laplacian on the crop, a measure of local contrast that rises when the
+  image is in focus; the threshold is `SOGLIA_NITIDEZZA` (40). The light is right within twice the
+  guardian's tolerance, or when the exposure is already at a limit and cannot improve; when the
+  bottle arrives the guardian measures at once (`Camera.guarda_subito`), without waiting for the
+  half second.
+- **With the stream stopped**, `_scatta_e_leggi` calls `Camera.scatta`, which waits 0.15 s
+  (`assestamento_luce_s`), throws away the old frames left in the USB buffer
+  (`fotogrammi_da_scartare`, 3), searches for the exposure and keeps the sharpest of a burst
+  (`fotogrammi_raffica`, 3).
+
+In both cases the LED ring keeps its usual light: the capture does not change it, so the exposure
+found at rest is also valid for the burst.
 
 The `Scatto` also carries the whole straightened frame and the position of the crop (`intero`,
 `posto`).
@@ -133,24 +138,34 @@ The `Scatto` also carries the whole straightened frame and the position of the c
 
 The light that matters is the mean grey level **on the straightened crop**, that is, where the OCR
 will look (`Camera._luce`). The target is `luce_cercata` (90 out of 255) with tolerance
-`luce_tollerata` (8); outside that band the exposure is corrected:
+`luce_tollerata` (8); outside that band the exposure is corrected by `posa_verso`:
 
 ```
-posa_nuova = posa × (luce_cercata / luce) ^ esponente_posa      clamped to [posa_minima, posa_massima]
+k          = how the scene responds: light ∝ exposure^k, estimated from the last two points
+             (between 0.3 and 1.6; without two useful points it is 1 / esponente_posa)
+posa_nuova = posa × (luce_cercata / luce) ^ (0.8 / k)      clamped to [posa_minima, posa_massima]
 ```
 
-The exponent (1.5) accounts for the fact that light does not grow in proportion to exposure: the
-sensor saturates on the bright spots. The guardian corrects one step at a time while the stream
-runs, about once a second (`_ritocca_la_posa`), so when the bottle arrives the exposure is usually
-already right; the capture with the stream stopped makes up to `ritocchi_posa` (3) corrections,
-each verified by `_aspetta_la_posa` (two frames in a row with the same light, different from the
-starting one). Exposure is measured in units of 100 µs: `posa_minima` is 300, `posa_massima` 4500.
-The maximum is below the one declared by the camera (5000) because beyond a certain exposure the
-camera stops delivering frames; if the stream stays silent with a long exposure, `_a_vuoto`
-restarts from `posa_sicura` (900).
+Light does not grow in proportion to exposure, and not always in the same way: it depends on the
+scene. On the bench `light ∝ exposure^0.54`; with a bright label close to the ring, on the device,
+20% more exposure gave 30% more light. A fixed exponent, tuned on the first case, would overshoot
+the good band at every step in the second: that is why the response is estimated on the scene, and
+each step covers 80% of the way (`SMORZAMENTO_POSA`), the rest at the next step.
 
-The LED ring shifts the mean light by a few levels, the exposure multiplies it: that is why the
-ring goes white only for the burst of `scatta`. At the start of the reading,
+This is the **background** adjustment: while the stream runs, while waiting and while reading,
+the guardian looks at the light every half second (`INTERVALLO_MISURA_S`, in seconds and not in
+frames: with the long exposures of a dark room the frames slow down) and corrects by one step
+(`_ritocca_la_posa`). The exposure follows the room, and the bottle finds it already nearly
+right. The capture with the stream stopped makes up to `ritocchi_posa` (3) corrections, each
+verified by `_aspetta_la_posa` (two frames in a row with the same light, different from the
+starting one). Exposure is measured in units of 100 µs: `posa_minima` is 100 (10 ms: below it,
+50 Hz lamps would cause banding; above it, a bright label under the ring at full brightness is
+burnt out), `posa_massima` 4500. The maximum is below the one declared by the camera (5000)
+because beyond a certain exposure the camera stops delivering frames; if the stream stays silent
+with a long exposure, `_a_vuoto` restarts from `posa_sicura` (900).
+
+The LED ring, white and yellow at full brightness, stays the same while waiting and while reading:
+the exposure the guardian finds at rest is the one of the capture. At the start of the reading,
 `ocr._contrasto_normalizzato` applies CLAHE (*contrast limited adaptive histogram equalisation*: a
 contrast stretch done region by region, with a limit that avoids amplifying noise) to the
 luminance only, in the LAB colour space: it helps in extreme cases without touching the colours.

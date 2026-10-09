@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import glob
 import logging
+import math
 import subprocess
 import threading
 import time
@@ -144,10 +145,13 @@ class ImpostazioniCamera:
     # tetto oltre il quale non si sta aspettando, si sta sperando: il caso
     # normale ne consuma cinque, tre di posa vecchia più due che si accordano.
     fotogrammi_di_attesa: int = 8
-    # I due estremi entro cui si può andare. Sotto il minimo non si legge
-    # nemmeno in pieno giorno; sopra il massimo la raffica costa più del
+    # I due estremi entro cui si può andare. Il minimo è dieci millesimi:
+    # sotto, le lampade a 50 Hz, che sfarfallano cento volte al secondo,
+    # darebbero bande sull'etichetta. Non di più, perché un'etichetta chiara
+    # vicino all'anello al massimo si brucia: misurata sul dispositivo, di
+    # giorno, luce 174 già a 300. Sopra il massimo la raffica costa più del
     # racconto, e una bottiglia che oscilla viene mossa.
-    posa_minima: int = 300
+    posa_minima: int = 100
     # NON il massimo della camera. `v4l2-ctl` dice `exposure_time_absolute
     # max=5000`, e in una sala a luci basse la regolazione arriva davvero oltre
     # il 4000. Ma a 5000 la camera SI FERMA: smette di dare fotogrammi, ogni
@@ -307,12 +311,50 @@ SCARTO_DI_POSA = 2.0
 # che passa davanti alla camera è ancora lì.
 FRESCHEZZA_S = 0.5
 
-# Ogni quanti fotogrammi il guardiano guarda quanta luce c'è.
-#
-# Lo stream ne dà una decina al secondo, e misurare costa quindici millesimi
-# fra raddrizzo, ritaglio e conversione in grigio. Una volta al secondo e' gia'
-# piu' spesso di quanto la luce di una sala cambi.
-FOTOGRAMMI_FRA_DUE_MISURE = 10
+# Ogni quanto il guardiano guarda quanta luce c'è: in secondi, non in
+# fotogrammi. Con le pose lunghe di una sala buia lo stream scende a due
+# fotogrammi al secondo, e contando i fotogrammi si ritoccherebbe meno proprio
+# quando serve di più. Mezzo secondo: misurare costa quindici millesimi fra
+# raddrizzo, ritaglio e conversione in grigio, e una sala che cambia luce - una
+# lampada accesa, il sole che cala - si insegue in due o tre passi, prima che
+# arrivi la bottiglia.
+INTERVALLO_MISURA_S = 0.5
+
+# Il ritocco fa questa parte della strada verso la luce cercata, e il resto al
+# passo dopo: la risposta della scena si stima da due punti, ed e' rumorosa.
+SMORZAMENTO_POSA = 0.8
+# Fra quali estremi si crede alla risposta stimata, `luce ∝ posa^k`. Fuori, la
+# stima viene da una scena cambiata fra le due misure, non dalla camera.
+ESPONENTE_SCENA_MIN = 0.3
+ESPONENTE_SCENA_MAX = 1.6
+
+
+def posa_verso(imp: "ImpostazioniCamera", posa: int, luce: float,
+               precedente: tuple[int, float] | None = None) -> int:
+    """La posa nuova: un passo verso la luce cercata.
+
+    La luce non segue la posa sempre allo stesso modo, dipende dalla scena.
+    Sul banco `luce ∝ posa^0,54`; sul dispositivo, con un'etichetta chiara
+    vicino all'anello, il 20% di posa in piu' ha dato il 30% di luce in piu'.
+    Un esponente fisso tarato sul primo caso, nel secondo salterebbe oltre la
+    banda buona a ogni passo, avanti e indietro: fra luce 78 e 101, un ritocco
+    al secondo per ore.
+
+    Quindi la risposta si misura sulla scena, dagli ultimi due punti, quando la
+    posa e' cambiata abbastanza da dire qualcosa; altrimenti vale quella di
+    progetto, `1 / esponente_posa`. E il passo si smorza: si fa l'ottanta per
+    cento della strada, e il resto al passo dopo.
+    """
+    k = 1.0 / imp.esponente_posa
+    if precedente is not None:
+        p0, l0 = precedente
+        if p0 > 0 and l0 > 0 and luce > 0 and abs(math.log(posa / p0)) > 0.05:
+            stimato = math.log(luce / l0) / math.log(posa / p0)
+            if stimato > 0:
+                k = min(ESPONENTE_SCENA_MAX, max(ESPONENTE_SCENA_MIN, stimato))
+    passo = SMORZAMENTO_POSA * math.log(imp.luce_cercata / max(luce, 1.0)) / k
+    nuova = int(round(posa * math.exp(passo)))
+    return max(imp.posa_minima, min(imp.posa_massima, nuova))
 
 # Quanto deve essere cambiata una riga o una colonna per contare come sagoma
 # della bottiglia. Un pixel isolato è rumore; mezza colonna è un bordo vero.
@@ -776,7 +818,10 @@ class Camera:
         # Quanti fotogrammi saltare prima di rifidarsi della luce, dopo aver
         # cambiato la posa: il driver la applica con tre fotogrammi di ritardo.
         self._da_saltare = 0
-        self._da_guardare = 1
+        # Quando il guardiano guardera' di nuovo la luce, e l'ultima misura
+        # fatta - posa e luce - per stimare come risponde la scena.
+        self._prossima_misura = 0.0
+        self._punto_precedente: tuple[int, float] | None = None
         # Letture di fila senza fotogramma. Vedi `_a_vuoto`.
         self._vuoti = 0
         # Quando la camera ha dato l'ultimo fotogramma, per qualunque strada:
@@ -847,6 +892,10 @@ class Camera:
         self._guardiano = None
         with self._lucchetto:
             self._recente = None
+            # Alla riaccensione la scena puo' essere un'altra: la misura vecchia
+            # non dice piu' come risponde, e la prima si fa subito.
+            self._punto_precedente = None
+            self._prossima_misura = 0.0
             self._spegni()
 
     def _spegni(self) -> None:
@@ -970,43 +1019,48 @@ class Camera:
             self._ritocca_la_posa(frame)
 
     def _ritocca_la_posa(self, frame) -> None:
-        """Un solo passo verso la posa giusta, e senza mai fermarsi.
+        """Un passo verso la posa giusta, mentre lo stream scorre.
+
+        E' la regolazione della luce in background: il guardiano gira finche'
+        il dispositivo aspetta o legge, e ogni mezzo secondo guarda quanta luce
+        c'e' dove guardera' l'OCR e, se serve, corregge la posa di un passo.
+        Cosi' la camera segue la sala - le luci abbassate a cena, il sole che
+        cala - e la bottiglia trova la posa gia' quasi giusta, invece di
+        pagarne la ricerca da appoggiata.
 
         `_cerca_la_posa` fa la stessa cosa in un colpo, ma aspettando: cambia
-        la posa e poi legge fotogrammi finché la luce non si ferma, e quei
-        fotogrammi si pagano tutti nel momento peggiore, cioè con la bottiglia
-        già appoggiata e qualcuno che guarda lo schermo.
-
-        Qui il tempo c'è: lo stream scorre comunque. Si corregge di un passo,
-        si saltano i tre fotogrammi che il driver impiega ad applicarla, e si
-        riguarda. Ci si mette qualche decimo in più e non se ne accorge
-        nessuno, perché succede prima.
+        la posa e poi legge fotogrammi finche' la luce non si ferma, e quei
+        fotogrammi si pagano tutti nel momento peggiore. Qui il tempo c'e':
+        si corregge di un passo, si saltano i tre fotogrammi che il driver
+        impiega ad applicarla, e si riguarda.
         """
         if self._da_saltare > 0:
             self._da_saltare -= 1
             return
-        # Non a ogni fotogramma: misurare la luce vuol dire raddrizzare,
-        # ritagliare e convertire in grigio un fotogramma da due megapixel, e
-        # sono quindici millesimi. La luce di una sala non cambia undici volte
-        # al secondo; una volta al secondo e' gia' piu' spesso del necessario.
-        self._da_guardare -= 1
-        if self._da_guardare > 0:
+        ora = time.monotonic()
+        if ora < self._prossima_misura:
             return
-        self._da_guardare = FOTOGRAMMI_FRA_DUE_MISURE
+        self._prossima_misura = ora + INTERVALLO_MISURA_S
         imp = self.imp
         luce = float(cv2.cvtColor(self.ritaglia(self._raddrizza(frame)),
                                   cv2.COLOR_BGR2GRAY).mean())
+        precedente = self._punto_precedente
+        self._punto_precedente = (imp.esposizione, luce)
         if abs(luce - imp.luce_cercata) <= imp.luce_tollerata:
             return
-        nuova = int(imp.esposizione
-                    * (imp.luce_cercata / max(luce, 1.0)) ** imp.esponente_posa)
-        nuova = max(imp.posa_minima, min(imp.posa_massima, nuova))
+        nuova = posa_verso(imp, imp.esposizione, luce, precedente)
         if nuova == imp.esposizione:
             return
         imposta_posa(self.percorso, nuova)
         self.imp = replace(imp, esposizione=nuova)
         self._da_saltare = self.imp.fotogrammi_da_scartare
         log.info("posa %d -> %d (luce %.0f)", imp.esposizione, nuova, luce)
+
+    def guarda_subito(self) -> None:
+        """La prossima misura della luce al prossimo fotogramma, senza aspettare
+        il mezzo secondo: la scena e' appena cambiata, e' arrivata una
+        bottiglia."""
+        self._prossima_misura = 0.0
 
     def pronto(self, *, dopo: float = 0.0, attesa: float = 0.5):
         """Il primo fotogramma preso DOPO un certo istante, già raddrizzato.
@@ -1047,12 +1101,20 @@ class Camera:
         nitidezza resta a 11 - ed è tre quarti di secondo su una scansione che
         comunque non troverà niente.
 
+        E la luce. All'arrivo della bottiglia la posa e' quella che il
+        guardiano ha trovato sulla sala, e l'etichetta, vicina all'anello, puo'
+        essere piu' chiara: si chiede subito una misura (`guarda_subito`), e ci
+        si ferma al primo fotogramma nitido CON la luce giusta. Uno nitido ma
+        bruciato si tiene solo se l'altro non arriva in tempo.
+
         `None` vuol dire che il guardiano non sta girando o non ha ancora un
         fotogramma abbastanza nuovo: chi chiama torna a `scatta`, che la camera
         se la apre da sé.
         """
+        self.guarda_subito()
         scadenza = time.monotonic() + attesa
         migliore: Scatto | None = None
+        in_luce: Scatto | None = None
         viste: list[float] = []
         while True:
             frame = self.pronto(dopo=dopo, attesa=max(0.0, scadenza - time.monotonic()))
@@ -1066,17 +1128,35 @@ class Camera:
             # una bottiglia mossa fa un numero alto e una lettura vuota.
             n = nitidezza(ritaglio)
             viste.append(n)
+            scatto = Scatto(immagine=ritaglio, nitidezza=n, scartati=0,
+                            nitidezze=[], intero=frame, posto=posto)
+            luce_giusta = self._luce_giusta(ritaglio)
             if migliore is None or n > migliore.nitidezza:
-                migliore = Scatto(immagine=ritaglio, nitidezza=n, scartati=0,
-                                  nitidezze=[], intero=frame, posto=posto)
-            if n >= SOGLIA_NITIDEZZA or time.monotonic() >= scadenza:
+                migliore = scatto
+            if luce_giusta and (in_luce is None or n > in_luce.nitidezza):
+                in_luce = scatto
+            if (n >= SOGLIA_NITIDEZZA and luce_giusta) or time.monotonic() >= scadenza:
                 break
             # Il prossimo dev'essere un altro fotogramma, non lo stesso
             # riguardato: `dopo` si sposta a ora.
             dopo = time.monotonic()
-        if migliore is not None:
-            migliore.nitidezze = viste
-        return migliore
+        scelto = in_luce or migliore
+        if scelto is not None:
+            scelto.nitidezze = viste
+        return scelto
+
+    def _luce_giusta(self, ritaglio) -> bool:
+        """La luce del ritaglio basta a leggere bene, o non si puo' migliorare.
+
+        Il doppio della tolleranza del guardiano: lui insegue il bersaglio, qui
+        basta che l'OCR legga. E se la posa e' gia' a un estremo, aspettare un
+        fotogramma migliore non serve: non arrivera'.
+        """
+        imp = self.imp
+        if imp.esposizione in (imp.posa_minima, imp.posa_massima):
+            return True
+        grigio = cv2.cvtColor(ritaglio, cv2.COLOR_BGR2GRAY) if ritaglio.ndim == 3 else ritaglio
+        return abs(float(grigio.mean()) - imp.luce_cercata) <= 2 * imp.luce_tollerata
 
     def fascia(self, frame) -> np.ndarray:
         """Il fotogramma INTERO, in grigio e piccolo.
@@ -1285,16 +1365,16 @@ class Camera:
         luce = self._luce(cap)
         if luce is None:
             return 0.0
+        precedente: tuple[int, float] | None = None
         for _ in range(imp.ritocchi_posa):
             if abs(luce - imp.luce_cercata) <= imp.luce_tollerata:
                 break
-            nuova = int(posa * (imp.luce_cercata / max(luce, 1.0))
-                        ** imp.esponente_posa)
-            nuova = max(imp.posa_minima, min(imp.posa_massima, nuova))
+            nuova = posa_verso(imp, posa, luce, precedente)
             if nuova == posa:
                 break
             imposta_posa(self.percorso, nuova)
             arrivata = self._aspetta_la_posa(cap, luce)
+            precedente = (posa, luce)
             posa = nuova
             if arrivata is None:
                 break

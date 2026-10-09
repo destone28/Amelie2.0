@@ -10,7 +10,7 @@ Amelie is a table-top device for a wine bar, a restaurant or a wine cellar at ho
 
 ## What Amelie does
 
-A guest places a bottle on the round plate behind the screen, with the label turned towards the screen: the camera looks at the label from the back of the tower that holds the screen. A distance sensor under the plate notices the bottle, the light next to the camera changes colour and the camera takes pictures of the label. The UNO Q reads the text on the label, looks it up in a database of Italian wines and tells the story out loud, while the text scrolls on the 5" touchscreen with the sentence being spoken highlighted.
+A guest places a bottle on the round plate behind the screen, with the label turned towards the screen: the camera looks at the label from the back of the tower that holds the screen. A distance sensor under the plate notices the bottle, and the camera takes pictures of the label, lit by the white and yellow light next to it, which is always on. The camera adjusts its exposure by itself while the device waits, so the bottle finds the right light already set. The UNO Q reads the text on the label, looks it up in a database of Italian wines and tells the story out loud, while the text scrolls on the 5" touchscreen with the sentence being spoken highlighted.
 
 Amelie always says how sure it is. When it recognises the exact wine, it starts with "This is the…"; when it can only recognise the appellation, the wine type or the grape variety, it says so and describes that. It never names something it has not read on the label. Every sentence of the description comes from facts in the database and from the official production specification of the appellation: nothing is invented.
 
@@ -182,7 +182,7 @@ Switch Amelie on. The screen shows the Amelie logo while the voices load, then t
 Check the three things that can go wrong when mounting the hardware:
 
 - **Sound**: tap the flag that is already highlighted, at the top right. Amelie announces the language out loud. If you can't hear it, check the jack between the display and the speakers, the speakers' USB power and their volume control.
-- **Modules**: the light is amber while Amelie waits. Place a bottle: the screen must say "Let me have a look…" and the light must change colour. If the light stays off, or nothing happens when you place the bottle, a Modulino is not seen: check the Qwiic cables, then switch off and on again.
+- **Modules**: while Amelie waits, the light is on, white and yellow; it turns red only for a fault, or while waiting when the battery is almost flat. Place a bottle: the screen must say "Let me have a look…". If the light stays off, or nothing happens when you place the bottle, a Modulino is not seen: check the Qwiic cables, then switch off and on again.
 - **Camera**: hold a finger on the bottom-right corner of the screen for three seconds to open the settings, and switch on **Debug camera**. The screen shows the frame that goes to the OCR, with the label in the middle, and the text that was read.
 
 For a complete check, connected over SSH:

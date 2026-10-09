@@ -64,16 +64,14 @@ legge male, o non si legge.
 
 Che una bottiglia ci sia lo decide il sensore di distanza, e solo lui: se ne
 accorge in un attimo (tre letture concordi, circa 0,15 secondi). La camera
-serve a sapere dove sta l'etichetta. Appena posi la bottiglia la luce diventa
-verde e lo schermo dice «Fammi guardare…»; poi, con la luce ambra, «Sto
-leggendo l'etichetta…» mentre la camera scatta e l'OCR legge, e «Un attimo…»
-mentre cerca il vino. Intanto un'animazione mostra una bottiglia che versa in
+serve a sapere dove sta l'etichetta. Appena posi la bottiglia lo schermo dice
+«Fammi guardare…»; poi «Sto leggendo l'etichetta…» mentre la camera scatta e
+l'OCR legge, e «Un attimo…» mentre cerca il vino. Intanto un'animazione mostra una bottiglia che versa in
 un calice.
 
 ### Il racconto
 
-Poi parte il racconto, sullo schermo e a voce, con la luce verde. La schermata
-mostra:
+Poi parte il racconto, sullo schermo e a voce. La schermata mostra:
 
 - in alto il **titolo**: il nome del vino; oppure la tipologia, la
   denominazione o il vitigno, quando il riconoscimento si ferma lì; oppure,
@@ -183,9 +181,9 @@ non si può concludere che sia un'altra.
 Due casi portano alla stessa schermata: l'OCR non trova nessuna parola (cifre
 e frammenti non contano), oppure trova parole ma nessun vino (nel modo «Carta
 dei vini»: nessuna voce della carta). Lo schermo mostra il simbolo ↻ e «Provi
-a girare l'etichetta verso di me?», la luce diventa rossa, e dopo quattro
-secondi il dispositivo riprova con una foto nuova: è il momento di girare la
-bottiglia.
+a girare l'etichetta verso di me?», e dopo quattro secondi il dispositivo
+riprova con una foto nuova: è il momento di girare la bottiglia. La luce resta
+accesa: serve a rileggere.
 
 Dopo tre letture fallite (`TENTATIVI_MAX` in `src/amelie/app.py`) il
 dispositivo smette:
@@ -206,21 +204,22 @@ richiesta di girare l'etichetta.
 ### La luce
 
 La luce sta nella torre e illumina l'etichetta attraverso una finestra
-traslucida. Il suo colore dice che cosa sta facendo il dispositivo:
+traslucida: otto LED, alternati bianchi e gialli, al massimo.
 
 | Momento | Luce |
 |---|---|
-| accensione, fino al primo comando del servizio (di norma la prima bottiglia) | ambra, che pulsa piano |
-| schermata d'attesa, lettura, ricerca del vino | ambra fissa |
-| scatto a camera ferma | bianca, solo per la durata dello scatto |
-| bottiglia appena posata, racconto, schermata finale (anche «Non ho riconosciuto questa bottiglia.») | verde |
-| «Provi a girare l'etichetta verso di me?», «Qualcosa non ha funzionato. Riprovo fra un istante.» | rossa |
-| Debug camera accesa | bianca |
+| accensione, finché il dispositivo non è pronto | bianca e gialla, che pulsa piano |
+| attesa, lettura, racconto, Debug camera | bianca e gialla, fissa |
+| attesa con la batteria quasi scarica (sotto il 15 % della stima) | rossa |
+| «Qualcosa non ha funzionato. Riprovo fra un istante.» | rossa |
 
 La pulsazione dell'accensione la fa il microcontrollore da solo, per dire che
-il dispositivo è vivo mentre il sistema si avvia. Di norma la camera è già in
-moto quando la bottiglia arriva, e il fotogramma si prende dal flusso senza
-accendere il bianco.
+il dispositivo è vivo mentre il sistema si avvia. Poi la luce resta la stessa
+in attesa e durante la lettura: la camera regola la sua esposizione a riposo,
+con la luce che troverà allo scatto, e la bottiglia trova la posa già quasi
+giusta. Con la batteria quasi scarica la luce diventa rossa solo in attesa:
+mentre legge resta bianca e gialla, perché illumina l'etichetta. Quanta
+batteria resta lo dice anche l'icona nelle impostazioni.
 
 ## Le lingue
 
@@ -377,8 +376,8 @@ riesce a leggere, per mettere a punto l'inquadratura:
 
 Accenderla **ferma il ciclo**: la camera la usa un processo alla volta, quindi
 niente racconti né letture finché è accesa, e un racconto in corso si
-interrompe. La luce va a bianco e la posa si cerca una volta, così inquadri
-con la luce che ci sarà davvero. Dallo schermo si esce solo dal pulsante
+interrompe. La luce resta quella di sempre, bianca e gialla, e la posa si
+cerca una volta, così inquadri con la luce che ci sarà davvero. Dallo schermo si esce solo dal pulsante
 «torna al racconto», in basso a destra, perché la Debug camera copre il
 pannello; uscendo, una bottiglia rimasta sul piatto si legge subito, e questa è
 la prova che l'inquadratura funziona. Non si ricorda fra un avvio e l'altro, e
@@ -432,7 +431,7 @@ I campi più utili:
 | Campo | Che cosa dice |
 |---|---|
 | `stato` | lo stato del dispositivo (vedi sotto) |
-| `mcu`, `protocollo`, `moduli` | se il microcontrollore risponde con il firmware di Amelie, con quale versione del protocollo (quella attesa è 2), e se vede la luce (`anello`) e il sensore di distanza (`distanza`) |
+| `mcu`, `protocollo`, `moduli` | se il microcontrollore risponde con il firmware di Amelie, con quale versione del protocollo (quella attesa è 3), e se vede la luce (`anello`) e il sensore di distanza (`distanza`) |
 | `camera`, `fotogramma_s`, `posa` | se il servizio usa la camera; da quanti secondi la camera non dà un fotogramma (a riposo meno di un secondo, `null` se non ne ha mai dato uno; durante il racconto la camera è spenta e il numero cresce); l'esposizione in uso |
 | `bottiglia` | se il sensore di distanza vede una bottiglia |
 | `differenza`, `soglia` | quanto il piatto, visto dalla camera, differisce da quello vuoto, in percentuale, e la soglia oltre la quale la camera ci vede qualcosa |

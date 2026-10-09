@@ -202,10 +202,11 @@ Uploading it needs the board.
 
 | method | parameters | returns |
 |---|---|---|
-| `set_anello` | r, g, b (0-255), brightness (0-100) | `true`; the colour is applied at the next pass of `loop()`, if the ring is present |
+| `set_anello` | r, g, b (0-255), brightness (0-100) | `true`; all eight LEDs the same colour, applied at the next pass of `loop()`, if the ring is present |
+| `set_luce` | two colours as `0xRRGGBB` integers, brightness (0-100) | `true`; the even LEDs take the first colour and the odd ones the second. It is Amelie's light: white and yellow |
 | `distanza` | — | the last measurement in millimetres, or `-1` if the last measurement is not valid or the sensor is not present |
 | `moduli` | — | which modules it sees, as a sum of bits: **1** the ring, **2** the sensor (from 0 to 3) |
-| `versione` | — | the **protocol** version: `2` |
+| `versione` | — | the **protocol** version: `3` |
 
 There is also one **notification**, that is, a message the microcontroller
 sends on its own initiative, without waiting for an answer:
@@ -242,10 +243,11 @@ An Arduino sketch has two fixed functions: `setup()`, run once at start-up, and
 The microcontroller is ready in a few milliseconds. The link with Linux comes
 when `arduino-router` starts, about forty seconds after power-up, and until
 then `Bridge.begin()` waits and `setup()` does not finish. In the meantime the
-ring **breathes in amber**, to show that the device is on: the sketch switches
-it on before it starts waiting, and a separate thread makes it breathe during
-the wait. The breathing stops at the first `set_anello` from Linux; from then
-on the colour is decided by the application.
+ring **breathes in white and yellow**, to show that the device is on: the
+sketch switches it on before it starts waiting, and a separate thread makes it
+breathe during the wait. The breathing stops at the first light command from
+Linux, which the application sends as soon as it is ready; from then on the
+light is decided by the application.
 
 As the very first step, at every start-up, the firmware frees the I²C bus with
 `i2c_recover_bus()`. A module reset in the middle of a byte can stay convinced
@@ -284,9 +286,16 @@ variables are at the top, and the functions come after.
 
 ## Power
 
-The eight LEDs are powered from the Qwiic cable, 28 AWG, at 3.3 V. Outside the
-burst the brightness stays between **22 and 30** out of 100 (22 for amber, 30
-for green and red), and goes up to **90, in white**, only for the capture burst
-and with "Debug camera" on: seconds, not a flash. Do not leave the ring at
-maximum "to see if it works": if the 3.3 V supply sags, I²C drops out too, and
-it looks like a module fault.
+The eight LEDs are powered from the Qwiic cable, 28 AWG, at 3.3 V, on the same
+bus as the distance sensor. Amelie's light keeps them **at full brightness**
+for as long as the device is on, white and yellow alternately (red for a fault
+or with a flat battery). Before adopting it, the worst case was measured: two
+minutes with all eight LEDs **white** at full brightness, and the distance
+sensor answered 1124 times out of 1124, with both modules always seen.
+Alternating white and yellow draws less than that.
+
+If the 3.3 V supply sagged, I²C would drop out too, and the fault would look
+like a module fault: if it appears with a ring other than the project's, the
+first thing to try is a lower brightness (`LUCE` in `src/amelie/bridge.py`).
+The price of the light at full brightness is paid in battery: about one watt
+more, which the battery estimate counts (`POTENZA_ANELLO_W`).

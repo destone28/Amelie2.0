@@ -53,7 +53,7 @@ NOMI_MODULI = ("anello", "distanza")
 # significati, e un sensore collegato risulterebbe assente. È il guasto
 # peggiore che si possa avere montando — il montaggio è giusto e il dispositivo
 # dice di no — e senza questo numero non c'è modo di accorgersene.
-PROTOCOLLO_ATTESO = 2
+PROTOCOLLO_ATTESO = 3
 
 
 @dataclass(frozen=True)
@@ -70,25 +70,50 @@ class Colore:
         if not 0 <= self.luminosita <= 100:
             raise ValueError(f"luminosità fuori scala: {self.luminosita}")
 
+    @property
+    def esadecimale(self) -> int:
+        """Il colore in un intero 0xRRGGBB, come lo vuole `set_luce`."""
+        return (self.r << 16) | (self.g << 8) | self.b
 
-# L'anello resta basso in permanenza — otto LED accesi tutta la sera su un
-# cavetto Qwiic da 28 AWG — e sale a bianco SOLO per la raffica. È l'unica luce
-# del dispositivo.
+
+@dataclass(frozen=True)
+class Luce:
+    """Gli otto LED dell'anello: i pari di un colore, i dispari di un altro.
+
+    La luminosità è una sola, perché il modulo ne ha una per scrittura: i due
+    colori devono dichiarare la stessa.
+    """
+    pari: Colore
+    dispari: Colore
+
+    def __post_init__(self) -> None:
+        if self.pari.luminosita != self.dispari.luminosita:
+            raise ValueError(
+                "i due colori di una luce vogliono la stessa luminosità: "
+                f"{self.pari.luminosita} e {self.dispari.luminosita}")
+
+
+# La luce di Amelie: i LED pari bianchi e i dispari gialli, al massimo, in ogni
+# stato in cui il dispositivo lavora; rossa per un guasto, e a riposo quando la
+# batteria è quasi scarica. È l'unica luce del dispositivo, e illumina
+# l'etichetta: la stessa in attesa e durante la raffica, perché la posa che la
+# camera trova a riposo valga anche per lo scatto.
 #
-# «Solo per la raffica» sono **secondi**, non un lampo: circa 1,7 per lo scatto,
-# di più quando la luce della sala è cambiata e la posa va ricercata (vedi
-# `Effetto.ILLUMINA_E_SCATTA` in `amelie.state`). È un dettaglio che conta per
-# l'alimentazione: 22 di luminosità per ore e 90 per qualche secondo sono
-# carichi diversi da quelli di un lampo.
+# Gli otto LED si alimentano dal cavetto Qwiic, a 3,3 V, sullo stesso bus del
+# sensore di distanza: se la tensione cedesse, cadrebbe anche il sensore, e il
+# guasto sembrerebbe dei moduli. Misurato: due minuti con tutti gli otto LED
+# bianchi al massimo - più del bianco e giallo alternati - e il sensore ha
+# risposto 1124 volte su 1124, i moduli sempre visti.
 #
-# Il grosso del segnale, comunque, non lo danno i LED: viene dalla posa lunga a
-# guadagno zero che questa geometria si può permettere perché bottiglia e
-# camera sono ferme entrambe (vedi le misure in `amelie.capture`).
-AMBRA = Colore(255, 150, 40, 22)      # attesa: caldo, discreto
-BIANCO_SCATTO = Colore(255, 255, 255, 90)   # solo durante la raffica
-VERDE = Colore(60, 220, 90, 30)
-ROSSO = Colore(230, 60, 40, 30)
+# Il conto si paga in batteria: vedi `POTENZA_BASE_W` in `amelie.batteria`.
+BIANCO = Colore(255, 255, 255, 100)
+GIALLO = Colore(255, 200, 0, 100)
+ROSSO = Colore(255, 30, 10, 100)
 SPENTO = Colore(0, 0, 0, 0)
+
+LUCE = Luce(BIANCO, GIALLO)
+LUCE_ROSSA = Luce(ROSSO, ROSSO)
+LUCE_SPENTA = Luce(SPENTO, SPENTO)
 
 
 class Ponte:
@@ -232,7 +257,13 @@ class Ponte:
     # ------------------------------------------------------------- comandi
 
     def anello(self, c: Colore) -> None:
+        """Tutti gli otto LED dello stesso colore."""
         self.chiama("set_anello", c.r, c.g, c.b, c.luminosita)
+
+    def luce(self, luce: Luce) -> None:
+        """I LED pari di un colore e i dispari di un altro."""
+        self.chiama("set_luce", luce.pari.esadecimale, luce.dispari.esadecimale,
+                    luce.pari.luminosita)
 
     def versione(self) -> int | None:
         """La versione del protocollo dichiarata dall'MCU, o None se non la dice.

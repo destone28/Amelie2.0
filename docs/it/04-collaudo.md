@@ -189,12 +189,12 @@ successiva. Per riprovare, spegni il dispositivo con l'interruttore e
 riaccendilo: riavviare Linux (`sudo reboot`) non basta, perché il
 microcontrollore non riparte.
 
-- **Modulino Pixels**: a riposo la luce è ambra tenue; dall'accensione alla
-  prima bottiglia pulsa lentamente, poi resta fissa. Se resta spenta, il modulo
-  non è visto.
-- **Modulino Distance**: posa una bottiglia di vetro scuro. Entro un istante la
-  luce diventa verde e lo schermo dice «Fammi guardare…», poi «Sto leggendo
-  l'etichetta…». Se non succede niente, il sensore non è visto. Il sensore
+- **Modulino Pixels**: all'accensione la luce pulsa lentamente, bianca e
+  gialla; quando il dispositivo è pronto resta fissa, al massimo. Se resta
+  spenta, il modulo non è visto.
+- **Modulino Distance**: posa una bottiglia di vetro scuro. Entro un istante lo
+  schermo dice «Fammi guardare…», poi «Sto leggendo l'etichetta…». Se non
+  succede niente, il sensore non è visto. Il sensore
   misura con la luce infrarossa, che attraversa il vetro chiaro: una bottiglia
   trasparente può non essere vista, per questo la prova si fa con il vetro
   scuro.
@@ -324,9 +324,9 @@ Con il dispositivo montato, acceso e una bottiglia vera:
 
 1. **A riposo**: il calice, «Ogni bottiglia ha una storia.», i tre passi
    («**Scegli** una bottiglia», «**Posa** la bottiglia su Amelie», «**Ascolta**
-   la sua storia»), la luce ambra tenue.
-2. **Posa la bottiglia**: la luce diventa verde e lo schermo dice «Fammi
-   guardare…», poi «Sto leggendo l'etichetta…» e «Un attimo…».
+   la sua storia»), la luce bianca e gialla accesa.
+2. **Posa la bottiglia**: lo schermo dice «Fammi guardare…», poi «Sto
+   leggendo l'etichetta…» e «Un attimo…».
 3. **Il racconto**: il titolo in alto, il testo con la frase che la voce sta
    dicendo in evidenza, la voce.
 4. **Solleva la bottiglia come per versare**: il racconto continua fino in
@@ -352,7 +352,7 @@ intervenire.
 |---|---|
 | togli la bottiglia mentre lo schermo dice «Fammi guardare…» o «Sto leggendo l'etichetta…» | il giro si interrompe e torna la schermata d'attesa |
 | metti e togli rapidamente dieci volte | nessun blocco, nessuna lettura doppia |
-| una bottiglia senza etichetta, o girata | lo schermo chiede «Provi a girare l'etichetta verso di me?», con la luce rossa, e riprova; dopo tre tentativi torna all'attesa, e non rilegge quella bottiglia finché non la togli. Con «Aggiungi correzioni» acceso, se dall'etichetta ha letto qualche parola, prima dice «Non ho riconosciuto questa bottiglia.» e offre «Mi aiuti a riconoscerla» |
+| una bottiglia senza etichetta, o girata | lo schermo chiede «Provi a girare l'etichetta verso di me?», con la luce sempre accesa per rileggere, e riprova; dopo tre tentativi torna all'attesa, e non rilegge quella bottiglia finché non la togli. Con «Aggiungi correzioni» acceso, se dall'etichetta ha letto qualche parola, prima dice «Non ho riconosciuto questa bottiglia.» e offre «Mi aiuti a riconoscerla» |
 | scollega la camera e posa una bottiglia | «Qualcosa non ha funzionato. Riprovo fra un istante.», con la luce rossa, poi la schermata d'attesa. Ricollega la camera e tocca «Ripristina il funzionamento» nelle impostazioni: la bottiglia successiva si legge di nuovo |
 | nel modo «Scritto sul momento», `sudo systemctl stop amelie-llm`, poi una bottiglia | lo schermo dice «Sto scrivendo la descrizione…» per circa 45 secondi, poi racconta lo stesso, dall'archivio. Alla fine riaccendi il modello con `sudo systemctl start amelie-llm` |
 | riavvia dieci volte, con `sudo reboot` o spegnendo e riaccendendo con l'interruttore | l'audio c'è ogni volta (guarda `/var/lib/amelie/audio-guard.log`) |

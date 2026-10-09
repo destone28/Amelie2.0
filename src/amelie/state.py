@@ -76,18 +76,16 @@ class Effetto(enum.Enum):
     sull'MCU, la camera e l'OCR su Linux, la voce su Piper.
     """
 
-    # Il colore di ciascuno lo decide l'orchestratore (`COLORE_ANELLO` in
-    # app.py), e la luce resta ferma: il respiro lo fa solo il firmware
-    # all'accensione, finche' Linux non prende il comando.
-    ANELLO_RESPIRO = "anello_respiro"      # attesa: ambra tenue
-    ANELLO_ACCESO = "anello_acceso"        # bottiglia posata, racconto: verde
-    ANELLO_LAVORO = "anello_lavoro"        # lettura e ricerca: ambra
-    ANELLO_ATTENZIONE = "anello_attenzione"  # si chiede qualcosa, o un guasto: rosso
+    # La luce di ciascuno la decide l'orchestratore (`LUCE_ANELLO` in app.py),
+    # e resta ferma: il respiro lo fa solo il firmware all'accensione, finche'
+    # Linux non prende il comando.
+    ANELLO_RESPIRO = "anello_respiro"      # attesa: bianco e giallo, rosso a batteria scarica
+    ANELLO_ACCESO = "anello_acceso"        # bottiglia posata, racconto: bianco e giallo
+    ANELLO_LAVORO = "anello_lavoro"        # lettura e ricerca: bianco e giallo
+    ANELLO_ATTENZIONE = "anello_attenzione"  # un guasto: rosso
     ANELLO_SPENTO = "anello_spento"
-    # La luce dello scatto è l'anello stesso, che sale a bianco per tutta la
-    # raffica — misurati 2 s quando la posa è già quella giusta, fino a 8
-    # quando la luce della sala è cambiata e va ricercata. Non un lampo, e per
-    # questo non si chiama «flash»: è l'anello di sempre, alzato a bianco.
+    # La luce dello scatto è quella di sempre, già accesa: la raffica non alza
+    # niente, e la posa che la camera ha trovato a riposo vale anche qui.
     ILLUMINA_E_SCATTA = "illumina_e_scatta"
     INTERROGA_DATABASE = "interroga_database"
     AVVIA_RACCONTO = "avvia_racconto"
@@ -144,7 +142,8 @@ EFFETTI_INGRESSO: dict[Stato, tuple[Effetto, ...]] = {
     Stato.RICONOSCIMENTO: (Effetto.ANELLO_LAVORO, Effetto.INTERROGA_DATABASE),
     Stato.RACCONTO: (Effetto.ANELLO_ACCESO, Effetto.AVVIA_RACCONTO),
     Stato.CONCLUSO: (Effetto.ANELLO_ACCESO,),
-    Stato.RIPOSIZIONA: (Effetto.ANELLO_ATTENZIONE, Effetto.MOSTRA_RIPOSIZIONA),
+    # Non e' un guasto, ed e' una lettura: serve la luce per rileggere.
+    Stato.RIPOSIZIONA: (Effetto.ANELLO_LAVORO, Effetto.MOSTRA_RIPOSIZIONA),
     Stato.GUASTO: (Effetto.ANELLO_ATTENZIONE, Effetto.MOSTRA_GUASTO),
 }
 

@@ -87,8 +87,10 @@
 
 /* Versione del PROTOCOLLO fra questo firmware e Linux, non del firmware: deve
  * valere quanto PROTOCOLLO_ATTESO in amelie.bridge. Si alza quando cambia il
- * SIGNIFICATO di qualcosa, per esempio dei bit di moduli(), non il codice. */
-static const int PROTOCOLLO = 2;
+ * SIGNIFICATO di qualcosa, per esempio dei bit di moduli(), o quando Linux
+ * comincia a chiedere un metodo che le versioni prima non hanno, come
+ * `set_luce`: non a ogni modifica del codice. */
+static const int PROTOCOLLO = 3;
 
 static const uint8_t IND_ANELLO   = 0x36;   /* indirizzo hardware, non 0x6C */
 static const uint8_t IND_TOF      = 0x29;   /* VL53L4CD, fisso */
@@ -135,17 +137,23 @@ static const uint8_t CONFIG_TOF[] = {
 static const uint32_t ATTESA_MODULI_MS = 10000;
 static const uint32_t PASSO_RICERCA_MS = 200;
 
+/* La luce di Amelie: i LED pari bianchi, i dispari gialli, al massimo. Sono
+ * gli stessi due colori che manda Linux (`LUCE` in amelie.bridge); qui servono
+ * al respiro dell'accensione, che arriva prima di Linux. */
+static const uint8_t BIANCO_R = 255, BIANCO_G = 255, BIANCO_B = 255;
+static const uint8_t GIALLO_R = 255, GIALLO_G = 200, GIALLO_B = 0;
+
 /* Il respiro dell'accensione: dà segno di vita mentre Linux si avvia. Il
  * microcontrollore è pronto in millisecondi, lo schermo ci mette una
  * cinquantina di secondi, e in mezzo l'anello sarebbe spento — un dispositivo
  * appena acceso che non fa niente sembra rotto.
  *
  * Si spegne da solo al primo comando da Linux: da lì il colore lo decide la
- * macchina a stati, e la luce diventa l'oro fisso dell'attesa. */
-/* La luminosità resta ferma e si modula il colore: vedi `respira()`. Sette su
- * trentuno è circa il 22 su cento dell'ambra dell'attesa, quindi il colmo del
- * respiro e la luce fissa che gli succede hanno la stessa intensità. */
-static const uint8_t  RESPIRO_LUM = 7;
+ * macchina a stati, e la luce resta fissa. */
+/* La luminosità resta ferma e si modula il colore: vedi `respira()`. Al
+ * massimo, come la luce fissa che gli succede: il colmo del respiro e la luce
+ * di sempre hanno la stessa intensità. */
+static const uint8_t  RESPIRO_LUM = 31;
 static const uint8_t  RESPIRO_FONDO = 26;   /* il minimo, su 255: mai spento */
 static const uint32_t RESPIRO_MS = 25;      /* 40 aggiornamenti al secondo */
 static const uint8_t  RESPIRO_PASSO = 2;    /* 256/2 x 25 ms = 3,2 s a ciclo */
@@ -171,8 +179,12 @@ static uint8_t fase = 0;
 static uint32_t ultimo_respiro = 0;
 
 /* Stato richiesto da Linux. I gestori scrivono qui e basta (vincolo 1). */
+/* Due colori: i LED pari prendono il primo, i dispari il secondo. Con un colore
+ * solo i due sono uguali. */
 struct StatoLed {
-  uint8_t r = 0, g = 0, b = 0, lum = 0;
+  uint8_t r = 0, g = 0, b = 0;
+  uint8_t r2 = 0, g2 = 0, b2 = 0;
+  uint8_t lum = 0;
   bool da_applicare = false;
 };
 static StatoLed rich_anello;
@@ -444,8 +456,20 @@ static int tof_misura() {
 /* ─── gestori esposti a Linux ──────────────────────────────────────────────── */
 
 bool set_anello(int r, int g, int b, int lum) {
-  rich_anello = {(uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)lum, true};
+  rich_anello = {(uint8_t)r, (uint8_t)g, (uint8_t)b,
+                 (uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)lum, true};
   respiro = false;          /* Linux ha preso il comando: basta respirare */
+  return true;
+}
+
+/* Due colori alternati, ciascuno in un intero 0xRRGGBB: i LED pari prendono il
+ * primo, i dispari il secondo. Tre parametri invece di sette: il ponte scambia
+ * interi, e un colore sta tutto in uno. */
+bool set_luce(int pari, int dispari, int lum) {
+  rich_anello = {(uint8_t)(pari >> 16), (uint8_t)(pari >> 8), (uint8_t)pari,
+                 (uint8_t)(dispari >> 16), (uint8_t)(dispari >> 8),
+                 (uint8_t)dispari, (uint8_t)lum, true};
+  respiro = false;
   return true;
 }
 
@@ -514,34 +538,39 @@ int scansiona(int blocco) {
 
 /* Gli otto LED, scritti a mano. Il formato è quello del modulo: quattro byte per
  * LED, nell'ordine 0xE0|luminosità, blu, verde, rosso — la luminosità è a
- * cinque bit, cioè 0-31, e arriva qui in centesimi.
+ * cinque bit, cioè 0-31. I LED pari prendono il primo colore, i dispari il
+ * secondo.
  *
  * Restituisce se il trasferimento è riuscito. `Module::write()` della libreria
  * ritorna `true` sempre, e con quel `true` il dispositivo direbbe di vedere un
  * anello che non ha mai acceso. */
-static bool anello_grezzo(uint8_t r, uint8_t g, uint8_t b, uint8_t l5) {
+static bool anello_grezzo(uint8_t r, uint8_t g, uint8_t b,
+                          uint8_t r2, uint8_t g2, uint8_t b2, uint8_t l5) {
   if (l5 > 31) l5 = 31;
   k_mutex_lock(&lucchetto_bus, K_FOREVER);
   Wire1.beginTransmission(IND_ANELLO);
   for (uint8_t i = 0; i < N_LED; i++) {
+    bool dispari = i % 2;
     Wire1.write((uint8_t)(0xE0 | l5));
-    Wire1.write(b);
-    Wire1.write(g);
-    Wire1.write(r);
+    Wire1.write(dispari ? b2 : b);
+    Wire1.write(dispari ? g2 : g);
+    Wire1.write(dispari ? r2 : r);
   }
   bool ok = Wire1.endTransmission() == 0;
   k_mutex_unlock(&lucchetto_bus);
   return ok;
 }
 
-/* Con la luminosità in centesimi, come la manda Linux. */
-static bool anello_scrivi(uint8_t r, uint8_t g, uint8_t b, uint8_t lum) {
-  return anello_grezzo(r, g, b, (uint8_t)((uint16_t)lum * 31U / 100U));
+/* Tutto spento: serve anche a sapere se l'anello c'è, scrivendogli davvero. */
+static bool anello_spento() {
+  return anello_grezzo(0, 0, 0, 0, 0, 0, 0);
 }
 
+/* Con la luminosità in centesimi, come la manda Linux. */
 static void applica(StatoLed &s) {
   if (!s.da_applicare) return;
-  if (anello_scrivi(s.r, s.g, s.b, s.lum)) s.da_applicare = false;
+  uint8_t l5 = (uint8_t)((uint16_t)s.lum * 31U / 100U);
+  if (anello_grezzo(s.r, s.g, s.b, s.r2, s.g2, s.b2, l5)) s.da_applicare = false;
 }
 
 /* Un respiro, e si modula il COLORE, non la luminosità.
@@ -552,9 +581,10 @@ static void applica(StatoLed &s) {
  * secondo si vedono uno per uno: la luce non respira, scatta.
  *
  * I canali di colore sono invece a otto bit. Tenendo la luminosità ferma e
- * scalando ambra su 0-255 si hanno 256 passi al posto di nove, e il respiro
- * torna continuo. Il colore non cambia: cambiano insieme e in proporzione,
- * quindi resta lo stesso ambra, più o meno acceso.
+ * scalando i due colori su 0-255 si hanno 256 passi al posto di nove, e il
+ * respiro torna continuo. I colori non cambiano: i canali scendono e salgono
+ * insieme e in proporzione, quindi restano lo stesso bianco e lo stesso
+ * giallo, più o meno accesi.
  *
  * La curva è quadratica: indugia in basso e sale piena verso il colmo, che è
  * come respira una cosa viva. Tutto in interi — qui non serve virgola mobile. */
@@ -565,10 +595,10 @@ static void respira() {
    * "sparito" e "guasto" a colpo d'occhio sono la stessa cosa. */
   uint16_t q = RESPIRO_FONDO + (uint16_t)(((uint32_t)curva *
                                            (255 - RESPIRO_FONDO)) / 254);
-  uint8_t r = (uint8_t)((255U * q) / 255U);
-  uint8_t g = (uint8_t)((150U * q) / 255U);
-  uint8_t b = (uint8_t)(( 40U * q) / 255U);
-  anello_grezzo(r, g, b, RESPIRO_LUM);
+  anello_grezzo((uint8_t)((BIANCO_R * q) / 255U), (uint8_t)((BIANCO_G * q) / 255U),
+                (uint8_t)((BIANCO_B * q) / 255U), (uint8_t)((GIALLO_R * q) / 255U),
+                (uint8_t)((GIALLO_G * q) / 255U), (uint8_t)((GIALLO_B * q) / 255U),
+                RESPIRO_LUM);
   fase += RESPIRO_PASSO;
 }
 
@@ -613,7 +643,7 @@ void setup() {
    * in cui lo schermo e' ancora nero. Presente = ha risposto a una scrittura,
    * non = non ha protestato. */
   for (uint8_t i = 0; i < 10 && !c_anello; i++) {
-    if (risponde(IND_ANELLO)) c_anello = anello_scrivi(0, 0, 0, 0);
+    if (risponde(IND_ANELLO)) c_anello = anello_spento();
     if (!c_anello) k_msleep(20);
   }
 
@@ -635,6 +665,7 @@ void setup() {
    * di arrivare fin qui, e comunque `Bridge.begin()` non ritorna finche' Linux
    * non c'e'. */
   Bridge.provide("set_anello", set_anello);
+  Bridge.provide("set_luce", set_luce);
   Bridge.provide("distanza", distanza);
   Bridge.provide("moduli", moduli);
   Bridge.provide("versione", versione);
@@ -650,7 +681,7 @@ void loop() {
   if (!ricerca_finita && ora_ms - ultima_ricerca >= PASSO_RICERCA_MS) {
     ultima_ricerca = ora_ms;
     /* Presente = ha risposto a una scrittura vera, non = non ha protestato. */
-    if (!c_anello && risponde(IND_ANELLO)) c_anello = anello_scrivi(0, 0, 0, 0);
+    if (!c_anello && risponde(IND_ANELLO)) c_anello = anello_spento();
     if (!c_tof && risponde(IND_TOF)) {
       uint16_t id = 0;
       if (tof_leggi16(R_IDENTITA, &id) && id == 0xEBAA) c_tof = tof_avvia();

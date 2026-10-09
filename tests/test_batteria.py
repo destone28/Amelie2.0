@@ -10,7 +10,8 @@ import json
 import pytest
 
 from amelie.batteria import (
-    CAPACITA_WH, POTENZA_BASE_W, POTENZA_CPU_W, RICARICATA_DOPO_S, Batteria,
+    CAPACITA_WH, POTENZA_ANELLO_W, POTENZA_BASE_W, POTENZA_CPU_W, RICARICATA_DOPO_S,
+    Batteria,
 )
 
 
@@ -52,14 +53,15 @@ class TestIlConto:
         batteria._ora.t += 3600
         batteria._cpu.lavora(0.0)
         batteria.aggiorna()
-        assert batteria.consumato_wh == pytest.approx(POTENZA_BASE_W, rel=1e-6)
+        assert batteria.consumato_wh == pytest.approx(POTENZA_BASE_W + POTENZA_ANELLO_W, rel=1e-6)
 
     def test_un_ora_a_cpu_piena_costa_di_piu(self, batteria):
         batteria.avvia()
         batteria._ora.t += 3600
         batteria._cpu.lavora(1.0)
         batteria.aggiorna()
-        assert batteria.consumato_wh == pytest.approx(POTENZA_BASE_W + POTENZA_CPU_W, rel=1e-6)
+        assert batteria.consumato_wh == pytest.approx(
+            POTENZA_BASE_W + POTENZA_ANELLO_W + POTENZA_CPU_W, rel=1e-6)
 
     def test_le_tacche_scendono_e_l_ultima_sparisce_prima_dello_zero(self, batteria):
         batteria.avvia()

@@ -31,27 +31,22 @@ sys.path.insert(0, str(RADICE / "src"))
 
 
 class LuceDelloScatto:
-    """Accende l'anello a bianco per la raffica, come fa il dispositivo vero.
+    """Accende l'anello con la luce con cui legge il dispositivo vero.
 
     **Non è un abbellimento: senza, questo strumento misura la scena sbagliata.**
-    La luce dello scatto è l'anello stesso, e `Amelie._scatta_e_leggi` lo
-    porta a BIANCO_SCATTO (luminosità 90) prima della raffica. Questa prova si
-    lancia a servizio FERMO — è la condizione per non contendere la camera —
-    quindi qui non c'è nessun altro a pilotarlo: l'anello resterebbe all'ambra
-    da 22 in cui l'ha lasciato la prova precedente.
+    La luce dello scatto è l'anello stesso, bianco e giallo al massimo (`LUCE`
+    in `amelie.bridge`). Questa prova si lancia a servizio FERMO — è la
+    condizione per non contendere la camera — quindi qui non c'è nessun altro a
+    pilotarlo, e l'anello resterebbe come l'ha lasciato la prova precedente.
 
-    Tarare la posa su una scena illuminata da un quarto della luce vera porta a
-    scrivere in `capture.py` un valore che nel dispositivo finito brucia
-    l'immagine.
+    Tarare la posa su una scena illuminata da un'altra luce porta a scrivere in
+    `capture.py` un valore che nel dispositivo finito brucia l'immagine, o la
+    lascia al buio.
 
     Se l'MCU non risponde lo **dice**, invece di misurare in silenzio una cosa
     diversa da quella che si crede di misurare — e lo dice una volta sola, anche
-    se la si riusa per sei pose di seguito.
-
-    Si accende e si spegne **a ogni scatto**, non una volta per tutta la prova:
-    fra una posa e l'altra c'e' l'OCR, cinque secondi in cui otto LED a bianco
-    pieno su un cavetto Qwiic da 28 AWG starebbero accesi per niente. E' la
-    stessa cadenza del dispositivo vero.
+    se la si riusa per sei pose di seguito. Finita la prova l'anello si spegne:
+    a servizio fermo non c'è niente da illuminare.
     """
 
     def __init__(self) -> None:
@@ -62,10 +57,10 @@ class LuceDelloScatto:
         self._gia_lamentato = False
 
     def __enter__(self) -> bool:
-        from amelie.bridge import BIANCO_SCATTO
+        from amelie.bridge import LUCE
 
         try:
-            self.ponte.anello(BIANCO_SCATTO)
+            self.ponte.luce(LUCE)
             self.acceso = True
         except Exception as e:                              # noqa: BLE001
             self.acceso = False
@@ -73,17 +68,17 @@ class LuceDelloScatto:
                 self._gia_lamentato = True
                 print(f"  ATTENZIONE: anello non acceso ({e.__class__.__name__}).")
                 print("  La misura vale MENO di quella vera: nel giro reale")
-                print("  l'anello sale a bianco per la raffica. Collega il")
-                print("  Modulino Pixels e verifica il firmware prima di tarare.")
+                print("  l'anello illumina l'etichetta. Collega il Modulino")
+                print("  Pixels e verifica il firmware prima di tarare.")
         return self.acceso
 
     def __exit__(self, *_) -> None:
-        from amelie.bridge import AMBRA
+        from amelie.bridge import LUCE_SPENTA
 
         if not self.acceso:
             return
         try:
-            self.ponte.anello(AMBRA)
+            self.ponte.luce(LUCE_SPENTA)
         except Exception:                                   # noqa: BLE001
             # Simmetrico all'accensione: se l'MCU muore a meta' prova, il
             # ripristino non deve mascherare l'errore vero con il suo.

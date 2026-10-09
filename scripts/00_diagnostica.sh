@@ -103,8 +103,12 @@ else
     campo() { printf '%s' "$STATO" | python3 -c "import json,sys; d=json.load(sys.stdin); v=d.get('$1'); print(json.dumps(v) if isinstance(v,(dict,list)) else v)"; }
     info "stato: $(campo stato), modo: $(campo modo), volume: $(campo volume)"
     [ "$(campo pronta)" = True ] && ok "applicazione pronta" || warn "applicazione non ancora pronta (riprova fra qualche secondo)"
-    if [ "$(campo mcu)" = True ] && [ "$(campo protocollo)" = 2 ]; then
-        ok "microcontrollore raggiungibile (protocollo 2)"
+    # Il protocollo che il codice si aspetta, letto dal codice: scritto qui a
+    # mano resterebbe indietro alla prima versione nuova del firmware.
+    ATTESO=$(PYTHONPATH=src venv/bin/python -c \
+        "from amelie.bridge import PROTOCOLLO_ATTESO; print(PROTOCOLLO_ATTESO)" 2>/dev/null)
+    if [ "$(campo mcu)" = True ] && [ "$(campo protocollo)" = "$ATTESO" ]; then
+        ok "microcontrollore raggiungibile (protocollo $ATTESO)"
         MODULI=$(campo moduli)
         grep -q '"anello": true' <<<"$MODULI" && ok "Modulino Pixels visto" \
             || bad "Modulino Pixels non visto: cavo Qwiic, poi spegni e riaccendi"

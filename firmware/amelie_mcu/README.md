@@ -201,10 +201,11 @@ Per caricarlo serve la board.
 
 | metodo | parametri | restituisce |
 |---|---|---|
-| `set_anello` | r, g, b (0-255), luminosità (0-100) | `true`; il colore si applica al giro successivo di `loop()`, se l'anello è presente |
+| `set_anello` | r, g, b (0-255), luminosità (0-100) | `true`; tutti gli otto LED dello stesso colore, applicato al giro successivo di `loop()`, se l'anello è presente |
+| `set_luce` | due colori come interi `0xRRGGBB`, luminosità (0-100) | `true`; i LED pari del primo colore e i dispari del secondo. È la luce di Amelie: bianco e giallo |
 | `distanza` | — | l'ultima misura in millimetri, oppure `-1` se l'ultima misura non è valida o il sensore non è presente |
 | `moduli` | — | quali moduli vede, come somma di bit: **1** l'anello, **2** il sensore (da 0 a 3) |
-| `versione` | — | la versione del **protocollo**: `2` |
+| `versione` | — | la versione del **protocollo**: `3` |
 
 C'è poi una **notifica**, cioè un messaggio che il microcontrollore manda di sua
 iniziativa, senza attendere risposta: `bottiglia(presente, mm)`, mandata quando
@@ -239,10 +240,11 @@ all'avvio, e `loop()`, ripetuta all'infinito.
 Il microcontrollore è pronto in pochi millisecondi. Il collegamento con Linux
 arriva quando parte `arduino-router`, una quarantina di secondi dopo
 l'accensione, e fino ad allora `Bridge.begin()` aspetta e `setup()` non finisce.
-Nel frattempo l'anello **respira in ambra**, per dire che il dispositivo è
-acceso: lo sketch lo accende prima di mettersi in attesa, e un thread separato
-lo fa respirare durante l'attesa. Il respiro si ferma al primo `set_anello` da
-Linux; da lì il colore lo decide l'applicazione.
+Nel frattempo l'anello **respira in bianco e giallo**, per dire che il
+dispositivo è acceso: lo sketch lo accende prima di mettersi in attesa, e un
+thread separato lo fa respirare durante l'attesa. Il respiro si ferma al primo
+comando di luce da Linux, che l'applicazione manda appena è pronta; da lì la
+luce la decide lei.
 
 Come prima cosa, a ogni avvio, il firmware libera il bus I²C con
 `i2c_recover_bus()`. Un modulo resettato a metà di un byte può restare convinto
@@ -279,9 +281,16 @@ variabili stanno in cima, e le funzioni dopo.
 
 ## Alimentazione
 
-Gli otto LED si alimentano dal cavetto Qwiic, da 28 AWG, a 3,3 V. Fuori dalla
-raffica la luminosità resta fra **22 e 30** su 100 (22 per l'ambra, 30 per il
-verde e il rosso), e sale a **90, in bianco**, solo per la raffica di scatti e
-con «Debug camera» accesa: secondi, non un lampo. Non tenere l'anello al
-massimo «per vedere se funziona»: se la tensione a 3,3 V cede, cade anche
-l'I²C, e sembra un guasto del modulo.
+Gli otto LED si alimentano dal cavetto Qwiic, da 28 AWG, a 3,3 V, sullo
+stesso bus del sensore di distanza. La luce di Amelie li tiene **al massimo**
+per tutto il tempo in cui il dispositivo è acceso, bianchi e gialli alternati
+(rossi per un guasto o a batteria scarica). Prima di adottarla si è misurato il
+caso peggiore: due minuti con tutti gli otto LED **bianchi** al massimo, e il
+sensore di distanza ha risposto 1124 volte su 1124, con i due moduli sempre
+visti. Bianco e giallo alternati consumano meno di così.
+
+Se la tensione a 3,3 V cedesse, cadrebbe anche l'I²C, e il guasto sembrerebbe
+dei moduli: se compare con un anello diverso da quello del progetto, la prima
+cosa da provare è una luminosità più bassa (`LUCE` in `src/amelie/bridge.py`).
+Il prezzo della luce al massimo si paga in batteria: circa un watt in più,
+che la stima della batteria conta (`POTENZA_ANELLO_W`).

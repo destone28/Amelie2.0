@@ -197,12 +197,12 @@ the next power-on. To try again, switch the device off with the power switch
 and on again: rebooting Linux (`sudo reboot`) is not enough, because the
 microcontroller does not restart.
 
-- **Modulino Pixels**: at rest the light is a soft amber; from power-on to the
-  first bottle it pulses slowly, then it stays steady. If it stays off, the
-  module is not seen.
-- **Modulino Distance**: place a dark glass bottle. Within an instant the light
-  turns green and the screen says "Let me have a look…", then "I'm reading the
-  label…". If nothing happens, the sensor is not seen. The sensor measures with
+- **Modulino Pixels**: at power-on the light pulses slowly, white and yellow;
+  when the device is ready it stays steady, at full brightness. If it stays
+  off, the module is not seen.
+- **Modulino Distance**: place a dark glass bottle. Within an instant the
+  screen says "Let me have a look…", then "I'm reading the label…". If nothing
+  happens, the sensor is not seen. The sensor measures with
   infrared light, which passes through clear glass: a transparent bottle may
   not be seen, which is why the test is done with dark glass.
 
@@ -332,9 +332,9 @@ With the device assembled, switched on, and a real bottle:
 
 1. **At rest**: the wine glass, "Every bottle has a story.", the three steps
    ("**Choose** a bottle", "**Place** the bottle on Amelie", "**Listen** to its
-   story"), the soft amber light.
-2. **Place the bottle**: the light turns green and the screen says "Let me
-   have a look…", then "I'm reading the label…" and "One moment…".
+   story"), the white and yellow light on.
+2. **Place the bottle**: the screen says "Let me have a look…", then "I'm
+   reading the label…" and "One moment…".
 3. **The story**: the title at the top, the text with the sentence the voice is
    speaking highlighted, the voice.
 4. **Lift the bottle as if to pour**: the story goes on to the end. Put it
@@ -360,7 +360,7 @@ able to step in.
 |---|---|
 | remove the bottle while the screen says "Let me have a look…" or "I'm reading the label…" | the round stops and the waiting screen comes back |
 | place and remove it quickly ten times | no freezes, no double readings |
-| a bottle with no label, or turned around | the screen asks "Could you turn the label towards me?", with the light turning red, and tries again; after three attempts it goes back to waiting, and does not read that bottle again until you remove it. With "Add corrections" on, if it has read a few words from the label, it first says "I couldn't recognise this bottle." and offers "Help me recognise it" |
+| a bottle with no label, or turned around | the screen asks "Could you turn the label towards me?", with the light still on to read again, and tries again; after three attempts it goes back to waiting, and does not read that bottle again until you remove it. With "Add corrections" on, if it has read a few words from the label, it first says "I couldn't recognise this bottle." and offers "Help me recognise it" |
 | unplug the camera and place a bottle | "Something went wrong. I'll try again in a moment.", with the light turning red, then the waiting screen. Plug the camera back in and tap "Restore operation" in the settings: the next bottle is read again |
 | in "Written on the spot" mode, `sudo systemctl stop amelie-llm`, then a bottle | the screen says "I'm writing the description…" for about 45 seconds, then tells the story anyway, from the archive. At the end switch the model back on with `sudo systemctl start amelie-llm` |
 | reboot ten times, with `sudo reboot` or by switching off and on with the power switch | the audio is there every time (look at `/var/lib/amelie/audio-guard.log`) |

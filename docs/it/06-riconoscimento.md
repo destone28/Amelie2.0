@@ -113,15 +113,21 @@ come un JPEG) a 1920 × 1080.
 
 Lo scatto ha due strade.
 
-- **Con lo stream in moto**, `Camera.al_volo` prende il primo fotogramma abbastanza nitido fra
-  quelli arrivati **dopo** l'istante in cui la bottiglia è comparsa, altrimenti il più nitido visto
-  entro un secondo: l'assestamento si guarda invece di aspettarlo. La nitidezza è la
-  varianza del laplaciano sul ritaglio, una misura di contrasto locale che sale quando l'immagine è
-  a fuoco; la soglia è `SOGLIA_NITIDEZZA` (40).
-- **A stream fermo**, `_scatta_e_leggi` porta l'anello di LED a bianco e chiama `Camera.scatta`,
-  che aspetta 0,15 s perché la luce si assesti (`assestamento_luce_s`), butta i fotogrammi vecchi
-  rimasti nel buffer USB (`fotogrammi_da_scartare`, 3), cerca la posa e tiene il più nitido di una
-  raffica (`fotogrammi_raffica`, 3); poi l'anello torna al colore dello stato.
+- **Con lo stream in moto**, `Camera.al_volo` prende il primo fotogramma abbastanza nitido **e con
+  la luce giusta** fra quelli arrivati **dopo** l'istante in cui la bottiglia è comparsa,
+  altrimenti il più nitido visto entro un secondo: l'assestamento si guarda invece di aspettarlo.
+  La nitidezza è la varianza del laplaciano sul ritaglio, una misura di contrasto locale che sale
+  quando l'immagine è a fuoco; la soglia è `SOGLIA_NITIDEZZA` (40). La luce è giusta entro il
+  doppio della tolleranza del guardiano, o quando la posa è già a un estremo e non può migliorare;
+  all'arrivo della bottiglia il guardiano misura subito (`Camera.guarda_subito`), senza aspettare
+  il mezzo secondo.
+- **A stream fermo**, `_scatta_e_leggi` chiama `Camera.scatta`, che aspetta 0,15 s
+  (`assestamento_luce_s`), butta i fotogrammi vecchi rimasti nel buffer USB
+  (`fotogrammi_da_scartare`, 3), cerca la posa e tiene il più nitido di una raffica
+  (`fotogrammi_raffica`, 3).
+
+In tutti e due i casi la luce dell'anello resta quella di sempre: lo scatto non la cambia, così la
+posa trovata a riposo vale anche per la raffica.
 
 Lo `Scatto` porta con sé anche il fotogramma intero raddrizzato e la posizione del ritaglio
 (`intero`, `posto`).
@@ -130,23 +136,35 @@ Lo `Scatto` porta con sé anche il fotogramma intero raddrizzato e la posizione 
 
 La luce che conta è la media del grigio **sul ritaglio raddrizzato**, cioè dove guarderà l'OCR
 (`Camera._luce`). Il bersaglio è `luce_cercata` (90 su 255) con tolleranza `luce_tollerata` (8);
-fuori banda si corregge la posa:
+fuori banda si corregge la posa con `posa_verso`:
 
 ```
-posa_nuova = posa × (luce_cercata / luce) ^ esponente_posa      limitata a [posa_minima, posa_massima]
+k         = come risponde la scena: luce ∝ posa^k, stimato dagli ultimi due punti
+            (fra 0,3 e 1,6; senza due punti utili vale 1 / esponente_posa)
+posa_nuova = posa × (luce_cercata / luce) ^ (0,8 / k)      limitata a [posa_minima, posa_massima]
 ```
 
-L'esponente (1,5) tiene conto che la luce non cresce in proporzione alla posa: il sensore satura
-sui punti chiari. Il guardiano corregge di un passo alla volta mentre lo stream scorre, circa una
-volta al secondo (`_ritocca_la_posa`), così all'arrivo della bottiglia la posa è di solito già
-giusta; lo scatto a stream fermo fa fino a `ritocchi_posa` (3) correzioni, ognuna verificata da
+La luce non cresce in proporzione alla posa, e non sempre allo stesso modo: dipende dalla scena.
+Sul banco `luce ∝ posa^0,54`; con un'etichetta chiara vicino all'anello, sul dispositivo, il 20%
+di posa in più ha dato il 30% di luce in più. Un esponente fisso, tarato sul primo caso, nel
+secondo salterebbe oltre la banda buona a ogni passo: per questo la risposta si stima sulla scena, e
+il passo fa l'80% della strada (`SMORZAMENTO_POSA`), il resto al passo dopo.
+
+È la regolazione **in background**: il guardiano, mentre lo stream scorre in attesa e durante la
+lettura, guarda la luce ogni mezzo secondo (`INTERVALLO_MISURA_S`, in secondi e non in fotogrammi:
+con le pose lunghe di una sala buia i fotogrammi rallentano) e corregge di un passo
+(`_ritocca_la_posa`). Così la posa segue la sala, e la bottiglia la trova già quasi giusta. Lo
+scatto a stream fermo fa fino a `ritocchi_posa` (3) correzioni, ognuna verificata da
 `_aspetta_la_posa` (due fotogrammi di fila con la stessa luce, diversa da quella di partenza). La
-posa si misura in unità da 100 µs: `posa_minima` è 300, `posa_massima` 4500. Il massimo sta sotto
-quello dichiarato dalla camera (5000) perché oltre una certa posa la camera smette di dare
-fotogrammi; se lo stream resta muto con una posa lunga, `_a_vuoto` riparte da `posa_sicura` (900).
+posa si misura in unità da 100 µs: `posa_minima` è 100 (10 ms: sotto, le lampade a 50 Hz
+darebbero bande, sopra un'etichetta chiara sotto l'anello al massimo si brucia), `posa_massima`
+4500. Il massimo sta sotto quello dichiarato dalla camera (5000) perché oltre una certa posa la
+camera smette di dare fotogrammi; se lo stream resta muto con una posa lunga, `_a_vuoto` riparte da
+`posa_sicura` (900).
 
-L'anello di LED sposta la luce media di pochi livelli, la posa la moltiplica: per questo l'anello
-va a bianco solo per la raffica di `scatta`. In apertura della lettura, `ocr._contrasto_normalizzato`
+L'anello di LED, bianco e giallo al massimo, resta acceso uguale in attesa e durante la lettura:
+la posa che il guardiano trova a riposo è quella dello scatto. In apertura della lettura,
+`ocr._contrasto_normalizzato`
 applica un CLAHE (*contrast limited adaptive histogram equalization*: uno stiramento del contrasto
 fatto zona per zona, con un limite che evita di amplificare il rumore) alla sola luminanza, nello
 spazio di colore LAB: aiuta nei casi estremi senza toccare i colori.

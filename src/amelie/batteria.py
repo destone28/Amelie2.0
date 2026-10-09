@@ -18,12 +18,15 @@ La potenza si stima come una base fissa piu' una parte che segue la CPU:
 
     base       5,0 W   SoC a riposo ~1,8, schermo 1,5 (misurato dal
                        costruttore: 0,30 A a 5 V), hub e camera in moto ~1,2,
-                       anello e amplificatore a riposo ~0,5
+                       amplificatore a riposo ~0,5
+    anello    +1,0 W   gli otto LED accesi al massimo, bianchi e gialli
+                       alternati: una stima a progetto, come la base
     CPU piena +2,5 W   quattro Cortex-A53 a pieno carico
     voce      +0,6 W   amplificatore che suona
 
-La base e' stimata a progetto (~5 W medi, oltre 12 ore di autonomia), non
-misurata col tester USB: una misura vera va messa qui al suo posto, e basta.
+Base e anello sono stimati a progetto (~6 W medi, una decina d'ore di
+autonomia), non misurati col tester USB: una misura vera va messa qui al suo
+posto, e basta.
 La CPU si legge da `/proc/stat`, che e' l'unica misura vera che la board
 offre di quanto sta lavorando - e il modello linguistico, l'OCR e la sintesi
 vocale passano tutti di li'.
@@ -57,6 +60,7 @@ log = logging.getLogger(__name__)
 
 CAPACITA_WH = 60.0
 POTENZA_BASE_W = 5.0
+POTENZA_ANELLO_W = 1.0
 POTENZA_CPU_W = 2.5
 POTENZA_VOCE_W = 0.6
 
@@ -69,6 +73,11 @@ SALTO_ASSURDO_S = 60 * 86400.0
 # all'otto per cento e non allo zero: sotto, il power bank puo' spegnersi da
 # solo senza avvisare, e una tacca accesa sarebbe una bugia.
 TACCHE = ((0.75, 4), (0.50, 3), (0.25, 2), (0.08, 1))
+# Sotto questa frazione la batteria e' scarica, e a riposo l'anello si fa rosso:
+# l'icona sta nelle impostazioni, e chi lavora in sala vede solo la luce. Il
+# quindici per cento e' circa un'ora e mezza alla potenza di base, anello
+# compreso: il tempo di accorgersene e di metterlo in carica.
+SOGLIA_SCARICA = 0.15
 
 
 def cpu_occupata() -> tuple[int, int] | None:
@@ -143,7 +152,7 @@ class Batteria:
             if totale > 0:
                 quota_cpu = max(0.0, min(1.0, occupato / totale))
         self._ultima_cpu = cpu
-        watt = POTENZA_BASE_W + POTENZA_CPU_W * quota_cpu
+        watt = POTENZA_BASE_W + POTENZA_ANELLO_W + POTENZA_CPU_W * quota_cpu
         if voce_accesa:
             watt += POTENZA_VOCE_W
         self.consumato_wh += watt * dt / 3600.0
@@ -153,6 +162,10 @@ class Batteria:
     def frazione(self) -> float:
         """Quanta ne resta, da 0 a 1."""
         return max(0.0, min(1.0, 1.0 - self.consumato_wh / self.capacita))
+
+    @property
+    def scarica(self) -> bool:
+        return self.frazione < SOGLIA_SCARICA
 
     @property
     def tacche(self) -> int:
@@ -165,7 +178,7 @@ class Batteria:
     @property
     def ore_rimaste(self) -> float:
         """Alla potenza di base: e' una stima della stima, serve al giornale."""
-        return (self.capacita - self.consumato_wh) / POTENZA_BASE_W
+        return (self.capacita - self.consumato_wh) / (POTENZA_BASE_W + POTENZA_ANELLO_W)
 
     def ricaricata(self) -> None:
         """Qualcuno l'ha messa in carica e lo dice: si riparte da piena."""
