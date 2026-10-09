@@ -48,11 +48,23 @@ log = logging.getLogger(__name__)
 
 VOCE_PREDEFINITA = "it_IT-serena-medium"
 
+# 16 bit, un canale: ogni campione sono due byte. Una posizione nel buffer deve
+# cadere sempre all'inizio di un campione: ripartendo da un byte dispari ogni
+# campione si legge a cavallo di due, il byte alto diventa basso, e la voce
+# diventa un fruscio forte e spezzettato.
+BYTE_PER_CAMPIONE = 2
+
+
 # Il PCM e' lineare: un secondo di parlato sono sempre gli stessi byte. E' cio'
 # che rende possibile un player vero - saltare avanti di cinque secondi e'
 # aritmetica su un offset, non una ricerca dentro un formato compresso.
 def byte_al_secondo(frequenza: int = 22050) -> int:
-    return frequenza * 2          # 16 bit, un canale
+    return frequenza * BYTE_PER_CAMPIONE
+
+
+def allinea(byte: int) -> int:
+    """La posizione `byte` riportata all'inizio del suo campione."""
+    return byte - byte % BYTE_PER_CAMPIONE
 
 
 # Quanto si scrive ad aplay per volta. Cento millisecondi: abbastanza piccolo
@@ -1143,7 +1155,13 @@ class Riproduttore:
             if self._in_pausa:
                 return
             self._in_pausa = True
-            self._posizione = max(0, self._posizione - int(self._bps * indietro))
+            # Allineato al campione. I secondi da riascoltare non sono quasi
+            # mai un numero pari di byte - 0,65 s a 22050 Hz sono 28.665 - e
+            # la coda e' sempre pari: senza allineare, ogni pausa spostava la
+            # ripresa di un byte dispari, e alla ripresa si sentiva fruscio
+            # invece della voce, una volta si' e una no.
+            self._posizione = allinea(
+                max(0, self._posizione - int(self._bps * indietro)))
             # La barra DEVE arretrare: si riavvolge di circa tre quarti di
             # secondo per non tagliare una parola alla ripresa.
             self._quota_vista = 0.0
@@ -1176,7 +1194,9 @@ class Riproduttore:
         """
         with self._sveglia:
             nuovo = self._posizione + int(secondi * self._bps)
-            self._posizione = max(0, min(nuovo, len(self._pcm)))
+            # Allineato al campione, come in `pausa`: un salto di secondi
+            # qualunque puo' essere un numero dispari di byte.
+            self._posizione = allinea(max(0, min(nuovo, len(self._pcm))))
             self._quota_vista = 0.0       # all'indietro la barra deve seguire
             self._taci()                  # si butta cio' che non e' ancora uscito
             self._sveglia.notify_all()
@@ -1253,6 +1273,9 @@ class Riproduttore:
                 if self._fermo.is_set():
                     return
                 pcm = self.voce.sintetizza(frase)
+                # Un byte spaiato in fondo a una frase sfaserebbe di mezzo
+                # campione tutte quelle dopo: non capita, ma costa niente.
+                pcm = pcm[:allinea(len(pcm))]
                 with self._sveglia:
                     self._inizi.append(len(self._pcm))
                     self._pcm.extend(pcm)

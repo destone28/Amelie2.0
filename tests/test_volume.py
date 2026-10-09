@@ -843,3 +843,95 @@ class TestLaPronunciaSegueLaLingua:
         assert lingua_del_modello("en_US-ljspeech-medium") == "en"
         assert lingua_del_modello("it_IT-serena-medium") == "it"
         assert lingua_del_modello("") == "it"
+
+
+class TestLaRipresaDopoLaPausa:
+    """Dopo una pausa la voce riparte voce, non fruscio.
+
+    La pausa riavvolge di quanto era gia' inviato e non ancora sentito: circa
+    0,65 secondi, cioe' 28.665 byte a 22050 Hz - un numero dispari. Senza
+    allineare al campione, ogni pausa spostava la ripresa di un byte dispari:
+    ogni campione si leggeva a cavallo di due, e alla ripresa si sentiva un
+    fruscio forte e spezzettato, una volta si' e una no.
+    """
+
+    # Campioni alterni +1000 e -1000: letti a cavallo di due campioni danno
+    # valori che non sono ne' l'uno ne' l'altro.
+    VALORI = {1000, -1000}
+
+    @classmethod
+    def _riproduttore(cls, scritti, in_pancia=0.45):
+        import time
+
+        from amelie.speech import Riproduttore
+
+        class UscitaFinta:
+            def svuota(self): pass
+            def in_pancia_s(self): return in_pancia
+            def attendi_fine(self, tetto=10.0): pass
+            def scrivi(self, dati):
+                scritti.append(bytes(dati))
+                time.sleep(0.002)       # il passo che darebbe ALSA
+
+        class VoceFinta:
+            class imp:
+                modello = "it_IT-serena-medium"
+                frequenza = 22050
+
+            def uscita(self):
+                return UscitaFinta()
+
+            def sintetizza(self, frase):
+                return array.array("h", [1000, -1000] * 22050).tobytes()
+
+        return Riproduttore(VoceFinta(), ["Prima frase.", "Seconda frase."])
+
+    @staticmethod
+    def _aspetta(condizione, tetto_s=5.0):
+        import time
+        fine = time.monotonic() + tetto_s
+        while not condizione() and time.monotonic() < fine:
+            time.sleep(0.005)
+        assert condizione(), "il riproduttore non e' andato avanti"
+
+    def _campioni_buoni(self, pezzi):
+        for pezzo in pezzi:
+            assert len(pezzo) % 2 == 0, "un pezzo di lunghezza dispari"
+            valori = set(array.array("h", pezzo))
+            assert valori <= self.VALORI, (
+                f"campioni letti a cavallo di due: {sorted(valori - self.VALORI)[:3]}")
+
+    def test_dopo_ogni_pausa_la_ripresa_e_voce(self):
+        """Il caso del dispositivo: pausa e play piu' volte di fila."""
+        scritti: list[bytes] = []
+        r = self._riproduttore(scritti)
+        r.avvia()
+        try:
+            for _ in range(4):
+                n = len(scritti)
+                self._aspetta(lambda: len(scritti) >= n + 5)
+                r.pausa()
+                assert r._posizione % 2 == 0
+                ripresa = len(scritti)
+                r.riprendi()
+                self._aspetta(lambda: len(scritti) >= ripresa + 3)
+                self._campioni_buoni(scritti[ripresa:])
+        finally:
+            r.ferma()
+
+    def test_la_pausa_riavvolge_su_un_campione_intero(self):
+        """In isolamento, con la latenza che dava un numero dispari di byte."""
+        r = self._riproduttore([])
+        r._pcm.extend(b"\x00" * 441000)
+        r._posizione = 220500
+        r.pausa()
+        assert r._posizione % 2 == 0
+        assert 220500 - r._posizione == pytest.approx(0.65 * 44100, abs=2)
+
+    @pytest.mark.parametrize("secondi", [0.123457, -0.333333, 2.71, -1.000001])
+    def test_un_salto_resta_su_un_campione_intero(self, secondi):
+        r = self._riproduttore([])
+        r._pcm.extend(b"\x00" * 441000)
+        r._posizione = 220500
+        r.salta(secondi)
+        assert r._posizione % 2 == 0
