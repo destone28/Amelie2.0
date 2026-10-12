@@ -264,7 +264,7 @@ Lo sketch del microcontrollore è documentato in [firmware/amelie_mcu/README.md]
 
 Created by Emilio Destratis ([destratis.it](https://destratis.it)) in collaboration with Arduino.
 
-- Il codice è distribuito sotto GNU General Public License v3.0 o successiva ([LICENSE](https://github.com/destone28/Amelie2.0/blob/main/LICENSE)).
+- Il codice è distribuito sotto licenza MIT ([LICENSE](https://github.com/destone28/Amelie2.0/blob/main/LICENSE)).
 - Documentazione, immagini, schemi e file 3D sono distribuiti sotto Creative Commons Attribuzione 4.0 Internazionale ([LICENSE-DOCS.md](https://github.com/destone28/Amelie2.0/blob/main/LICENSE-DOCS.md)).
 
 Il database dei vini si costruisce da dati aperti ed è distribuito sotto Open Database License 1.0. Le fonti sono:

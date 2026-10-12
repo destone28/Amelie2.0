@@ -8,7 +8,7 @@ costruisce, modifica o ridistribuisce il dispositivo.
 
 | Che cosa | Licenza |
 |---|---|
-| Codice: `src/`, `scripts/`, `firmware/`, `data/*.py`, `tests/` | **GPL-3.0-or-later**, vedi [LICENSE](../../LICENSE) |
+| Codice: `src/`, `scripts/`, `firmware/`, `data/*.py`, `tests/` | **MIT**, vedi [LICENSE](../../LICENSE) |
 | Documentazione (`docs/` e i file README), immagini (`docs/images/`), schema dei collegamenti (`hardware/wiring.svg`), file di stampa 3D (`hardware/stl/`), lessico (`data/lessico/`), schede dei vitigni (`data/vitigni.json`), carta dei vini (`vini.csv`) | **CC BY 4.0**, vedi [LICENSE-DOCS.md](../../LICENSE-DOCS.md) |
 | Il database costruito, `data/amelie.db` | **ODbL 1.0**, per via di X-Wines (più sotto) |
 | Il modello linguistico affinato, `studente-q4_k_m.gguf` | **Apache-2.0**, come i modelli da cui deriva |
@@ -26,8 +26,7 @@ L'attribuzione richiesta da CC BY 4.0 è:
 
 | Licenza | Che cosa permette e che cosa chiede |
 |---|---|
-| **GPL-3.0-or-later** (GNU General Public License, versione 3 o successiva) | usare, studiare, modificare e ridistribuire il programma, anche a fini commerciali. Chi lo ridistribuisce, modificato o no, deve farlo con la stessa licenza e mettere a disposizione il codice sorgente |
-| **GPL-3.0** | come la precedente, limitata alla versione 3 |
+| **GPL-3.0** (GNU General Public License, versione 3) | usare, studiare, modificare e ridistribuire il programma, anche a fini commerciali. Chi lo ridistribuisce, modificato o no, deve farlo con la stessa licenza e mettere a disposizione il codice sorgente |
 | **CC BY 4.0** (Creative Commons Attribuzione 4.0 Internazionale) | copiare, ridistribuire e modificare l'opera, anche a fini commerciali, con tre obblighi: citare l'autore, indicare la licenza con un collegamento, dire se si è modificato qualcosa |
 | **CC BY-SA 4.0** | come CC BY 4.0, e in più ogni opera derivata va distribuita con la stessa licenza (*share-alike*, «condividi allo stesso modo») |
 | **CC BY-NC 4.0**, **CC BY-NC-SA 4.0** | come le due precedenti, ma vietano l'uso commerciale (*NC*, *non commercial*) |
@@ -199,6 +198,12 @@ Anche le schede di `en_GB-alba-medium` ed `en_US-libritts_r-medium` dichiarano
 CC BY 4.0, ma è la licenza del dataset di affinamento: più sotto entrambe dicono
 di essere affinate dalla voce lessac. La riga della licenza non basta: conta da
 quale voce una voce è stata affinata.
+
+Piper non è nel repository: lo installa `scripts/install.sh` da PyPI, e
+l'applicazione lo usa come libreria. La licenza MIT del codice di Amelie è
+compatibile con la GPL; chi distribuisce un dispositivo con Piper installato
+deve rispettarne la licenza, cioè mettere a disposizione il suo codice
+sorgente, che è pubblico all'indirizzo qui sopra.
 
 ### Modello linguistico
 

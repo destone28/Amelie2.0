@@ -1,6 +1,6 @@
 # Licences of the documentation and design files
 
-The **source code** in this repository (`src/`, `scripts/`, `firmware/`, `data/*.py`, `tests/`) is released under the **GNU General Public License v3.0 or later** (GPL-3.0-or-later): see [LICENSE](LICENSE).
+The **source code** in this repository (`src/`, `scripts/`, `firmware/`, `data/*.py`, `tests/`) is released under the **MIT License**: see [LICENSE](LICENSE).
 
 The documentation (`docs/` and the README files), the images (`docs/images/`), the wiring diagram (`hardware/wiring.svg`), the 3D printing files (`hardware/stl/`), the lexicon in `data/lessico/`, the grape variety sheets in `data/vitigni.json` and the wine list in `vini.csv` are released under the **Creative Commons Attribution 4.0 International** licence (CC BY 4.0): <https://creativecommons.org/licenses/by/4.0/>
 
@@ -20,7 +20,7 @@ The device uses data, models and software by others, each under its own licence.
 
 # Licenze della documentazione e dei file di progetto
 
-Il **codice sorgente** di questo repository (`src/`, `scripts/`, `firmware/`, `data/*.py`, `tests/`) è distribuito sotto **GNU General Public License v3.0 o successiva** (GPL-3.0-or-later): vedi [LICENSE](LICENSE).
+Il **codice sorgente** di questo repository (`src/`, `scripts/`, `firmware/`, `data/*.py`, `tests/`) è distribuito sotto **licenza MIT**: vedi [LICENSE](LICENSE).
 
 La documentazione (`docs/` e i file README), le immagini (`docs/images/`), lo schema dei collegamenti (`hardware/wiring.svg`), i file di stampa 3D (`hardware/stl/`), il lessico in `data/lessico/`, le schede dei vitigni in `data/vitigni.json` e la carta dei vini in `vini.csv` sono distribuiti sotto **Creative Commons Attribuzione 4.0 Internazionale** (CC BY 4.0): <https://creativecommons.org/licenses/by/4.0/deed.it>
 

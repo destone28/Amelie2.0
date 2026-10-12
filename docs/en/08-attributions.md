@@ -8,7 +8,7 @@ anyone who builds, modifies or redistributes the device.
 
 | What | Licence |
 |---|---|
-| Code: `src/`, `scripts/`, `firmware/`, `data/*.py`, `tests/` | **GPL-3.0-or-later**, see [LICENSE](../../LICENSE) |
+| Code: `src/`, `scripts/`, `firmware/`, `data/*.py`, `tests/` | **MIT**, see [LICENSE](../../LICENSE) |
 | Documentation (`docs/` and the README files), images (`docs/images/`), wiring diagram (`hardware/wiring.svg`), 3D printing files (`hardware/stl/`), lexicon (`data/lessico/`), grape variety sheets (`data/vitigni.json`), wine list (`vini.csv`) | **CC BY 4.0**, see [LICENSE-DOCS.md](../../LICENSE-DOCS.md) |
 | The built database, `data/amelie.db` | **ODbL 1.0**, because of X-Wines (below) |
 | The fine-tuned language model, `studente-q4_k_m.gguf` | **Apache-2.0**, like the models it derives from |
@@ -26,8 +26,7 @@ The attribution required by CC BY 4.0 is:
 
 | Licence | What it allows and what it asks |
 |---|---|
-| **GPL-3.0-or-later** (GNU General Public License, version 3 or later) | using, studying, modifying and redistributing the program, also commercially. Anyone who redistributes it, modified or not, must do so under the same licence and make the source code available |
-| **GPL-3.0** | like the previous one, limited to version 3 |
+| **GPL-3.0** (GNU General Public License, version 3) | using, studying, modifying and redistributing the program, also commercially. Anyone who redistributes it, modified or not, must do so under the same licence and make the source code available |
 | **CC BY 4.0** (Creative Commons Attribution 4.0 International) | copying, redistributing and adapting the work, also commercially, with three obligations: credit the author, name the licence with a link, say whether anything was changed |
 | **CC BY-SA 4.0** | like CC BY 4.0, and in addition every derivative work must be distributed under the same licence (*share-alike*) |
 | **CC BY-NC 4.0**, **CC BY-NC-SA 4.0** | like the two previous ones, but they forbid commercial use (*NC*, *non-commercial*) |
@@ -204,6 +203,12 @@ speech synthesis products. The model cards of `en_GB-alba-medium` and
 the fine-tuning dataset: further down both say they are fine-tuned from the
 lessac voice. The licence line is not enough: what matters is which voice a
 voice was fine-tuned from.
+
+Piper is not in the repository: `scripts/install.sh` installs it from PyPI, and
+the application uses it as a library. The MIT licence of Amelie's code is
+compatible with the GPL; anyone who distributes a device with Piper installed
+must respect Piper's licence, that is, make its source code available, which
+is public at the address above.
 
 ### Language model
 

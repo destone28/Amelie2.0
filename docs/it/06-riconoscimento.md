@@ -275,7 +275,7 @@ che ha già chiesto; se il file manca, solleva `DatabaseAssente`.
 | registro UE eAmbrosia | `data/sources/eambrosia_it_wine.tsv` | le 532 indicazioni geografiche italiane del vino: le 124 che figshare non ha (119 IGP e 5 DOP) e la menzione DOCG, DOC o IGT di tutte | © Unione europea, CC BY 4.0 |
 | documenti unici UE | `data/sources/documenti_unici.jsonl` | colore, odore e sapore ufficiali delle tipologie | © Unione europea, CC BY 4.0 |
 | elenco delle DOCG | `data/sources/docg.txt` | quali DOP sono DOCG, che il registro UE non distingue dalle DOC | dati di fatto |
-| il progetto | `data/vitigni.json`, `data/geografia.py` | le schede dei vitigni scritte a mano, con gli alias; la regione di ogni denominazione | CC BY 4.0 (schede), GPL-3.0-or-later (codice) |
+| il progetto | `data/vitigni.json`, `data/geografia.py` | le schede dei vitigni scritte a mano, con gli alias; la regione di ogni denominazione | CC BY 4.0 (schede), MIT (codice) |
 
 Il database costruito si distribuisce sotto ODbL 1.0, per via di X-Wines; attribuzioni e citazioni
 obbligatorie sono in [08-attribuzioni.md](08-attribuzioni.md), la provenienza di ogni file in

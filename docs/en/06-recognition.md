@@ -279,7 +279,7 @@ it has already asked; if the file is missing, it raises `DatabaseAssente`.
 | EU register eAmbrosia | `data/sources/eambrosia_it_wine.tsv` | the 532 Italian wine geographical indications: the 124 figshare lacks (119 IGPs and 5 DOPs) and the DOCG, DOC or IGT term of all of them | © European Union, CC BY 4.0 |
 | EU single documents | `data/sources/documenti_unici.jsonl` | the official colour, aroma and taste of the *tipologie* | © European Union, CC BY 4.0 |
 | list of the DOCGs | `data/sources/docg.txt` | which DOPs are DOCGs, which the EU register does not distinguish from DOCs | facts |
-| the project | `data/vitigni.json`, `data/geografia.py` | the hand-written grape variety profiles, with their aliases; the region of each appellation | CC BY 4.0 (profiles), GPL-3.0-or-later (code) |
+| the project | `data/vitigni.json`, `data/geografia.py` | the hand-written grape variety profiles, with their aliases; the region of each appellation | CC BY 4.0 (profiles), MIT (code) |
 
 The built database is distributed under ODbL 1.0, because of X-Wines; attributions and mandatory
 citations are in [08-attributions.md](08-attributions.md), the provenance of each file in

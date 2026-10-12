@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "Supporto da tavolo che riconosce un vino dall'etichetta e ne racconta la storia"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "GPL-3.0-or-later" }
+license = { text = "MIT" }
 authors = [{ name = "Emilio Destratis" }]
 
 # Le versioni esatte collaudate sulla UNO Q stanno in requirements.txt, che e'
